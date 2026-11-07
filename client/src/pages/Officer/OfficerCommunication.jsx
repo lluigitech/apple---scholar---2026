@@ -1,8 +1,9 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Megaphone, Clock, Search, Plus, X, Send, ChevronDown, Users } from 'lucide-react';
 
-const API = 'http://localhost:5000/api';
+const API = `${API_ORIGIN}/api`;
 
 const YEAR_LEVELS = [
     { value: 'grade_7',    label: 'Grade 7' },

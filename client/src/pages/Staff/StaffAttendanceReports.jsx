@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -12,7 +13,7 @@ import {
     readStaffWorkPreferences,
 } from '../../utils/staffWorkPreferences';
 
-const API = 'http://localhost:5000/api';
+const API = `${API_ORIGIN}/api`;
 const authHeaders = () => ({
     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
 });

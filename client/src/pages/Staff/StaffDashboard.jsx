@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -23,7 +24,7 @@ const CLAY = '#c1666b';
 const SLATE = '#5c7487';
 const GRAPHITE = '#6b625c';
 
-const API = 'http://localhost:5000/api';
+const API = `${API_ORIGIN}/api`;
 const token = () => localStorage.getItem('token');
 const authHeaders = () => ({ headers: { Authorization: `Bearer ${token()}` } });
 

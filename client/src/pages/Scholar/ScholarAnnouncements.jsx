@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Megaphone, Clock3, Search, AlertCircle, AlertTriangle, Info, ChevronDown, UserRound } from 'lucide-react';
@@ -172,7 +173,7 @@ const ScholarAnnouncements = () => {
         const fetchAnnouncements = async () => {
             try {
                 const params = yearLevel ? { year_level: yearLevel } : {};
-                const res = await axios.get('http://localhost:5000/api/scholar/announcements', { params });
+                const res = await axios.get(`${API_ORIGIN}/api/scholar/announcements`, { params });
                 setAnnouncements(res.data);
             } catch (err) {
                 console.error('Error fetching announcements:', err);

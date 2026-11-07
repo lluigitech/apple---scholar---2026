@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
@@ -8,7 +9,7 @@ import {
 import { QRCodeSVG } from 'qrcode.react';
 import { formatYearLevelLabel } from '../../utils/yearLevelLabels';
 
-const API = 'http://localhost:5000/api';
+const API = `${API_ORIGIN}/api`;
 const token = () => localStorage.getItem('token');
 const authHeaders = () => ({ headers: { Authorization: `Bearer ${token()}` } });
 

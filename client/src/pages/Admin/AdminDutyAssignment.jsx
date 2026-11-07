@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
@@ -8,7 +9,7 @@ import {
 import { formatAdminDate } from '../../utils/adminPreferences';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
-const API = 'http://localhost:5000/api';
+const API = `${API_ORIGIN}/api`;
 const authHeaders = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
 const PAGE_SIZE = 10;
 

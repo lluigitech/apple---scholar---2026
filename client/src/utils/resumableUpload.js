@@ -1,7 +1,8 @@
+import { API_ORIGIN } from './apiConfig.js';
 import axios from 'axios';
 
 const CHUNK_SIZE = 1024 * 1024;
-const API_BASE = 'http://localhost:5000/api/submission';
+const API_BASE = `${API_ORIGIN}/api/submission`;
 
 const authHeader = () => {
   const token = localStorage.getItem('token');

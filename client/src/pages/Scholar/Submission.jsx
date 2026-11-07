@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { useState, useCallback, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
@@ -35,7 +36,7 @@ const RADIUS = 18;
 const display = { fontFamily: "'Playfair Display', Georgia, serif" };
 const body = { fontFamily: "'Inter', -apple-system, 'Segoe UI', sans-serif" };
 
-const API_BASE = 'http://localhost:5000/api/submission';
+const API_BASE = `${API_ORIGIN}/api/submission`;
 
 const asText = (value) => {
     if (value === null || typeof value === 'undefined') return '';
@@ -396,7 +397,7 @@ function Submission() {
 
     if (!userId) return;
 
-    axios.get(`http://localhost:5000/api/scholar/profile/${userId}`, { headers: authHeader() })
+    axios.get(`${API_ORIGIN}/api/scholar/profile/${userId}`, { headers: authHeader() })
       .then(({ data }) => applyProfileInfo(data))
       .catch(() => {
         // Keep cached profile if the live profile fetch fails.

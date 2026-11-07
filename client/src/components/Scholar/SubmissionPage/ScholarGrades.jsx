@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../../utils/apiConfig.js';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { uploadResumableFile } from '../../../utils/resumableUpload';
@@ -24,7 +25,7 @@ const WARNING = '#C08A3E';
 const display = { fontFamily: "'Playfair Display', Georgia, serif" };
 const body = { fontFamily: "'Inter', -apple-system, 'Segoe UI', sans-serif" };
 
-const API = 'http://localhost:5000/api/submission';
+const API = `${API_ORIGIN}/api/submission`;
 
 const SEMESTERS  = ['1st Sem', '2nd Sem', 'Summer'];
 const ACAD_YEARS = ['2023-2024', '2024-2025', '2025-2026', '2026-2027'];

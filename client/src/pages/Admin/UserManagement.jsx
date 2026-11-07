@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -200,7 +201,7 @@ const CreateModal = ({ onClose, onSuccess }) => {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            const res = await axios.post('http://localhost:5000/api/admin/users', form, {
+            const res = await axios.post(`${API_ORIGIN}/api/admin/users`, form, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             onSuccess({
@@ -331,7 +332,7 @@ const EditModal = ({ user, onClose, onSuccess }) => {
         try {
             setLoading(true);
             const token = localStorage.getItem('token');
-            await axios.put(`http://localhost:5000/api/admin/users/${user.id}`, form, {
+            await axios.put(`${API_ORIGIN}/api/admin/users/${user.id}`, form, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             onSuccess();
@@ -643,7 +644,7 @@ const UserManagement = () => {
             setLoading(true);
             setRegistryError('');
             const token = localStorage.getItem('token');
-            const res = await axios.get('http://localhost:5000/api/admin/users', {
+            const res = await axios.get(`${API_ORIGIN}/api/admin/users`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setUsersList(res.data);
@@ -669,7 +670,7 @@ const UserManagement = () => {
             setDeleting(true);
             setDeleteError('');
             const token = localStorage.getItem('token');
-            await axios.delete(`http://localhost:5000/api/admin/users/${selectedUser.id}`, {
+            await axios.delete(`${API_ORIGIN}/api/admin/users/${selectedUser.id}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             closeModal();
@@ -689,7 +690,7 @@ const UserManagement = () => {
             setArchiveError('');
             setRegistryMessage('');
             const token = localStorage.getItem('token');
-            await axios.patch(`http://localhost:5000/api/admin/users/${selectedUser.id}/archive`, {}, {
+            await axios.patch(`${API_ORIGIN}/api/admin/users/${selectedUser.id}/archive`, {}, {
                 headers: { Authorization: ['Bearer', token].join(' ') }
             });
             closeModal();

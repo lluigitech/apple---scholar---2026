@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 ﻿import { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
@@ -6,7 +7,7 @@ import {
     CheckCircle2, AlertCircle, RotateCcw, Save, ClipboardList, ClipboardCheck, Megaphone, CalendarClock,
 } from 'lucide-react';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = `${API_ORIGIN}/api`;
 const YEAR_LEVEL_OPTIONS = [
     { value: 'grade_7', label: 'Grade 7' },
     { value: 'grade_8', label: 'Grade 8' },
@@ -374,7 +375,7 @@ const ScholarSettings = () => {
 
         try {
             setPasswordLoading(true);
-            await axios.post('http://localhost:5000/api/change-password', {
+            await axios.post(`${API_ORIGIN}/api/change-password`, {
                 current_password: currentPassword,
                 new_password: newPassword,
             }, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });

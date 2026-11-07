@@ -1,9 +1,10 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { QrCode, Search, CheckCircle2, LogOut, ChevronDown, Loader2 } from 'lucide-react';
 import { BrowserQRCodeReader } from '@zxing/browser';
 
-const API = 'http://localhost:5000/api/officer';
+const API = `${API_ORIGIN}/api/officer`;
 
 export function Attendance() {
     const officerId  = localStorage.getItem('id')       || '';

@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../utils/apiConfig.js';
 import { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -79,7 +80,7 @@ const Login = () => {
         setIsLoading(true);
         setError('');
         try {
-            const res = await axios.post('http://localhost:5000/api/login', { email, password });
+            const res = await axios.post(`${API_ORIGIN}/api/login`, { email, password });
             if (res.data.status === "Success") {
                 const userRole = res.data.role.toLowerCase().trim();
                 localStorage.setItem('token', res.data.token);

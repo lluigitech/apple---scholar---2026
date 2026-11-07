@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
@@ -6,7 +7,7 @@ import {
     Plus, Users,
 } from 'lucide-react';
 
-const API = 'http://localhost:5000/api';
+const API = `${API_ORIGIN}/api`;
 const authHeaders = () => ({
     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
 });

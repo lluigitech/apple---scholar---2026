@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -40,7 +41,7 @@ const StaffSidebar = ({ isOpen, onClose, collapsed = false }) => {
     };
 
     const handleLogout = async () => {
-        await axios.post('http://localhost:5000/api/logout', {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }).catch(() => {});
+        await axios.post(`${API_ORIGIN}/api/logout`, {}, { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }).catch(() => {});
         localStorage.clear();
         navigate('/login');
     };

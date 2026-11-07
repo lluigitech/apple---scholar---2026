@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { X, CheckCircle, Clock, XCircle, Download, Image as ImageIcon } from 'lucide-react';
 import { formatYearLevelLabel } from '../../utils/yearLevelLabels';
 
@@ -289,14 +290,14 @@ const ScholarLetterView = ({ submission, onClose }) => {
                                     {mediaItems.map((item, i) => (
                                         <div key={i}>
                                             <a
-                                                href={`http://localhost:5000/${item.path}`}
+                                                href={`${API_ORIGIN}/${item.path}`}
                                                 target="_blank"
                                                 rel="noreferrer"
                                                 className="block rounded-xl overflow-hidden border border-gray-100 shadow-sm hover:opacity-90 transition-opacity"
                                                 style={{ height: 150 }}
                                             >
                                                 <img
-                                                    src={`http://localhost:5000/${item.path}`}
+                                                    src={`${API_ORIGIN}/${item.path}`}
                                                     alt={item.description || `Documentation ${i + 1}`}
                                                     className="w-full h-full object-cover"
                                                 />
@@ -334,7 +335,7 @@ const ScholarLetterView = ({ submission, onClose }) => {
                                         </p>
                                         {doc.path ? (
                                             <a
-                                                href={`http://localhost:5000/${doc.path}`}
+                                                href={`${API_ORIGIN}/${doc.path}`}
                                                 target="_blank"
                                                 rel="noreferrer"
                                                 className="flex items-center justify-center gap-1 mt-1 text-xs font-bold"

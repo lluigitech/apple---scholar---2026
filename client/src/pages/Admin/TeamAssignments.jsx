@@ -1,3 +1,4 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
@@ -33,7 +34,7 @@ const mono    = { fontFamily: "'IBM Plex Mono', ui-monospace, Menlo, monospace" 
 
 const CARD = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS };
 
-const API = 'http://localhost:5000/api';
+const API = `${API_ORIGIN}/api`;
 const authHeaders = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
 
 const YEAR_LEVELS = [
