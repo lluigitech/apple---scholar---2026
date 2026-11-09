@@ -8,6 +8,7 @@ const { ZipArchive } = require('archiver');
 const unzipper = require('unzipper');
 const mysqlEscaper = require('mysql2');
 const cloudinary = require('../config/cloudinary');
+const r2Storage = require('./r2StorageService');
 const db = require('../config/db');
 
 const execFileAsync = promisify(execFile);
@@ -236,6 +237,30 @@ const safeArchiveSegment = (value) => String(value || 'asset')
     .slice(0, 120) || 'asset';
 
 const extensionOf = (value) => String(value || '').toLowerCase().replace(/^\./, '');
+const contentTypeFor = (extension) => ({
+    pdf: 'application/pdf',
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+    bmp: 'image/bmp',
+    svg: 'image/svg+xml',
+    tif: 'image/tiff',
+    tiff: 'image/tiff',
+    mp4: 'video/mp4',
+    mov: 'video/quicktime',
+    webm: 'video/webm',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    txt: 'text/plain',
+    csv: 'text/csv',
+    rtf: 'application/rtf',
+})[extensionOf(extension)] || 'application/octet-stream';
 const formatBytes = (bytes) => {
     if (!bytes) return '—';
     const units = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -285,7 +310,8 @@ const addCloudinaryAssets = async (archive, { includeDocuments, includeImages })
     if (!includeDocuments && !includeImages) return [];
     const assets = await new Promise((resolve, reject) => {
         db.query(
-            'SELECT public_id, resource_type, file_format, scholar_id FROM file_assets WHERE public_id IS NOT NULL',
+            `SELECT public_id, resource_type, file_format, scholar_id FROM file_assets
+             WHERE public_id IS NOT NULL AND resource_type IN ('image', 'video', 'raw')`,
             (error, rows) => error ? reject(error) : resolve(rows)
         );
     });
@@ -329,6 +355,44 @@ const addCloudinaryAssets = async (archive, { includeDocuments, includeImages })
     return archivedAssets;
 };
 
+const addR2Assets = async (archive, { includeDocuments, includeImages }) => {
+    if (!includeDocuments && !includeImages) return [];
+    const [assets] = await db.promise().query(
+        `SELECT file_url, public_id, file_format, scholar_id FROM file_assets
+         WHERE resource_type = 'r2' AND public_id IS NOT NULL`
+    );
+    const archivedAssets = [];
+    for (const asset of assets) {
+        const reference = r2Storage.parseR2Uri(asset.file_url);
+        if (!reference || reference.key !== asset.public_id) {
+            throw new Error('An R2 asset reference does not match its registered object key.');
+        }
+        const document = DOCUMENT_EXTENSIONS.has(extensionOf(asset.file_format));
+        const image = IMAGE_EXTENSIONS.has(extensionOf(asset.file_format));
+        if (!((document && includeDocuments) || (image && includeImages))) continue;
+        const key = String(asset.public_id);
+        const object = await r2Storage.getObject(asset.file_url);
+        if (!object.Body) throw new Error('An R2 asset could not be read for the full backup.');
+        const category = document && includeDocuments ? 'documents' : 'images';
+        const archiveName = path.posix.join(
+            'r2',
+            category,
+            key.split('/').map(safeArchiveSegment).join('/')
+        );
+        archive.append(object.Body, { name: archiveName });
+        archivedAssets.push({
+            provider: 'r2',
+            key,
+            fileUrl: asset.file_url,
+            fileFormat: asset.file_format,
+            scholarId: asset.scholar_id,
+            archiveName,
+            category,
+        });
+    }
+    return archivedAssets;
+};
+
 const archiveToFile = async ({ filePath, dumpPath, backup, includeDocuments, includeImages }) => {
     const output = fs.createWriteStream(filePath, { flags: 'wx' });
     const archive = new ZipArchive({ zlib: { level: 6 } });
@@ -351,7 +415,10 @@ const archiveToFile = async ({ filePath, dumpPath, backup, includeDocuments, inc
         if (includeDocuments) await addLocalFiles(archive, UPLOADS_DIR, 'uploads', DOCUMENT_EXTENSIONS);
         if (includeImages) await addLocalFiles(archive, UPLOADS_DIR, 'uploads', IMAGE_EXTENSIONS);
         if (includeImages) await addLocalFiles(archive, IMAGES_DIR, 'images', IMAGE_EXTENSIONS);
-        const assets = await addCloudinaryAssets(archive, { includeDocuments, includeImages });
+        const assets = [
+            ...await addCloudinaryAssets(archive, { includeDocuments, includeImages }),
+            ...await addR2Assets(archive, { includeDocuments, includeImages }),
+        ];
         archive.append(JSON.stringify({
             id: backup.id,
             name: backup.name,
@@ -418,7 +485,7 @@ const validateArchive = async (backup, archivePath) => {
 
 const extractBackupFiles = async (archivePath, extractionPath) => {
     const archive = await unzipper.Open.file(archivePath);
-    const allowedRoots = new Set(['uploads', 'images', 'cloudinary']);
+    const allowedRoots = new Set(['uploads', 'images', 'cloudinary', 'r2']);
     for (const entry of archive.files) {
         const normalized = String(entry.path || '').replace(/\\/g, '/').replace(/\/$/, '');
         if (!normalized || normalized === 'database.sql' || normalized === 'backup-manifest.json') continue;
@@ -514,6 +581,7 @@ const replaceFilesByExtensions = async (sourceRoot, destinationRoot, acceptedExt
 const restoreCloudinaryAssets = async (manifest, extractionPath) => {
     if (!Array.isArray(manifest.assets) || !manifest.assets.length) return;
     for (const asset of manifest.assets) {
+        if (asset.provider === 'r2') continue;
         if (!['image', 'video', 'raw'].includes(asset.resourceType) ||
             typeof asset.publicId !== 'string' ||
             typeof asset.archiveName !== 'string') {
@@ -529,6 +597,59 @@ const restoreCloudinaryAssets = async (manifest, extractionPath) => {
             overwrite: true,
             invalidate: true,
         });
+    }
+};
+
+const restoreR2Assets = async (manifest, extractionPath) => {
+    if (!Array.isArray(manifest.assets) || !manifest.assets.length) return;
+    const config = r2Storage.getR2Config();
+    const referenceColumns = [
+        ['submissions', 'report_card_path'],
+        ['submissions', 'cor_path'],
+        ['submissions', 'generated_pdf_path'],
+        ['grades', 'proof_path'],
+        ['submission_media', 'file_path'],
+        ['submission_media', 'photo_path'],
+        ['documents', 'file_path'],
+    ];
+    for (const asset of manifest.assets) {
+        if (asset.provider !== 'r2') continue;
+        if (typeof asset.key !== 'string' || !asset.key ||
+            asset.key.split('/').some(part => !part || part === '.' || part === '..') ||
+            typeof asset.archiveName !== 'string' || !asset.archiveName.startsWith('r2/')) {
+            throw new Error('Backup has invalid R2 asset metadata.');
+        }
+        const source = path.resolve(extractionPath, ...asset.archiveName.split('/'));
+        if (!source.startsWith(`${extractionPath}${path.sep}`)) throw new Error('Backup contains an unsafe R2 asset path.');
+        const buffer = await fs.promises.readFile(source);
+        const oldUrl = typeof asset.fileUrl === 'string' ? asset.fileUrl : '';
+        const newUrl = r2Storage.makeR2Uri(config.bucket, asset.key);
+        await r2Storage.uploadBuffer({
+            buffer,
+            key: asset.key,
+            contentType: contentTypeFor(asset.fileFormat),
+        });
+        if (oldUrl && oldUrl !== newUrl) {
+            const connection = await db.promise().getConnection();
+            try {
+                await connection.beginTransaction();
+                for (const [table, column] of referenceColumns) {
+                    await connection.query(`UPDATE \`${table}\` SET \`${column}\` = ? WHERE \`${column}\` = ?`, [newUrl, oldUrl]);
+                }
+                await connection.query(
+                    `UPDATE file_assets
+                     SET file_url = ?, public_id = ?, resource_type = 'r2', file_format = ?
+                     WHERE file_url = ?`,
+                    [newUrl, asset.key, asset.fileFormat || 'bin', oldUrl]
+                );
+                await connection.commit();
+            } catch (error) {
+                await connection.rollback();
+                throw error;
+            } finally {
+                connection.release();
+            }
+        }
     }
 };
 
@@ -956,6 +1077,7 @@ const restoreBackup = async (id, { confirmed = false, allowNoSafetyBackup = fals
             if (!restoredWithBinary) await restoreUsingPool(dumpPath);
             if (backup.includeDocuments || backup.includeImages) {
                 await restoreCloudinaryAssets(validated.manifest, workDirectory);
+                await restoreR2Assets(validated.manifest, workDirectory);
                 if (backup.includeDocuments) {
                     await replaceFilesByExtensions(path.join(workDirectory, 'uploads'), UPLOADS_DIR, DOCUMENT_EXTENSIONS);
                 }
@@ -983,6 +1105,7 @@ const restoreBackup = async (id, { confirmed = false, allowNoSafetyBackup = fals
                     await fs.promises.mkdir(safetyWorkDirectory, { recursive: true });
                     await extractBackupFiles(getBackupPath(safety), safetyWorkDirectory);
                     await restoreCloudinaryAssets(safetyArchive.manifest, safetyWorkDirectory);
+                    await restoreR2Assets(safetyArchive.manifest, safetyWorkDirectory);
                     if (safety.includeDocuments) {
                         await replaceFilesByExtensions(path.join(safetyWorkDirectory, 'uploads'), UPLOADS_DIR, DOCUMENT_EXTENSIONS);
                     }

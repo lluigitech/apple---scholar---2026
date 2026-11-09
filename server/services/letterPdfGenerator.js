@@ -6,6 +6,7 @@ const Docxtemplater = require('docxtemplater');
 const ImageModule = require('docxtemplater-image-module-free');
 const db = require('../config/db');
 const cloudinary = require('../config/cloudinary');
+const r2Storage = require('./r2StorageService');
 
 const promiseDb = db.promise();
 
@@ -54,6 +55,10 @@ const execAsync = (cmd) => new Promise((resolve, reject) => {
 const fetchImageBuffer = async (filePath) => {
   if (!filePath) return null;
   try {
+    if (r2Storage.parseR2Uri(filePath)) {
+      return await r2Storage.readObjectBuffer(filePath);
+    }
+
     // Remote URL (Cloudinary or external)
     if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
       const res = await fetch(filePath);
@@ -211,24 +216,50 @@ async function generateLetterPdf(submissionId) {
   }
 
   let publicPath;
-  try {
-    const uploadResult = await cloudinary.uploader.upload(outPdf, {
-      resource_type: 'auto',
-      folder: 'apple-scholar/generated-letters',
-      public_id: baseName,
-      overwrite: true,
+  let storageAsset = null;
+  if (r2Storage.getStorageProvider() === 'r2') {
+    const key = r2Storage.createObjectKey({
+      folder: 'monthly-letters',
+      scholarId: sub.scholar_id,
+      originalName: `${baseName}.pdf`,
     });
+    storageAsset = await r2Storage.uploadFile({
+      filePath: outPdf,
+      key,
+      contentType: 'application/pdf',
+    });
+    publicPath = storageAsset.url;
+  } else {
+    try {
+      const uploadResult = await cloudinary.uploader.upload(outPdf, {
+        resource_type: 'auto',
+        folder: 'apple-scholar/generated-letters',
+        public_id: baseName,
+        overwrite: true,
+      });
 
-    publicPath = uploadResult.secure_url;
-  } catch (cloudErr) {
-    console.warn('Cloudinary upload failed, falling back to local static path:', cloudErr && cloudErr.message ? cloudErr.message : cloudErr);
-    publicPath = path.posix.join('/uploads', 'generated-letters', `${baseName}.pdf`);
+      publicPath = uploadResult.secure_url;
+      storageAsset = uploadResult;
+    } catch (cloudErr) {
+      console.warn('Cloudinary upload failed, falling back to local static path:', cloudErr && cloudErr.message ? cloudErr.message : cloudErr);
+      publicPath = path.posix.join('/uploads', 'generated-letters', `${baseName}.pdf`);
+    }
   }
 
-  try {
-    await promiseDb.query('UPDATE submissions SET generated_pdf_path = ? WHERE id = ?', [publicPath, submissionId]);
-  } catch (dbErr) {
-    console.warn('Failed to update submission.generated_pdf_path', dbErr && dbErr.message ? dbErr.message : dbErr);
+  await promiseDb.query('UPDATE submissions SET generated_pdf_path = ? WHERE id = ?', [publicPath, submissionId]);
+  if (storageAsset) {
+    await promiseDb.query(
+      `INSERT INTO file_assets (scholar_id, file_url, public_id, resource_type, file_format)
+       VALUES (?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE public_id = VALUES(public_id), resource_type = VALUES(resource_type), file_format = VALUES(file_format)`,
+      [
+        sub.scholar_id,
+        publicPath,
+        storageAsset.key || storageAsset.public_id,
+        storageAsset.resourceType || storageAsset.resource_type || 'raw',
+        storageAsset.format || 'pdf',
+      ]
+    );
   }
 
   return publicPath;

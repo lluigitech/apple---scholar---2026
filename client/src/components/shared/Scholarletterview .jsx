@@ -1,9 +1,74 @@
+import { useEffect, useState } from 'react';
+import axios from 'axios';
 import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { X, CheckCircle, Clock, XCircle, Download, Image as ImageIcon } from 'lucide-react';
 import { formatYearLevelLabel } from '../../utils/yearLevelLabels';
 
 const MAROON = '#802B36';
 const MAROON_LIGHT = '#F5E8EA';
+
+const useSubmissionFileUrl = (filePath) => {
+    const [fileUrl, setFileUrl] = useState(null);
+    const [loadError, setLoadError] = useState(false);
+
+    useEffect(() => {
+        let objectUrl;
+        let cancelled = false;
+        setFileUrl(null);
+        setLoadError(false);
+        if (!filePath) return undefined;
+
+        const requiresAuthorization = filePath.startsWith('r2://') || filePath.includes('res.cloudinary.com');
+        if (!requiresAuthorization) {
+            setFileUrl(/^https?:\/\//i.test(filePath)
+                ? filePath
+                : `${API_ORIGIN}/${filePath.replace(/^\/+/, '')}`);
+            return undefined;
+        }
+
+        const token = localStorage.getItem('token');
+        if (!token) {
+            setLoadError(true);
+            return undefined;
+        }
+
+        axios.get(`${API_ORIGIN}/api/submission/preview?url=${encodeURIComponent(filePath)}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            responseType: 'blob',
+        }).then(({ data }) => {
+            if (cancelled) return;
+            objectUrl = URL.createObjectURL(data);
+            setFileUrl(objectUrl);
+        }).catch((error) => {
+            if (cancelled) return;
+            console.error('Could not load protected submission file:', error);
+            setLoadError(true);
+        });
+
+        return () => {
+            cancelled = true;
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
+        };
+    }, [filePath]);
+
+    return { fileUrl, loadError };
+};
+
+const SubmissionFileImage = ({ filePath, alt, className }) => {
+    const { fileUrl } = useSubmissionFileUrl(filePath);
+    return fileUrl ? <img src={fileUrl} alt={alt} className={className} /> : null;
+};
+
+const SubmissionFileLink = ({ filePath, children, className, style }) => {
+    const { fileUrl, loadError } = useSubmissionFileUrl(filePath);
+    if (loadError) return <span style={style}>Unable to load file</span>;
+    if (!fileUrl) return <span style={style}>Loading file…</span>;
+    return (
+        <a href={fileUrl} target="_blank" rel="noreferrer" className={className} style={style}>
+            {children}
+        </a>
+    );
+};
 
 // ─── Helpers ──────────────────────────────────────────────────
 
@@ -289,19 +354,17 @@ const ScholarLetterView = ({ submission, onClose }) => {
                                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                     {mediaItems.map((item, i) => (
                                         <div key={i}>
-                                            <a
-                                                href={`${API_ORIGIN}/${item.path}`}
-                                                target="_blank"
-                                                rel="noreferrer"
+                                            <SubmissionFileLink
+                                                filePath={item.path}
                                                 className="block rounded-xl overflow-hidden border border-gray-100 shadow-sm hover:opacity-90 transition-opacity"
                                                 style={{ height: 150 }}
                                             >
-                                                <img
-                                                    src={`${API_ORIGIN}/${item.path}`}
+                                                <SubmissionFileImage
+                                                    filePath={item.path}
                                                     alt={item.description || `Documentation ${i + 1}`}
                                                     className="w-full h-full object-cover"
                                                 />
-                                            </a>
+                                            </SubmissionFileLink>
                                             {item.description && (
                                                 <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.72rem', color: '#6b7280', marginTop: 5, textAlign: 'center', fontStyle: 'italic', lineHeight: 1.4 }}>
                                                     ({item.description})
@@ -334,15 +397,13 @@ const ScholarLetterView = ({ submission, onClose }) => {
                                             {doc.label}
                                         </p>
                                         {doc.path ? (
-                                            <a
-                                                href={`${API_ORIGIN}/${doc.path}`}
-                                                target="_blank"
-                                                rel="noreferrer"
+                                            <SubmissionFileLink
+                                                filePath={doc.path}
                                                 className="flex items-center justify-center gap-1 mt-1 text-xs font-bold"
                                                 style={{ color: '#16a34a' }}
                                             >
                                                 <Download size={11} /> View File
-                                            </a>
+                                            </SubmissionFileLink>
                                         ) : (
                                             <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '0.75rem', fontWeight: 700, color: '#ef4444', marginTop: 4 }}>
                                                 ❌ Not submitted

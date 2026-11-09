@@ -30,7 +30,12 @@ const letterFileName = letter => `Monthly_Letter_${String(letter.scholarName || 
 
 const getLetterPdfBlob = async letter => {
   if (letter.pdfUrl) {
-    const url = new URL(letter.pdfUrl, `${API_BASE}/`);
+    const storedPath = String(letter.pdfUrl);
+    const protectedFile = storedPath.startsWith('r2://') || storedPath.includes('res.cloudinary.com');
+    const requestUrl = protectedFile
+      ? `${API_BASE}/submission/preview?url=${encodeURIComponent(storedPath)}`
+      : storedPath;
+    const url = new URL(requestUrl, `${API_BASE}/`);
     if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Unsupported letter PDF URL.');
     const apiOrigin = new URL(API_BASE).origin;
     const response = await axios.get(url.href, {

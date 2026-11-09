@@ -618,7 +618,7 @@ const OfficerManualValidation = () => {
     if (!path) return { url: null, kind: null };
     const backendRoot = API.replace(/\/api$/, '');
     const normalized = path.startsWith('/') ? `${backendRoot}${path}` : path;
-    const url = normalized.includes('res.cloudinary.com')
+    const url = normalized.startsWith('r2://') || normalized.includes('res.cloudinary.com')
       ? `${API}/submission/preview?url=${encodeURIComponent(normalized)}`
       : normalized;
     return { url, kind: fileKind(normalized) };

@@ -345,6 +345,37 @@ export default function ArchiveManagement() {
     const [dRetention, setDRetention] = useState('');
     const [archivedDocsAll, setArchivedDocsAll] = useState([]); // unfiltered, for KPIs
 
+    const openStoredFile = async (filePath, { download = false, fileName = 'document' } = {}) => {
+        setError('');
+        const previewWindow = download ? null : window.open('', '_blank');
+        if (!download && !previewWindow) {
+            setError('Allow pop-ups to view this document.');
+            return;
+        }
+
+        try {
+            const response = await axios.get(previewUrl(filePath), {
+                ...auth(),
+                responseType: 'blob',
+            });
+            const objectUrl = URL.createObjectURL(response.data);
+            if (download) {
+                const link = document.createElement('a');
+                link.href = objectUrl;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+            } else {
+                previewWindow.location.href = objectUrl;
+            }
+            window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+        } catch (e) {
+            if (previewWindow) previewWindow.close();
+            setError(e.response?.data?.error || 'Unable to open this document.');
+        }
+    };
+
     const loadScholars = useCallback(async () => {
         setScholarsLoading(true);
         try {
@@ -892,8 +923,8 @@ export default function ArchiveManagement() {
                                                     <td style={tdStyle}>
                                                         <div className="flex items-center gap-1.5">
                                                             {row.file_path && (<>
-                                                                <ActionBtn icon={Eye} href={previewUrl(row.file_path)} target="_blank" title="View" />
-                                                                <ActionBtn icon={Download} href={previewUrl(row.file_path)} target="_blank" download title="Download" />
+                                                                <ActionBtn icon={Eye} onClick={() => openStoredFile(row.file_path)} title="View" />
+                                                                <ActionBtn icon={Download} onClick={() => openStoredFile(row.file_path, { download: true, fileName: row.file_name || 'document' })} title="Download" />
                                                             </>)}
                                                             {docState === 1 && <ActionBtn icon={RotateCcw} onClick={() => mutateDoc('restore', row)} title="Restore" />}
                                                             {role === 'admin' && row.record_type !== 'submission' && <ActionBtn icon={Trash2} onClick={() => mutateDoc('delete', row)} title="Delete" danger />}
@@ -927,8 +958,8 @@ export default function ArchiveManagement() {
                                             </div>
                                             <div className="flex items-center gap-1.5 mt-3 pt-3" style={{ borderTop: `1px solid ${BORDER}` }}>
                                                 {row.file_path && (<>
-                                                    <ActionBtn icon={Eye} href={previewUrl(row.file_path)} target="_blank" title="View" />
-                                                    <ActionBtn icon={Download} href={previewUrl(row.file_path)} target="_blank" download title="Download" />
+                                                    <ActionBtn icon={Eye} onClick={() => openStoredFile(row.file_path)} title="View" />
+                                                    <ActionBtn icon={Download} onClick={() => openStoredFile(row.file_path, { download: true, fileName: row.file_name || 'document' })} title="Download" />
                                                 </>)}
                                                 {docState === 1 && <ActionBtn icon={RotateCcw} onClick={() => mutateDoc('restore', row)} title="Restore" />}
                                                 {role === 'admin' && row.record_type !== 'submission' && <ActionBtn icon={Trash2} onClick={() => mutateDoc('delete', row)} title="Delete" danger />}
@@ -1011,7 +1042,7 @@ export default function ArchiveManagement() {
                                             <p className="truncate" style={{ ...body, fontSize: '0.84rem', color: INK }}>{d.file_name || '—'}</p>
                                             <p style={{ ...body, fontSize: '0.72rem', color: MUTED }}>{[d.category, formatDate(d.uploaded_at)].filter(Boolean).join('  ·  ')}</p>
                                         </div>
-                                        {d.file_path && <ActionBtn icon={Eye} href={previewUrl(d.file_path)} target="_blank" title="View document" />}
+                                        {d.file_path && <ActionBtn icon={Eye} onClick={() => openStoredFile(d.file_path)} title="View document" />}
                                     </div>
                                 ))}
                             </div>

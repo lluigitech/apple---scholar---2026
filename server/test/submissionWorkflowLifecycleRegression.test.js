@@ -177,7 +177,7 @@ const gradesDeadlineCheck = controllerContent.indexOf(
   'Number(assignedTask.deadline_passed) === 1',
   gradesSubmitStart
 );
-const gradesCloudUpload = controllerContent.indexOf('uploadBufferToCloudinary(req.file)', gradesSubmitStart);
+const gradesCloudUpload = controllerContent.indexOf('uploadFileToConfiguredStorage(req.file, scholar_id)', gradesSubmitStart);
 assert.ok(
   gradesSubmitStart !== -1 &&
     gradesDeadlineCheck > gradesSubmitStart &&

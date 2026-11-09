@@ -15,6 +15,7 @@ const { logComplianceIncident, clampCompliance, getComplianceSettings, calculate
 const { logAuditEvent } = require('../utils/auditLogger');
 const { canAccessScholar, logPrivacyAccess } = require('../middleware/privacyAccess');
 const { consumeCompleted, removeSession } = require('../services/resumableUploadService');
+const r2Storage = require('../services/r2StorageService');
 const { predictSentimentForLetter, predictContentScoreForLetter, mapSentimentValueToLabel } = require('../services/sentimentService');
 const { predictLetterScore, mapQualityStatus, mapQualityLabel } = require('../services/letterScoreService');
 const { buildSubmissionReviewEmail } = require('../utils/emailTemplates');
@@ -345,7 +346,7 @@ const folderForField = {
     report_card: 'report-cards',
     cor: 'cor',
     media: 'other-documents',
-    proof: 'grades-proof',
+    proof: 'report-cards',
 };
 
 const uploadBufferToCloudinary = (file) => new Promise((resolve, reject) => {
@@ -366,27 +367,43 @@ const uploadBufferToCloudinary = (file) => new Promise((resolve, reject) => {
     uploader.end(file.buffer);
 });
 
-const uploadPermanentFiles = async (files) => {
+const uploadFileToConfiguredStorage = async (file, scholarId) => {
+    if (r2Storage.getStorageProvider() === 'r2') {
+        const key = r2Storage.createObjectKey({
+            folder: folderForField[file.fieldname] || 'other-documents',
+            scholarId,
+            originalName: file.originalname,
+        });
+        return r2Storage.uploadBuffer({
+            buffer: file.buffer,
+            key,
+            contentType: file.mimetype,
+        });
+    }
+
+    return uploadBufferToCloudinary(file);
+};
+
+const uploadPermanentFiles = async (files, scholarId) => {
     await Promise.all(files.map(async (file) => {
-        const asset = await uploadBufferToCloudinary(file);
-        file.path = asset.secure_url;
-        file.cloudinaryAsset = asset;
+        const asset = await uploadFileToConfiguredStorage(file, scholarId);
+        file.path = asset.url || asset.secure_url;
+        file.storageAsset = asset;
     }));
 };
 
 const registerFileAssets = async (scholarId, files) => {
     for (const file of files) {
-        const asset = file.cloudinaryAsset;
-        if (!asset?.secure_url || !asset.public_id) continue;
-        await new Promise((resolve) => {
+        const asset = file.storageAsset || file.cloudinaryAsset;
+        const fileUrl = asset?.url || asset?.secure_url;
+        const publicId = asset?.key || asset?.public_id;
+        if (!fileUrl || !publicId) throw new Error('Stored upload is missing its asset reference.');
+        await new Promise((resolve, reject) => {
             db.query(
                 `INSERT INTO file_assets (scholar_id, file_url, public_id, resource_type, file_format)
                  VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE public_id = VALUES(public_id), resource_type = VALUES(resource_type), file_format = VALUES(file_format)`,
-                [scholarId, asset.secure_url, asset.public_id, asset.resource_type || 'image', asset.format || null],
-                (err) => {
-                    if (err) console.error('File asset registry error:', err.message);
-                    resolve();
-                }
+                [scholarId, fileUrl, publicId, asset.resourceType || asset.resource_type || 'image', asset.format || null],
+                (err) => err ? reject(err) : resolve()
             );
         });
     }
@@ -511,7 +528,7 @@ exports.submitCompliance = async (req, res) => {
         }
 
         let modelScorePrediction = null;
-        await uploadPermanentFiles(uploadedFiles);
+        await uploadPermanentFiles(uploadedFiles, scholar_id);
         await registerFileAssets(scholar_id, uploadedFiles);
         await Promise.all(resumableIds.map(removeSession));
         const reportCardPath = uploadedFiles.find(file => file.fieldname === 'report_card')?.path || null;
@@ -939,11 +956,7 @@ exports.predictLetterScore = async (req, res) => {
     }
 };
 
-// PREVIEW / PROXY A CLOUDINARY FILE
-// The `url` query param is already the full Cloudinary secure_url stored in the DB
-// (set by multer-storage-cloudinary at upload time), so we just fetch it directly
-// and stream it back - no need to hit the Cloudinary Admin API at all.
-// This avoids the resource_type mismatch issues (image/video/raw/auto) entirely.
+// PREVIEW / PROXY A REGISTERED FILE
 exports.previewCloudinaryFile = async (req, res) => {
     const { url } = req.query;
     if (!url) return res.status(400).json({ error: 'Missing file URL' });
@@ -956,14 +969,14 @@ exports.previewCloudinaryFile = async (req, res) => {
                  UNION ALL SELECT s.scholar_id, s.id AS resource_id, s.submission_type AS resource_type
                  FROM submission_media m
                  JOIN submissions s ON s.id = m.submission_id
-                 WHERE m.file_path = ?
+                 WHERE m.file_path = ? OR m.photo_path = ?
                  UNION ALL SELECT scholar_id, id AS resource_id, 'grades' AS resource_type FROM grades WHERE proof_path = ?
                  UNION ALL SELECT d.scholar_id, d.id AS resource_id, COALESCE(s.submission_type, 'document') AS resource_type
                  FROM documents d
                  LEFT JOIN submissions s ON s.id = d.source_submission_id
                  WHERE d.file_path = ?
                  LIMIT 1`,
-                [url, url, url, url, url, url],
+                [url, url, url, url, url, url, url],
                 (queryErr, rows) => queryErr ? reject(queryErr) : resolve(rows)
             );
         });
@@ -999,6 +1012,22 @@ exports.previewCloudinaryFile = async (req, res) => {
             res.setHeader('content-type', 'application/pdf');
             res.setHeader('content-disposition', 'inline');
             return res.sendFile(localPath);
+        }
+
+        const r2Reference = r2Storage.parseR2Uri(url);
+        if (r2Reference) {
+            const object = await r2Storage.getObject(url);
+            if (!object.Body) return res.status(404).json({ error: 'File not found in R2' });
+            res.setHeader('content-type', object.ContentType || 'application/octet-stream');
+            res.setHeader('content-disposition', 'inline');
+            res.setHeader('x-content-type-options', 'nosniff');
+            if (object.ContentLength != null) res.setHeader('content-length', object.ContentLength);
+            object.Body.once('error', (streamError) => {
+                console.error('R2 file preview stream failed:', streamError.message);
+                if (!res.headersSent) res.status(502).end();
+                else res.destroy(streamError);
+            });
+            return object.Body.pipe(res);
         }
 
         // Basic safety check: only allow proxying actual Cloudinary URLs.
@@ -1750,13 +1779,13 @@ exports.submitGrades = (req, res) => {
             if (Number(assignedTask.deadline_passed) === 1) {
                 throw Object.assign(new Error('The deadline for this task has passed. Submissions are closed.'), { statusCode: 409 });
             }
-            return uploadBufferToCloudinary(req.file);
+            return uploadFileToConfiguredStorage(req.file, scholar_id).then((asset) => ({ asset, assignedTask }));
         })
-        .then(async (asset) => {
-            req.file.path = asset.secure_url;
-            req.file.cloudinaryAsset = asset;
+        .then(async ({ asset, assignedTask }) => {
+            req.file.path = asset.url || asset.secure_url;
+            req.file.storageAsset = asset;
             await registerFileAssets(scholar_id, [req.file]);
-            return saveGradesWithProofPath(req, res, scholar_id, semester, academic_year, subjects, asset.secure_url, assignedTask);
+            return saveGradesWithProofPath(req, res, scholar_id, semester, academic_year, subjects, req.file.path, assignedTask);
         })
         .catch((uploadError) => {
             console.error('Grade proof upload error:', uploadError);
@@ -2271,6 +2300,10 @@ const safeArchiveFolderPart = (value, fallback) =>
     String(value || fallback).replace(/[<>:"/\\|?*\x00-\x1F]/g, '').trim();
 
 const readGeneratedPdf = async (filePath) => {
+    if (r2Storage.parseR2Uri(filePath)) {
+        return r2Storage.readObjectBuffer(filePath);
+    }
+
     if (/^https:\/\//i.test(filePath)) {
         const parsed = new URL(filePath);
         if (parsed.hostname !== 'res.cloudinary.com') throw new Error('Unsupported PDF storage host.');
@@ -2323,6 +2356,10 @@ exports.downloadMonthlyLetterPdf = async (req, res) => {
 
         const uploadsRoot = path.resolve(__dirname, '..', 'uploads');
         const readPdfPath = async filePath => {
+            if (r2Storage.parseR2Uri(filePath)) {
+                return r2Storage.readObjectBuffer(filePath);
+            }
+
             if (/^https:\/\//i.test(filePath)) {
                 const parsed = new URL(filePath);
                 if (parsed.hostname !== 'res.cloudinary.com') throw new Error('Unsupported PDF storage host.');
