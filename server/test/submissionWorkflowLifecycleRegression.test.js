@@ -96,6 +96,14 @@ assert.ok(
 );
 
 assert.ok(
+  controllerContent.includes("SELECT s.scholar_id, COALESCE(u.email, ''), 'system', ?, 'generated', ?") &&
+    controllerContent.includes('`submission_review_${resolvedStatus}`') &&
+    controllerContent.includes("SELECT u.scholar_id, COALESCE(u.email, ''), 'system', ?, 'generated', ?") &&
+    controllerContent.includes('`grade_review_${normalizedStatus}`'),
+  'submission and grades review decisions should create in-app scholar notifications even without SMTP'
+);
+
+assert.ok(
   officerControllerContent.includes('const missingTasks = assigned.filter') &&
     officerControllerContent.includes('return !Number.isNaN(dueDate.getTime()) && dueDate < today') &&
     officerControllerContent.includes("task.type === 'Report Card' && record.submission_type === 'grades'"),

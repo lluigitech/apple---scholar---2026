@@ -88,7 +88,7 @@ test('Officer validation queue includes every submission type and grades in assi
 test('Officer grade approval is limited to pending records and assigned year levels', async () => {
   let update;
   fakeDb.query = (sql, values, callback) => {
-    update = { sql, values };
+    if (sql.trimStart().startsWith('UPDATE grades')) update = { sql, values };
     callback(null, { affectedRows: 1 });
   };
 

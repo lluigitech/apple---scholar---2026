@@ -1489,6 +1489,23 @@ exports.reviewSubmission = (req, res) => {
         res.json({ message: 'Submission reviewed successfully', id, review_status: resolvedStatus });
         logAuditEvent({ req, action: 'submission_reviewed', module: 'Submissions', details: `Reviewed submission ${id} as ${resolvedStatus}` });
         db.query(
+            `INSERT INTO notification_logs (scholar_id, recipient, channel, type, status, detail)
+             SELECT s.scholar_id, COALESCE(u.email, ''), 'system', ?, 'generated', ?
+             FROM submissions s
+             LEFT JOIN users u ON u.scholar_id = s.scholar_id
+             WHERE s.id = ?`,
+            [
+                `submission_review_${resolvedStatus}`,
+                `submission:${id}:status:${resolvedStatus}`,
+                id,
+            ],
+            (notificationErr) => {
+                if (notificationErr) {
+                    console.error('Failed to create in-app submission notification:', notificationErr.message);
+                }
+            }
+        );
+        db.query(
             `UPDATE documents SET status = CASE ? WHEN 'approved' THEN 'Approved' WHEN 'returned' THEN 'Rejected' WHEN 'rejected' THEN 'Rejected' ELSE 'Pending' END WHERE source_submission_id = ?`,
             [resolvedStatus, id],
             (documentStatusErr) => { if (documentStatusErr) console.error('Document retention status update failed:', documentStatusErr.message); }
@@ -1969,6 +1986,23 @@ exports.reviewGrades = (req, res) => {
             return res.status(404).json({ error: 'No pending grades submission found within your assigned year levels.' });
         }
         res.json({ message: 'Grades reviewed successfully' });
+        db.query(
+            `INSERT INTO notification_logs (scholar_id, recipient, channel, type, status, detail)
+             SELECT u.scholar_id, COALESCE(u.email, ''), 'system', ?, 'generated', ?
+             FROM users u
+             WHERE u.scholar_id = ? AND LOWER(u.role) = 'scholar'
+             LIMIT 1`,
+            [
+                `grade_review_${normalizedStatus}`,
+                `grades:${semester}:${academic_year}:status:${normalizedStatus}:event:${randomUUID()}`,
+                scholar_id,
+            ],
+            (notificationErr) => {
+                if (notificationErr) {
+                    console.error('Failed to create in-app grades notification:', notificationErr.message);
+                }
+            }
+        );
     });
 };
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import useComplianceStatus from '../../hooks/useComplianceStatus';
@@ -588,13 +588,12 @@ const ScholarDashboard = () => {
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [subRes, annRes, dutiesRes, gradesRes, tasksRes, notificationsRes] = await Promise.allSettled([
+                const [subRes, annRes, dutiesRes, gradesRes, tasksRes] = await Promise.allSettled([
                     axios.get(`${API}/submission/history/${scholarId}`, { headers: authHeader() }),
                     axios.get(`${API}/scholar/announcements`, { headers: authHeader() }),
                     axios.get(`${API}/scholar/my-duties`, { headers: authHeader() }),
                     axios.get(`${API}/submission/grades/${scholarId}`, { headers: authHeader() }),
                     axios.get(`${API}/tasks`, { headers: authHeader() }),
-                    axios.get(`${API}/scholar/notifications`, { headers: authHeader() }),
                 ]);
 
                 const history = subRes.status === 'fulfilled' && Array.isArray(subRes.value.data) ? subRes.value.data : [];
@@ -605,18 +604,6 @@ const ScholarDashboard = () => {
                 if (annRes.status === 'fulfilled') {
                     setAnnouncements(annRes.value.data.slice(0, 3));
                 }
-
-                if (notificationsRes.status === 'fulfilled' && Array.isArray(notificationsRes.value.data)) {
-                    setNotifications(notificationsRes.value.data);
-                    setNotificationsError('');
-                } else {
-                    const notificationError = notificationsRes.status === 'rejected'
-                        ? notificationsRes.reason
-                        : new Error('Unexpected notification response.');
-                    console.error('Unable to load scholar notifications:', notificationError);
-                    setNotificationsError(notificationError.response?.data?.error || 'Unable to load notifications. Please try again.');
-                }
-                setNotificationsLoading(false);
 
                 setChecklistInputs({
                     duties: dutiesRes.status === 'fulfilled' && Array.isArray(dutiesRes.value.data) ? dutiesRes.value.data : [],
@@ -634,19 +621,43 @@ const ScholarDashboard = () => {
         fetchData();
     }, [scholarId, API]);
 
-    const refreshNotifications = async () => {
-        setNotificationsLoading(true);
+    const refreshNotifications = useCallback(async (showLoading = false, isActive = () => true) => {
+        if (showLoading) setNotificationsLoading(true);
         try {
             const response = await axios.get(`${API}/scholar/notifications`, { headers: authHeader() });
+            if (!isActive()) return;
             setNotifications(Array.isArray(response.data) ? response.data : []);
             setNotificationsError('');
         } catch (requestError) {
+            if (!isActive()) return;
             console.error('Unable to refresh scholar notifications:', requestError);
             setNotificationsError(requestError.response?.data?.error || 'Unable to load notifications. Please try again.');
         } finally {
-            setNotificationsLoading(false);
+            if (showLoading && isActive()) setNotificationsLoading(false);
         }
-    };
+    }, [API]);
+
+    useEffect(() => {
+        let active = true;
+        const refresh = async (showLoading = false) => {
+            if (!active) return;
+            await refreshNotifications(showLoading, () => active);
+        };
+        const refreshWhenVisible = () => {
+            if (document.visibilityState === 'visible') refresh();
+        };
+
+        refresh(true);
+        const interval = window.setInterval(() => refresh(), 60_000);
+        window.addEventListener('focus', refreshWhenVisible);
+        document.addEventListener('visibilitychange', refreshWhenVisible);
+        return () => {
+            active = false;
+            window.clearInterval(interval);
+            window.removeEventListener('focus', refreshWhenVisible);
+            document.removeEventListener('visibilitychange', refreshWhenVisible);
+        };
+    }, [refreshNotifications]);
 
     const allRequirements = buildScholarChecklist(checklistInputs).map((task) => ({
         ...task,
