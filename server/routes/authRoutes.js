@@ -63,15 +63,16 @@ router.post('/reset-password', async (req, res) => {
 
 // ─── LOGIN ───────────────────────────────────────────────────
 router.post('/login', (req, res) => {
-    const loginId = String(req.body?.loginId || req.body?.identifier || req.body?.email || '').trim();
+    const loginId = String(req.body?.loginId || '').trim();
+    const email = String(req.body?.email || '').trim();
     const password = req.body?.password;
-    if (!loginId || typeof password !== 'string' || !password) {
-        return res.status(400).json({ message: 'Login ID or email and password are required.' });
+    if (!loginId || !email || typeof password !== 'string' || !password) {
+        return res.status(400).json({ message: 'Login ID, email, and password are required.' });
     }
 
-    const sql = 'SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR UPPER(scholar_id) = UPPER(?) LIMIT 1';
+    const sql = 'SELECT * FROM users WHERE UPPER(scholar_id) = UPPER(?) AND LOWER(email) = LOWER(?) LIMIT 1';
 
-    db.query(sql, [loginId, loginId], async (err, data) => {
+    db.query(sql, [loginId, email], async (err, data) => {
         try {
             if (err) {
                 console.error('[LOGIN ERROR] db query failed:', err);
@@ -79,7 +80,7 @@ router.post('/login', (req, res) => {
             }
 
             if (!Array.isArray(data) || data.length === 0) {
-                return res.status(401).json({ message: 'Invalid Login ID/email or password' });
+                return res.status(401).json({ message: 'Invalid Login ID, email, or password' });
             }
 
             const user = data[0];
@@ -102,7 +103,7 @@ router.post('/login', (req, res) => {
                     details: `Failed login attempt for account ${user.scholar_id || user.email || user.id}`,
                     result: 'failed',
                 }).catch(() => {});
-                return res.status(401).json({ message: 'Invalid Login ID/email or password' });
+                return res.status(401).json({ message: 'Invalid Login ID, email, or password' });
             }
 
             if (typeof user.password === 'string' && (user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$'))) {
@@ -121,7 +122,7 @@ router.post('/login', (req, res) => {
                     details: `Failed login attempt for account ${user.scholar_id || user.email || user.id}`,
                     result: 'failed',
                 }).catch(() => {});
-                return res.status(401).json({ message: 'Invalid Login ID/email or password' });
+                return res.status(401).json({ message: 'Invalid Login ID, email, or password' });
             }
 
             const token = jwt.sign(

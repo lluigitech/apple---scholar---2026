@@ -64,7 +64,7 @@ const invokeLogin = (body) => new Promise((resolve) => {
   routes.get('POST /login')({ body }, response);
 });
 
-test('all user roles can sign in using generated role ID, and legacy email login still works', async () => {
+test('all user roles sign in with their generated ID, matching email, and password', async () => {
   const users = [
     { scholar_id: 'SCH-2026-0162', role: 'scholar' },
     { scholar_id: 'OFF-2026-0001', role: 'officer' },
@@ -81,33 +81,35 @@ test('all user roles can sign in using generated role ID, and legacy email login
       password: 'correct-password',
       must_change_password: 0,
     }];
-    const response = await invokeLogin({ loginId: user.scholar_id.toLowerCase(), password: 'correct-password' });
+    const response = await invokeLogin({
+      loginId: user.scholar_id.toLowerCase(),
+      email: ' USER@example.com ',
+      password: 'correct-password',
+    });
 
     assert.equal(response.statusCode, 200);
     assert.equal(response.payload.status, 'Success');
     assert.equal(response.payload.role, user.role);
-    assert.match(capturedQuery.sql, /LOWER\(email\) = LOWER\(\?\) OR UPPER\(scholar_id\) = UPPER\(\?\)/);
-    assert.deepEqual(capturedQuery.values, [user.scholar_id.toLowerCase(), user.scholar_id.toLowerCase()]);
+    assert.match(capturedQuery.sql, /UPPER\(scholar_id\) = UPPER\(\?\) AND LOWER\(email\) = LOWER\(\?\)/);
+    assert.deepEqual(capturedQuery.values, [user.scholar_id.toLowerCase(), 'USER@example.com']);
   }
 
-  queryResult = [{
-    scholar_id: 'SCH-2026-0162',
-    role: 'scholar',
-    id: 1,
-    full_name: 'Test User',
-    email: 'user@example.com',
+  queryResult = [];
+  const mismatchedEmailResponse = await invokeLogin({
+    loginId: 'SCH-2026-0162',
+    email: 'someone-else@example.com',
     password: 'correct-password',
-    must_change_password: 0,
-  }];
-  const legacyResponse = await invokeLogin({ email: ' user@example.com ', password: 'correct-password' });
-  assert.equal(legacyResponse.statusCode, 200);
-  assert.deepEqual(capturedQuery.values, ['user@example.com', 'user@example.com']);
+  });
+  assert.equal(mismatchedEmailResponse.statusCode, 401);
 });
 
-test('login rejects missing credentials and does not query the database', async () => {
+test('login rejects missing identifiers or password without querying the database', async () => {
   capturedQuery = undefined;
-  const response = await invokeLogin({ loginId: 'SCH-2026-0162', password: '' });
+  const missingEmail = await invokeLogin({ loginId: 'SCH-2026-0162', password: 'correct-password' });
+  assert.equal(missingEmail.statusCode, 400);
+  assert.equal(capturedQuery, undefined);
 
-  assert.equal(response.statusCode, 400);
+  const missingPassword = await invokeLogin({ loginId: 'SCH-2026-0162', email: 'user@example.com', password: '' });
+  assert.equal(missingPassword.statusCode, 400);
   assert.equal(capturedQuery, undefined);
 });
