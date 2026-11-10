@@ -5,13 +5,13 @@ import { useNavigate } from 'react-router-dom';
 import {
     Eye,
     EyeOff,
-    Mail,
     Lock,
     AlertCircle,
     ShieldCheck,
     GraduationCap,
     Users,
     ArrowRight,
+    UserRound,
 } from 'lucide-react';
 
 // Official Apple Scholar logo — also the way back to the landing page
@@ -61,12 +61,12 @@ const LeafCluster = ({ className, flip = false }) => (
 );
 
 const Login = () => {
-    // "Remember me" only remembers the email address on this device.
-    const [email, setEmail] = useState(() => {
-        try { return localStorage.getItem('remembered_email') || ''; } catch { return ''; }
+    // Continue accepting the old remembered-email value after the login field change.
+    const [loginId, setLoginId] = useState(() => {
+        try { return localStorage.getItem('remembered_login') || localStorage.getItem('remembered_email') || ''; } catch { return ''; }
     });
     const [rememberMe, setRememberMe] = useState(() => {
-        try { return !!localStorage.getItem('remembered_email'); } catch { return false; }
+        try { return !!(localStorage.getItem('remembered_login') || localStorage.getItem('remembered_email')); } catch { return false; }
     });
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
@@ -80,13 +80,13 @@ const Login = () => {
         setIsLoading(true);
         setError('');
         try {
-            const res = await axios.post(`${API_ORIGIN}/api/login`, { email, password });
+            const res = await axios.post(`${API_ORIGIN}/api/login`, { loginId, password });
             if (res.data.status === "Success") {
                 const userRole = res.data.role.toLowerCase().trim();
                 localStorage.setItem('token', res.data.token);
                 localStorage.setItem('role', userRole);
                 localStorage.setItem('name', res.data.name);
-                localStorage.setItem('email', res.data.email || email);
+                localStorage.setItem('email', res.data.email || '');
                 localStorage.setItem('id', res.data.id);
                 localStorage.setItem('scholar_id', res.data.scholar_id);
                 if (res.data.must_change_password && userRole === 'scholar') {
@@ -107,7 +107,7 @@ const Login = () => {
             }
         } catch (err) {
             if (err.response?.status === 401) {
-                setError('Wrong email or password.');
+                setError('Wrong Login ID/email or password.');
             } else if (err.response?.status === 404) {
                 setError('Account not found.');
             } else {
@@ -118,11 +118,12 @@ const Login = () => {
         }
     };
 
-    // Runs before the (unchanged) login handler: stores or clears the remembered email.
+    // Runs before the login handler: stores or clears the remembered login ID/email.
     const handleSubmit = (e) => {
         try {
-            if (rememberMe) localStorage.setItem('remembered_email', email);
-            else localStorage.removeItem('remembered_email');
+            if (rememberMe) localStorage.setItem('remembered_login', loginId);
+            else localStorage.removeItem('remembered_login');
+            localStorage.removeItem('remembered_email');
         } catch { /* storage unavailable — ignore */ }
         handleLogin(e);
     };
@@ -262,14 +263,14 @@ const Login = () => {
 
                             <form onSubmit={handleSubmit}>
                                 <div className="field-group">
-                                    <label className="field-label" htmlFor="login-email">Email address</label>
+                                    <label className="field-label" htmlFor="login-id">Login ID or email</label>
                                     <div className="input-wrap">
-                                        <Mail size={18} color={PRIMARY} className="input-icon" />
+                                        <UserRound size={18} color={PRIMARY} className="input-icon" />
                                         <input
-                                            id="login-email"
-                                            type="email" required placeholder="yourname@kalinga.org"
-                                            value={email} onChange={(e) => setEmail(e.target.value)}
-                                            autoComplete="email"
+                                            id="login-id"
+                                            type="text" required placeholder="SCH-2026-0162 or your email"
+                                            value={loginId} onChange={(e) => setLoginId(e.target.value)}
+                                            autoComplete="username"
                                             className="portal-input"
                                             style={sans}
                                         />

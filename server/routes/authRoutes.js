@@ -63,11 +63,15 @@ router.post('/reset-password', async (req, res) => {
 
 // ─── LOGIN ───────────────────────────────────────────────────
 router.post('/login', (req, res) => {
-    const { email, password } = req.body;
-    console.log('[LOGIN INVOKED]', { email, passwordProvided: !!password });
-    const sql = "SELECT * FROM users WHERE email = ?";
+    const loginId = String(req.body?.loginId || req.body?.identifier || req.body?.email || '').trim();
+    const password = req.body?.password;
+    if (!loginId || typeof password !== 'string' || !password) {
+        return res.status(400).json({ message: 'Login ID or email and password are required.' });
+    }
 
-    db.query(sql, [email], async (err, data) => {
+    const sql = 'SELECT * FROM users WHERE LOWER(email) = LOWER(?) OR UPPER(scholar_id) = UPPER(?) LIMIT 1';
+
+    db.query(sql, [loginId, loginId], async (err, data) => {
         try {
             if (err) {
                 console.error('[LOGIN ERROR] db query failed:', err);
@@ -75,12 +79,10 @@ router.post('/login', (req, res) => {
             }
 
             if (!Array.isArray(data) || data.length === 0) {
-                console.log('[LOGIN] no user found for email', email);
-                return res.status(401).json({ message: "Invalid email or password" });
+                return res.status(401).json({ message: 'Invalid Login ID/email or password' });
             }
 
             const user = data[0];
-            console.log('[LOGIN USER]', { id: user.id, email: user.email, role: user.role, passwordPresent: !!user.password });
             const normalizedRole = typeof user.role === 'string' ? user.role.toLowerCase().trim() : user.role;
             const currentAge = calculateAge(user.birth_date);
             if (currentAge !== null && currentAge !== Number(user.age)) {
@@ -91,17 +93,16 @@ router.post('/login', (req, res) => {
 
             let match = false;
             if (!user.password) {
-                console.log('[LOGIN] user has no password');
                 logAuditEvent({
                     req,
                     userId: user.id,
                     role: normalizedRole,
                     action: 'login',
                     module: 'Authentication',
-                    details: `Failed login attempt for ${user.email}`,
+                    details: `Failed login attempt for account ${user.scholar_id || user.email || user.id}`,
                     result: 'failed',
                 }).catch(() => {});
-                return res.status(401).json({ message: "Invalid email or password" });
+                return res.status(401).json({ message: 'Invalid Login ID/email or password' });
             }
 
             if (typeof user.password === 'string' && (user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$'))) {
@@ -110,7 +111,6 @@ router.post('/login', (req, res) => {
                 match = String(password) === String(user.password);
             }
 
-            console.log('[LOGIN] password match:', match);
             if (!match) {
                 logAuditEvent({
                     req,
@@ -118,18 +118,10 @@ router.post('/login', (req, res) => {
                     role: normalizedRole,
                     action: 'login',
                     module: 'Authentication',
-                    details: `Failed login attempt for ${user.email}`,
+                    details: `Failed login attempt for account ${user.scholar_id || user.email || user.id}`,
                     result: 'failed',
                 }).catch(() => {});
-                return res.status(401).json({ message: "Invalid email or password" });
-            }
-
-            // Debug: ensure JWT secret is available (helps identify signing errors)
-            try {
-                const secretPresent = !!process.env.JWT_SECRET;
-                console.log('[LOGIN] JWT_SECRET present:', secretPresent);
-            } catch (e) {
-                console.log('[LOGIN] JWT_SECRET check failed:', e && e.message ? e.message : e);
+                return res.status(401).json({ message: 'Invalid Login ID/email or password' });
             }
 
             const token = jwt.sign(
