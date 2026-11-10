@@ -104,7 +104,7 @@ const OfficerSidebar = ({ isOpen, onClose, collapsed = false }) => {
             {/* Mobile overlay */}
             {isOpen && (
                 <div
-                    className="fixed inset-0 bg-black/25 backdrop-blur-sm z-20 lg:hidden"
+                    className="fixed inset-0 bg-black/25 backdrop-blur-sm z-[70] lg:hidden"
                     onClick={onClose}
                 />
             )}
@@ -161,7 +161,7 @@ const OfficerSidebar = ({ isOpen, onClose, collapsed = false }) => {
             {/* Sidebar */}
             <aside
                 className={`
-                    as-sidebar fixed top-0 left-0 h-screen z-30
+                    as-sidebar fixed top-0 left-0 h-screen z-[80] lg:z-30
                     flex flex-col overflow-hidden
                     transform transition-transform duration-300 ease-in-out
                     lg:sticky lg:top-0 lg:translate-x-0 lg:h-screen lg:shrink-0
