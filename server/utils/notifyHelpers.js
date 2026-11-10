@@ -359,16 +359,16 @@ exports.sendWelcomeEmail = (user, plainPassword, cb) => {
         if (!transporter) return cb(null, { ok: false, error: 'SMTP not configured' });
         if (!user.email) return cb(null, { ok: false, error: 'No email on file for this user' });
 
-        const subject = 'Welcome to Kalinga Scholar — Your Account Details';
+        const subject = 'Welcome to Apple Scholar — Your Portal Account';
         const portalUrl = `${(process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/+$/, '')}/account/setup`;
         const text = `Hello ${user.full_name || ''},\n\n` +
-            `An account has been created for you on Kalinga Scholar.\n\n` +
+            `Your Apple Scholar portal account is ready. Use the details below to sign in, review your scholarship requirements, submit documents, and track your progress.\n\n` +
             `Login ID: ${user.generatedId}\n` +
             `Email: ${user.email}\n` +
             `Temporary Password: ${plainPassword}\n\n` +
             `Complete your account setup here: ${portalUrl}\n\n` +
-            `Please log in and change your password immediately, as required on first login.\n\n` +
-            `— Kalinga at Pag-ibig Foundation`;
+            `Change your temporary password after your first sign-in, and never share it with anyone.\n\n` +
+            `— Apple Scholar`;
 
         try {
             const info = await transporter.sendMail({

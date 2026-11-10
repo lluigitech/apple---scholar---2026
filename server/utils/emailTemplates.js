@@ -10,7 +10,7 @@
  */
 
 const BRAND_NAME = 'Apple Scholar'; // single place to change the wordmark/footer name
-const TAGLINE = 'Learn · Grow · Make a Difference';
+const TAGLINE = 'Scholarship · Submissions · Progress';
 
 const COLORS = {
   primary: '#6D2140',
@@ -355,16 +355,16 @@ const buildWelcomeEmail = ({ fullName, loginId, email, temporaryPassword, setupU
 
   return renderLayout({
     preheader: `Your ${BRAND_NAME} account is ready`,
-    title: 'Welcome to the Portal',
-    intro: `${greeting(fullName)}\nAn account has been created for you. Use the details below to sign in and finish your account setup.`,
+    title: 'Welcome to Apple Scholar',
+    intro: `${greeting(fullName)}\nYour Apple Scholar portal account is ready. Use the details below to sign in, review your scholarship requirements, submit documents, and track your progress.`,
     contentHtml: detailRows([
       { label: 'Login ID', value: loginId },
       { label: 'Email', value: email },
     ]) + passwordBox,
     statusPanelHtml: statusPanel({
       tone: 'warning',
-      title: 'Change your password after signing in',
-      body: 'For your security, please change this temporary password right after your first login, and do not share it with anyone.',
+      title: 'Secure your account',
+      body: 'Change your temporary password after your first sign-in and never share it with anyone.',
     }),
     actionLabel: 'Set Up My Account',
     actionUrl: setupUrl,

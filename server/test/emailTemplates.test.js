@@ -116,3 +116,18 @@ test('template content is escaped and unsafe action URLs do not create links', (
   assert.match(complianceHtml, /68\.00%/);
   assert.doesNotMatch(complianceHtml, /<Scholar>/);
 });
+
+test('welcome email uses Apple Scholar system-specific account guidance', () => {
+  const html = templates.buildWelcomeEmail({
+    fullName: 'Scholar',
+    loginId: 'AS-001',
+    email: 'scholar@example.com',
+    temporaryPassword: 'temporary-password',
+    setupUrl: 'https://example.com/account/setup',
+  });
+
+  assert.match(html, /Scholarship · Submissions · Progress/);
+  assert.match(html, /Welcome to Apple Scholar/);
+  assert.match(html, /review your scholarship requirements, submit documents, and track your progress/);
+  assert.match(html, /Change your temporary password after your first sign-in/);
+});
