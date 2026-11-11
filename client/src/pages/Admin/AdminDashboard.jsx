@@ -131,8 +131,8 @@ const AdminDashboard = () => {
     const [dashboardError, setDashboardError] = useState('');
 
     const [scholarGrowth, setScholarGrowth] = useState([]);
-    const [complianceBreakdown, setComplianceBreakdown] = useState([]);
-    const [complianceRate, setComplianceRate] = useState(0);
+    const [qualityScoreBreakdown, setQualityScoreBreakdown] = useState([]);
+    const [averageQualityScore, setAverageQualityScore] = useState(0);
     const [riskDistribution, setRiskDistribution] = useState([]);
     const [sentimentBreakdown, setSentimentBreakdown] = useState([]);
 
@@ -169,14 +169,14 @@ const AdminDashboard = () => {
                 }
                 setScholarGrowth(growth);
 
-                setComplianceBreakdown([
-                    { name: 'Approved', value: summary.submissions.approved, color: SUCCESS },
-                    { name: 'Pending', value: summary.submissions.pending, color: WARNING },
-                    { name: 'Rejected', value: summary.submissions.rejected, color: DANGER },
+                const qualityScore = summary.submissions.qualityScore;
+                setQualityScoreBreakdown([
+                    { name: 'Excellent (90–100)', value: qualityScore.excellent, color: SUCCESS },
+                    { name: 'Good (75–89)', value: qualityScore.good, color: '#4B91A8' },
+                    { name: 'Needs Improvement (50–74)', value: qualityScore.needsImprovement, color: WARNING },
+                    { name: 'Non-Compliant (0–49)', value: qualityScore.nonCompliant, color: DANGER },
                 ]);
-                setComplianceRate(summary.submissions.totalRecords
-                    ? Math.round((summary.submissions.approved / summary.submissions.totalRecords) * 100)
-                    : 0);
+                setAverageQualityScore(qualityScore.average);
 
                 const riskLevels = [
                     { level: 'Low', value: 0, color: SUCCESS },
@@ -294,7 +294,7 @@ const AdminDashboard = () => {
           desc: 'Coordinate scholar duty schedules and assignments.', count: stats.upcomingDuties },
     ];
 
-    const complianceTotal = complianceBreakdown.reduce((sum, c) => sum + c.value, 0);
+    const scoredSubmissionTotal = qualityScoreBreakdown.reduce((sum, item) => sum + item.value, 0);
     const pct = (value, total) => (total ? Math.round((value / total) * 100) : 0);
 
     const todayLabel = formatAdminDate(new Date(), { weekday: 'long' });
@@ -417,7 +417,7 @@ const AdminDashboard = () => {
                     </div>
                 ) : (
                     <>
-                        {/* Row 1: Scholar Growth + Compliance Status */}
+                        {/* Row 1: Scholar Growth + Scoring Status */}
                         <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-5">
                             <ChartCard icon={BarChart3} title="Scholar Growth" subtitle="Monthly registrations of scholars.">
                                 {scholarGrowth.length === 0 ? (
@@ -442,16 +442,16 @@ const AdminDashboard = () => {
                                 )}
                             </ChartCard>
 
-                            <ChartCard icon={PieChartIcon} title="Compliance Status" subtitle="Approved • Pending • Rejected submissions.">
-                                {complianceTotal === 0 ? (
-                                    <EmptyState>No compliance submissions yet.</EmptyState>
+                            <ChartCard icon={PieChartIcon} title="Scoring Status" subtitle="Submission quality scores by scoring band.">
+                                {scoredSubmissionTotal === 0 ? (
+                                    <EmptyState>No scored submissions yet.</EmptyState>
                                 ) : (
                                     <div className="flex flex-col sm:flex-row items-center gap-4">
                                         <div className="relative min-w-0 flex-shrink-0 w-full sm:w-[210px]" style={{ height: 210 }}>
                                             <ResponsiveContainer width="100%" height="100%">
                                                 <PieChart>
-                                                    <Pie data={complianceBreakdown} cx="50%" cy="50%" innerRadius={62} outerRadius={92} paddingAngle={2} dataKey="value" nameKey="name">
-                                                        {complianceBreakdown.map((entry) => (
+                                                    <Pie data={qualityScoreBreakdown} cx="50%" cy="50%" innerRadius={62} outerRadius={92} paddingAngle={2} dataKey="value" nameKey="name">
+                                                        {qualityScoreBreakdown.map((entry) => (
                                                             <Cell key={entry.name} fill={entry.color} stroke="none" />
                                                         ))}
                                                     </Pie>
@@ -459,17 +459,17 @@ const AdminDashboard = () => {
                                                 </PieChart>
                                             </ResponsiveContainer>
                                             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                                <span style={{ ...serif, fontSize: '1.6rem', fontWeight: 700, color: INK }}>{complianceRate}%</span>
-                                                <span style={{ ...sans, fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: MUTED }}>Approved</span>
+                                                <span style={{ ...serif, fontSize: '1.6rem', fontWeight: 700, color: INK }}>{averageQualityScore}%</span>
+                                                <span style={{ ...sans, fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: MUTED }}>Avg. Score</span>
                                             </div>
                                         </div>
                                         <ul className="flex-1 w-full flex flex-col gap-3" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                                            {complianceBreakdown.map((item) => (
+                                            {qualityScoreBreakdown.map((item) => (
                                                 <li key={item.name} className="flex items-center gap-3">
                                                     <span className="rounded-full flex-shrink-0" style={{ width: 12, height: 12, background: item.color }} />
                                                     <span className="flex-1" style={{ ...sans, fontSize: '0.82rem', color: INK }}>{item.name}</span>
                                                     <span style={{ ...sans, fontSize: '0.82rem', fontWeight: 600, color: INK, minWidth: 24, textAlign: 'right' }}>{item.value}</span>
-                                                    <span style={{ ...sans, fontSize: '0.8rem', fontWeight: 700, color: item.color, minWidth: 40, textAlign: 'right' }}>{pct(item.value, complianceTotal)}%</span>
+                                                    <span style={{ ...sans, fontSize: '0.8rem', fontWeight: 700, color: item.color, minWidth: 40, textAlign: 'right' }}>{pct(item.value, scoredSubmissionTotal)}%</span>
                                                 </li>
                                             ))}
                                         </ul>

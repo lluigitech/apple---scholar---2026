@@ -59,6 +59,8 @@ test('dashboard summary returns zero counts for successful empty aggregates', as
     'FROM duties': [{ total: 0, cancelled: 0, upcoming: 0, today: 0, past: 0, assigned_groups: 0, assigned_scholar_assignments: 0 }],
     'FROM submissions': [{
       total_records: 0, approved: 0, pending: 0, rejected: 0,
+      scored_records: 0, excellent_scores: 0, good_scores: 0,
+      needs_improvement_scores: 0, non_compliant_scores: 0, average_quality_score: null,
       positive_sentiment: 0, neutral_sentiment: 0, negative_sentiment: 0, unscored_sentiment: 0,
     }],
     'FROM audit_logs': [],
@@ -79,6 +81,10 @@ test('dashboard summary returns zero counts for successful empty aggregates', as
     },
     submissions: {
       totalRecords: 0, approved: 0, pending: 0, rejected: 0,
+      qualityScore: {
+        scoredRecords: 0, excellent: 0, good: 0,
+        needsImprovement: 0, nonCompliant: 0, average: 0,
+      },
       sentiment: { positive: 0, neutral: 0, negative: 0, unscored: 0 },
     },
     recentActivity: [],
@@ -100,6 +106,8 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
     }],
     'FROM submissions': [{
       total_records: '15', approved: '8', pending: '4', rejected: '3',
+      scored_records: '10', excellent_scores: '2', good_scores: '3',
+      needs_improvement_scores: '4', non_compliant_scores: '1', average_quality_score: '72.8',
       positive_sentiment: '5', neutral_sentiment: '2', negative_sentiment: '1', unscored_sentiment: '7',
     }],
     'FROM audit_logs': [{ id: 99, action: 'submission_reviewed', module: 'Submissions', result: 'success', actor_name: 'Admin' }],
@@ -113,6 +121,10 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
   assert.equal(response.body.duties.assignedScholarAssignments, 12);
   assert.equal(response.body.submissions.sentiment.negative, 1);
   assert.equal(response.body.submissions.sentiment.unscored, 7);
+  assert.deepEqual(response.body.submissions.qualityScore, {
+    scoredRecords: 10, excellent: 2, good: 3,
+    needsImprovement: 4, nonCompliant: 1, average: 73,
+  });
   assert.equal(response.body.users.total, 12);
   assert.equal(response.body.users.scholars, 7);
   assert.deepEqual(response.body.recentUsers, [{ id: 4, full_name: 'Recent Admin', role: 'admin' }]);
@@ -128,6 +140,11 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
   assert.match(activityQuery.sql, /SELECT al\.id, al\.action, al\.module, al\.details/);
   const dutyQuery = captured.find((query) => query.sql.includes('FROM duties'));
   assert.match(dutyQuery.sql, /SELECT DISTINCT dga\.duty_id, sgm\.scholar_id/);
+  const submissionQuery = captured.find((query) => query.sql.includes('FROM submissions'));
+  assert.match(submissionQuery.sql, /quality_score >= 90/);
+  assert.match(submissionQuery.sql, /quality_score >= 75 AND quality_score < 90/);
+  assert.match(submissionQuery.sql, /quality_score >= 50 AND quality_score < 75/);
+  assert.match(submissionQuery.sql, /quality_score < 50/);
 });
 
 test('dashboard summary returns an error when an aggregate query fails', async () => {
@@ -140,6 +157,8 @@ test('dashboard summary returns an error when an aggregate query fails', async (
     'FROM duties': [{ total: 0, cancelled: 0, upcoming: 0, today: 0, past: 0, assigned_groups: 0, assigned_scholar_assignments: 0 }],
     'FROM submissions': [{
       total_records: 0, approved: 0, pending: 0, rejected: 0,
+      scored_records: 0, excellent_scores: 0, good_scores: 0,
+      needs_improvement_scores: 0, non_compliant_scores: 0, average_quality_score: null,
       positive_sentiment: 0, neutral_sentiment: 0, negative_sentiment: 0, unscored_sentiment: 0,
     }],
     'FROM audit_logs': [],
