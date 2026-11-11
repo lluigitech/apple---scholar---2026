@@ -62,7 +62,7 @@ const INK_SOFT = '#5C4E42'; // body copy on cream
 const MUTED = '#8A7A68';
 
 // Full-width background, controlled inner width
-const WRAP = 'w-full mx-auto px-4 sm:px-6 lg:px-10';
+const WRAP = 'w-full px-4 sm:px-6 lg:px-12';
 
 // ─── Feature cards data from thesis ───────────────────────────────────────────
 const features = [
