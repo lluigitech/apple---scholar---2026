@@ -141,7 +141,9 @@ exports.getSummary = async (req, res) => {
       AVG(s.quality_score) AS average_quality_score
     FROM submissions s
     LEFT JOIN users u ON u.scholar_id = s.scholar_id AND u.role = 'scholar'
-    WHERE s.quality_score IS NOT NULL AND s.submitted_at IS NOT NULL
+    WHERE s.submission_type = 'letter'
+      AND s.quality_score IS NOT NULL
+      AND s.submitted_at IS NOT NULL
     GROUP BY DATE_FORMAT(s.submitted_at, '%Y-%m'), COALESCE(NULLIF(TRIM(u.year_level), ''), 'Unspecified')
     ORDER BY month ASC, year_level ASC
   `;

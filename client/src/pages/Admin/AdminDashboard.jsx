@@ -499,7 +499,7 @@ const AdminDashboard = () => {
                             <ChartCard
                                 icon={BarChart3}
                                 title="Scoring Status"
-                                subtitle="Monthly score bands by scholar year level."
+                                subtitle="Monthly letter score bands by scholar year level."
                                 headerAction={qualityScoreAvailable && scoringMonths.length > 0 && (
                                     <select
                                         aria-label="Filter scoring by month"

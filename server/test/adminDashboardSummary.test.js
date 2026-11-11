@@ -173,6 +173,7 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
   const monthlyScoreQuery = captured.find((query) => query.sql.includes('FROM submissions s'));
   assert.match(monthlyScoreQuery.sql, /DATE_FORMAT\(s\.submitted_at, '%Y-%m'\)/);
   assert.match(monthlyScoreQuery.sql, /u\.year_level/);
+  assert.match(monthlyScoreQuery.sql, /s\.submission_type = 'letter'/);
   assert.match(monthlyScoreQuery.sql, /s\.quality_score IS NOT NULL/);
 });
 
