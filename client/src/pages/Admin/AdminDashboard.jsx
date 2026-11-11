@@ -151,12 +151,12 @@ const AdminDashboard = () => {
             try {
                 const config = authConfig();
                 setDashboardError('');
-                const [summaryRes, scholarComplianceRes] = await Promise.all([
+                const [summaryRes, flaggedScholarsRes] = await Promise.all([
                     axios.get(`${API}/admin/dashboard-summary`, config),
-                    axios.get(`${API}/admin/reports/compliance-summary`, config),
+                    axios.get(`${API}/flagged/scholars`, config),
                 ]);
                 const summary = summaryRes.data;
-                const complianceData = scholarComplianceRes.data;
+                const flaggedScholars = flaggedScholarsRes.data;
                 setNotificationSummary(summary);
 
                 setStats({
@@ -197,12 +197,11 @@ const AdminDashboard = () => {
                 }
 
                 const riskLevels = [
-                    { level: 'Low', value: 0, color: SUCCESS },
-                    { level: 'Moderate', value: 0, color: WARNING },
-                    { level: 'High', value: 0, color: DANGER },
+                    { level: 'Moderate', riskLevel: 'medium', value: 0, color: WARNING },
+                    { level: 'High', riskLevel: 'high', value: 0, color: DANGER },
                 ];
-                complianceData.forEach(({ riskStatus }) => {
-                    const level = riskLevels.find((item) => item.level.toLowerCase() === riskStatus);
+                flaggedScholars.forEach(({ risk_level: riskLevel }) => {
+                    const level = riskLevels.find((item) => item.riskLevel === riskLevel);
                     if (level) level.value += 1;
                 });
                 setRiskDistribution(riskLevels);
@@ -552,7 +551,7 @@ const AdminDashboard = () => {
 
                         {/* Row 2: Risk Distribution + NLP Sentiment */}
                         <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-5">
-                            <ChartCard icon={ShieldCheck} title="Risk Distribution" subtitle="Active scholars by compliance risk level.">
+                            <ChartCard icon={ShieldCheck} title="Risk Distribution" subtitle="Flagged scholars by risk level.">
                                 {riskDistribution.reduce((sum, item) => sum + item.value, 0) === 0 ? (
                                     <EmptyState>No risk data yet.</EmptyState>
                                 ) : (
