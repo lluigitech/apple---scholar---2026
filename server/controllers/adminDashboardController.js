@@ -129,6 +129,23 @@ exports.getSummary = async (req, res) => {
     FROM submissions
   `;
 
+  const qualityScoreByMonthLevelSql = `
+    SELECT
+      DATE_FORMAT(s.submitted_at, '%Y-%m') AS month,
+      COALESCE(NULLIF(TRIM(u.year_level), ''), 'Unspecified') AS year_level,
+      COUNT(*) AS scored_records,
+      COALESCE(SUM(CASE WHEN s.quality_score >= 90 THEN 1 ELSE 0 END), 0) AS excellent_scores,
+      COALESCE(SUM(CASE WHEN s.quality_score >= 75 AND s.quality_score < 90 THEN 1 ELSE 0 END), 0) AS good_scores,
+      COALESCE(SUM(CASE WHEN s.quality_score >= 50 AND s.quality_score < 75 THEN 1 ELSE 0 END), 0) AS needs_improvement_scores,
+      COALESCE(SUM(CASE WHEN s.quality_score < 50 THEN 1 ELSE 0 END), 0) AS non_compliant_scores,
+      AVG(s.quality_score) AS average_quality_score
+    FROM submissions s
+    LEFT JOIN users u ON u.scholar_id = s.scholar_id AND u.role = 'scholar'
+    WHERE s.quality_score IS NOT NULL AND s.submitted_at IS NOT NULL
+    GROUP BY DATE_FORMAT(s.submitted_at, '%Y-%m'), COALESCE(NULLIF(TRIM(u.year_level), ''), 'Unspecified')
+    ORDER BY month ASC, year_level ASC
+  `;
+
   const activitySql = `
     SELECT al.id, al.action, al.module, al.details, al.result, al.created_at,
            u.full_name AS actor_name
@@ -139,7 +156,7 @@ exports.getSummary = async (req, res) => {
   `;
 
   try {
-    const [userSummaryRows, recentUsers, scholarGrowth, announcementRows, taskRows, dutyRows, submissionRows, activityRows] = await Promise.all([
+    const [userSummaryRows, recentUsers, scholarGrowth, announcementRows, taskRows, dutyRows, submissionRows, qualityScoreByMonthLevelRows, activityRows] = await Promise.all([
       queryRows(userSummarySql),
       queryRows(recentUsersSql, [5]),
       queryRows(scholarGrowthSql),
@@ -147,6 +164,7 @@ exports.getSummary = async (req, res) => {
       queryRows(taskSql),
       queryRows(dutySql),
       queryRows(submissionSql),
+      queryRows(qualityScoreByMonthLevelSql),
       queryRows(activitySql, [10]),
     ]);
     const users = aggregateRow(userSummaryRows);
@@ -199,6 +217,18 @@ exports.getSummary = async (req, res) => {
             ? 0
             : Math.round(Number(submissions.average_quality_score)),
         },
+        qualityScoreByMonthLevel: qualityScoreByMonthLevelRows.map((row) => ({
+          month: row.month,
+          yearLevel: row.year_level,
+          scoredRecords: toCount(row.scored_records),
+          excellent: toCount(row.excellent_scores),
+          good: toCount(row.good_scores),
+          needsImprovement: toCount(row.needs_improvement_scores),
+          nonCompliant: toCount(row.non_compliant_scores),
+          average: row.average_quality_score === null
+            ? 0
+            : Number(row.average_quality_score),
+        })),
         sentiment: {
           positive: toCount(submissions.positive_sentiment),
           neutral: toCount(submissions.neutral_sentiment),

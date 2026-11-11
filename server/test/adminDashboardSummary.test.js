@@ -57,12 +57,14 @@ test('dashboard summary returns zero counts for successful empty aggregates', as
     'FROM announcements': [{ total: 0, active: 0, withdrawn: 0 }],
     'FROM tasks': [{ total: 0, active: 0, overdue: 0 }],
     'FROM duties': [{ total: 0, cancelled: 0, upcoming: 0, today: 0, past: 0, assigned_groups: 0, assigned_scholar_assignments: 0 }],
+    'FROM submissions s': [],
     'FROM submissions': [{
       total_records: 0, approved: 0, pending: 0, rejected: 0,
       scored_records: 0, excellent_scores: 0, good_scores: 0,
       needs_improvement_scores: 0, non_compliant_scores: 0, average_quality_score: null,
       positive_sentiment: 0, neutral_sentiment: 0, negative_sentiment: 0, unscored_sentiment: 0,
     }],
+    'FROM submissions s': [],
     'FROM audit_logs': [],
   });
 
@@ -85,6 +87,7 @@ test('dashboard summary returns zero counts for successful empty aggregates', as
         scoredRecords: 0, excellent: 0, good: 0,
         needsImprovement: 0, nonCompliant: 0, average: 0,
       },
+      qualityScoreByMonthLevel: [],
       sentiment: { positive: 0, neutral: 0, negative: 0, unscored: 0 },
     },
     recentActivity: [],
@@ -104,6 +107,18 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
       total: '6', cancelled: '1', upcoming: '2', today: '1', past: '2',
       assigned_groups: '4', assigned_scholar_assignments: '12',
     }],
+    'FROM submissions s': [
+      {
+        month: '2026-10', year_level: 'college_1', scored_records: '4',
+        excellent_scores: '1', good_scores: '1', needs_improvement_scores: '2',
+        non_compliant_scores: '0', average_quality_score: '78.25',
+      },
+      {
+        month: '2026-10', year_level: 'college_2', scored_records: '2',
+        excellent_scores: '0', good_scores: '1', needs_improvement_scores: '0',
+        non_compliant_scores: '1', average_quality_score: '61.5',
+      },
+    ],
     'FROM submissions': [{
       total_records: '15', approved: '8', pending: '4', rejected: '3',
       scored_records: '10', excellent_scores: '2', good_scores: '3',
@@ -125,6 +140,16 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
     scoredRecords: 10, excellent: 2, good: 3,
     needsImprovement: 4, nonCompliant: 1, average: 73,
   });
+  assert.deepEqual(response.body.submissions.qualityScoreByMonthLevel, [
+    {
+      month: '2026-10', yearLevel: 'college_1', scoredRecords: 4,
+      excellent: 1, good: 1, needsImprovement: 2, nonCompliant: 0, average: 78.25,
+    },
+    {
+      month: '2026-10', yearLevel: 'college_2', scoredRecords: 2,
+      excellent: 0, good: 1, needsImprovement: 0, nonCompliant: 1, average: 61.5,
+    },
+  ]);
   assert.equal(response.body.users.total, 12);
   assert.equal(response.body.users.scholars, 7);
   assert.deepEqual(response.body.recentUsers, [{ id: 4, full_name: 'Recent Admin', role: 'admin' }]);
@@ -145,6 +170,10 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
   assert.match(submissionQuery.sql, /quality_score >= 75 AND quality_score < 90/);
   assert.match(submissionQuery.sql, /quality_score >= 50 AND quality_score < 75/);
   assert.match(submissionQuery.sql, /quality_score < 50/);
+  const monthlyScoreQuery = captured.find((query) => query.sql.includes('FROM submissions s'));
+  assert.match(monthlyScoreQuery.sql, /DATE_FORMAT\(s\.submitted_at, '%Y-%m'\)/);
+  assert.match(monthlyScoreQuery.sql, /u\.year_level/);
+  assert.match(monthlyScoreQuery.sql, /s\.quality_score IS NOT NULL/);
 });
 
 test('dashboard summary returns an error when an aggregate query fails', async () => {
@@ -161,6 +190,7 @@ test('dashboard summary returns an error when an aggregate query fails', async (
       needs_improvement_scores: 0, non_compliant_scores: 0, average_quality_score: null,
       positive_sentiment: 0, neutral_sentiment: 0, negative_sentiment: 0, unscored_sentiment: 0,
     }],
+    'FROM submissions s': [],
     'FROM audit_logs': [],
   }, { match: 'FROM tasks', error: new Error('database unavailable') });
 
