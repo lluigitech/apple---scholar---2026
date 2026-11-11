@@ -41,25 +41,43 @@ const getAssignedOfficers = (targetLevels) => new Promise((resolve, reject) => {
   );
 });
 
-const visibleToUser = async (req, task) => {
+const getScholarAccount = (userId) => new Promise((resolve, reject) => {
+  db.query(
+    'SELECT year_level, created_at FROM users WHERE id = ? AND role = \'scholar\' LIMIT 1',
+    [userId],
+    (err, rows) => {
+      if (err) return reject(err);
+      resolve(rows[0] || null);
+    }
+  );
+});
+
+const toTimestamp = (value) => {
+  const timestamp = value instanceof Date ? value.getTime() : new Date(value).getTime();
+  if (!Number.isFinite(timestamp)) {
+    throw new Error('Task visibility could not validate the account or task creation date.');
+  }
+  return timestamp;
+};
+
+const visibleToUser = async (req, task, scholarAccount = null) => {
   const targetLevels = parseTargetLevels(task.target_year_levels);
+
+  if (req.user?.role === 'scholar') {
+    const account = scholarAccount || await getScholarAccount(req.user.id);
+    if (!account || toTimestamp(task.created_at) <= toTimestamp(account.created_at)) return false;
+    if (!targetLevels?.length) return true;
+    return Boolean(
+      account.year_level
+      && targetLevels.some(level => normalizeYearLevel(level) === normalizeYearLevel(account.year_level))
+    );
+  }
+
   if (!targetLevels?.length || ['admin', 'staff'].includes(req.user?.role)) return true;
 
   if (req.user?.role === 'officer') {
     const assignedLevels = await getAssignedYearLevels(req.user.id);
     return targetLevels.some(level => assignedLevels.some(assigned => normalizeYearLevel(level) === normalizeYearLevel(assigned)));
-  }
-
-  if (req.user?.role === 'scholar') {
-    return new Promise((resolve, reject) => {
-      db.query('SELECT year_level FROM users WHERE id = ? AND role = \'scholar\'', [req.user.id], (err, rows) => {
-        if (err) return reject(err);
-        resolve(Boolean(
-          rows[0]?.year_level
-          && targetLevels.some(level => normalizeYearLevel(level) === normalizeYearLevel(rows[0].year_level))
-        ));
-      });
-    });
   }
 
   return false;
@@ -78,6 +96,9 @@ exports.getAllTasks = async (req, res) => {
   db.query(sql, async (err, rows) => {
     if (err) return res.status(500).json({ error: 'Error fetching tasks' });
     try {
+      const scholarAccount = req.user?.role === 'scholar'
+        ? await getScholarAccount(req.user.id)
+        : null;
       const visibleTasks = await Promise.all(rows.map(async task => {
         const targetLevels = parseTargetLevels(task.target_year_levels) || [];
         const assignedOfficers = await getAssignedOfficers(targetLevels);
@@ -87,7 +108,7 @@ exports.getAllTasks = async (req, res) => {
             assigned_officers: assignedOfficers,
             assigned_officer_names: [...new Set(assignedOfficers.map(officer => officer.full_name))],
           },
-          visible: await visibleToUser(req, task),
+          visible: await visibleToUser(req, task, scholarAccount),
         };
       }));
       res.json(visibleTasks.filter(item => item.visible).map(item => item.task));

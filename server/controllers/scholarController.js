@@ -354,22 +354,30 @@ exports.markNotificationRead = (req, res) => {
 };
 
 exports.getAnnouncements = (req, res) => {
-    const { year_level } = req.query;
+    const scholarUserId = req.user?.id;
+    if (!scholarUserId) {
+        return res.status(401).json({ error: 'Authenticated scholar account is required.' });
+    }
 
     const sql = `
         SELECT a.id, a.title, a.content, a.priority, a.target_roles, a.target_levels,
                a.created_by, a.created_by_role, a.created_at,
-               u.full_name AS created_by_name
+               u.full_name AS created_by_name,
+               scholar.year_level AS scholar_year_level
         FROM announcements a
+        JOIN users scholar
+          ON scholar.id = ?
+         AND scholar.role = 'scholar'
+         AND a.created_at > scholar.created_at
         LEFT JOIN users u ON u.id = a.created_by
         ORDER BY a.created_at DESC
     `;
 
-    db.query(sql, (err, data) => {
+    db.query(sql, [scholarUserId], (err, data) => {
         if (err) return res.status(500).json({ error: 'Error fetching announcements' });
 
         const results = data
-            .map(row => ({
+            .map(({ scholar_year_level, ...row }) => ({
                 ...row,
                 target_roles: typeof row.target_roles === 'string'
                     ? JSON.parse(row.target_roles || '[]')
@@ -379,14 +387,17 @@ exports.getAnnouncements = (req, res) => {
                     : (row.target_levels || []),
                 created_by_role: String(row.created_by_role || '').trim().toLowerCase(),
                 created_by_name: row.created_by_name || (row.created_by ? 'Unknown' : 'System'),
+                scholar_year_level,
             }))
             .filter(row => {
+                if (row.target_roles.length > 0
+                    && !row.target_roles.some(role => String(role).toLowerCase() === 'scholar')) return false;
                 const levels = row.target_levels;
-                if (!year_level) return true;
-                const isAll = ALL_LEVELS.every(l => levels.includes(l));
-                if (isAll) return true;
-                return levels.includes(year_level);
-            });
+                if (!levels.length || ALL_LEVELS.every(level => levels.includes(level))) return true;
+                const accountLevel = normalizeYearLevel(row.scholar_year_level);
+                return levels.some(level => normalizeYearLevel(level) === accountLevel);
+            })
+            .map(({ scholar_year_level, ...row }) => row);
 
         res.json(results);
     });
@@ -619,6 +630,10 @@ exports.getMyDuties = (req, res) => {
         FROM duties d
         JOIN duty_group_assignments dga ON dga.duty_id = d.id
         LEFT JOIN scholar_group_members m ON m.group_id = dga.group_id AND m.scholar_id = ?
+        JOIN users scholar_account
+            ON scholar_account.id = ?
+           AND scholar_account.role = 'scholar'
+           AND dga.created_at > scholar_account.created_at
         LEFT JOIN scholar_groups g ON g.id = dga.group_id
         LEFT JOIN users assigned_staff ON assigned_staff.id = g.assigned_staff_id
             AND LOWER(assigned_staff.role) IN ('staff', 'officer')
@@ -628,7 +643,7 @@ exports.getMyDuties = (req, res) => {
         WHERE (m.scholar_id = ? OR p.scholar_id = ? OR da.scholar_id = ?)
         ORDER BY d.duty_date DESC
     `;
-    db.query(sql, [scholar_id, scholar_id, scholar_id, scholar_id, scholar_id, scholar_id], (err, data) => {
+    db.query(sql, [scholar_id, req.user.id, scholar_id, scholar_id, scholar_id, scholar_id, scholar_id], (err, data) => {
         if (err) {
             console.error('Error fetching duties (getMyDuties):', err);
             return res.status(500).json({ error: 'Error fetching your duties' });
