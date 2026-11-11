@@ -133,6 +133,7 @@ const AdminDashboard = () => {
     const [scholarGrowth, setScholarGrowth] = useState([]);
     const [qualityScoreBreakdown, setQualityScoreBreakdown] = useState([]);
     const [averageQualityScore, setAverageQualityScore] = useState(0);
+    const [qualityScoreAvailable, setQualityScoreAvailable] = useState(false);
     const [riskDistribution, setRiskDistribution] = useState([]);
     const [sentimentBreakdown, setSentimentBreakdown] = useState([]);
 
@@ -170,13 +171,19 @@ const AdminDashboard = () => {
                 setScholarGrowth(growth);
 
                 const qualityScore = summary.submissions.qualityScore;
-                setQualityScoreBreakdown([
-                    { name: 'Excellent (90–100)', value: qualityScore.excellent, color: SUCCESS },
-                    { name: 'Good (75–89)', value: qualityScore.good, color: '#4B91A8' },
-                    { name: 'Needs Improvement (50–74)', value: qualityScore.needsImprovement, color: WARNING },
-                    { name: 'Non-Compliant (0–49)', value: qualityScore.nonCompliant, color: DANGER },
-                ]);
-                setAverageQualityScore(qualityScore.average);
+                const qualityScoreFields = ['scoredRecords', 'excellent', 'good', 'needsImprovement', 'nonCompliant', 'average'];
+                const hasQualityScore = qualityScore
+                    && qualityScoreFields.every((field) => qualityScore[field] !== null
+                        && qualityScore[field] !== undefined
+                        && Number.isFinite(Number(qualityScore[field])));
+                setQualityScoreAvailable(Boolean(hasQualityScore));
+                setQualityScoreBreakdown(hasQualityScore ? [
+                    { name: 'Excellent (90–100)', value: Number(qualityScore.excellent), color: SUCCESS },
+                    { name: 'Good (75–89)', value: Number(qualityScore.good), color: '#4B91A8' },
+                    { name: 'Needs Improvement (50–74)', value: Number(qualityScore.needsImprovement), color: WARNING },
+                    { name: 'Non-Compliant (0–49)', value: Number(qualityScore.nonCompliant), color: DANGER },
+                ] : []);
+                setAverageQualityScore(hasQualityScore ? Number(qualityScore.average) : 0);
 
                 const riskLevels = [
                     { level: 'Low', value: 0, color: SUCCESS },
@@ -443,7 +450,9 @@ const AdminDashboard = () => {
                             </ChartCard>
 
                             <ChartCard icon={PieChartIcon} title="Scoring Status" subtitle="Submission quality scores by scoring band.">
-                                {scoredSubmissionTotal === 0 ? (
+                                {!qualityScoreAvailable ? (
+                                    <EmptyState>Scoring data is unavailable. Ensure the backend is updated, then reload.</EmptyState>
+                                ) : scoredSubmissionTotal === 0 ? (
                                     <EmptyState>No scored submissions yet.</EmptyState>
                                 ) : (
                                     <div className="flex flex-col sm:flex-row items-center gap-4">
