@@ -310,7 +310,7 @@ const AdminDashboard = () => {
             <div className="w-full px-5 sm:px-8 py-8" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
                 {/* ── Page header ── */}
-                <header className="flex flex-col lg:flex-row lg:items-start justify-between gap-5" style={{ position: 'relative', zIndex: 30 }}>
+                <header className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
                     <div className="min-w-0">
                         <span style={{ ...sans, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.24em', textTransform: 'uppercase', color: BRONZE }}>Admin Portal</span>
                         <h1 style={{ ...serif, fontSize: '2rem', fontWeight: 700, color: PRIMARY, marginTop: 4, letterSpacing: '-0.01em', lineHeight: 1.15 }}>Executive Intelligence Dashboard</h1>

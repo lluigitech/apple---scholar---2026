@@ -139,10 +139,10 @@ const AdminLayout = ({ children }) => {
             <main className="flex-1 min-w-0 w-full overflow-y-auto overflow-x-hidden" style={{ background: BG }}>
                 {/* Mobile / tablet header — hamburger + centered logo only */}
                 <div
-                    className="sticky top-0 z-10 flex items-center px-4 backdrop-blur-md lg:hidden"
+                    className="sticky top-0 z-40 flex items-center px-4 lg:hidden"
                     style={{
                         height: 70,
-                        background: 'rgba(247, 244, 238, 0.94)',
+                        background: BG,
                         borderBottom: `1px solid ${BORDER}`,
                     }}
                 >
