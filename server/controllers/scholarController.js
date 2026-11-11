@@ -413,7 +413,7 @@ exports.getComplianceStatus = (req, res) => {
     `;
 
     const scholarSql = `
-        SELECT u.year_level, g.units, g.grade, g.grade_scale
+        SELECT u.year_level, u.created_at, g.units, g.grade, g.grade_scale
         FROM users u
         LEFT JOIN grades g ON g.scholar_id = u.scholar_id
         WHERE u.scholar_id = ?
@@ -477,7 +477,11 @@ exports.getComplianceStatus = (req, res) => {
                             const att = attRows && attRows[0] ? attRows[0] : null;
                             const today = new Date();
                             getOverdueComplianceTaskCounts(
-                                [{ scholar_id, year_level: gradeRows[0]?.year_level }],
+                                [{
+                                    scholar_id,
+                                    year_level: gradeRows[0]?.year_level,
+                                    created_at: gradeRows[0]?.created_at,
+                                }],
                                 today,
                                 (taskErr, overdueTasksByScholar) => {
                                     if (taskErr) {
