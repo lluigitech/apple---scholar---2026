@@ -332,9 +332,9 @@ const LandingPage = () => {
           transition: 'background 0.3s ease',
         }}
       >
-        <div className={`${WRAP} h-[72px] sm:h-[84px] flex lg:grid lg:grid-cols-[1fr_auto_1fr] items-center justify-between gap-4`}>
+        <div className={`${WRAP} h-16 sm:h-[72px] flex lg:grid lg:grid-cols-[1fr_auto_1fr] items-center justify-between gap-4`}>
           <a href="#home" onClick={() => handleNavClick('Home')} className="flex-shrink-0 justify-self-start" aria-label="Apple Scholar — home">
-            <img src={appleLogo} alt="Apple Scholar" className="h-12 sm:h-14 w-auto" style={{ objectFit: 'contain' }} />
+            <img src={appleLogo} alt="Apple Scholar" className="h-10 sm:h-12 w-auto" style={{ objectFit: 'contain' }} />
           </a>
 
           <div className="hidden lg:flex items-center gap-10 text-sm font-medium" style={{ color: INK_SOFT }}>
@@ -354,7 +354,7 @@ const LandingPage = () => {
           <div className="flex items-center gap-3 justify-self-end">
             <button
               onClick={() => navigate('/login')}
-              className="btn-maroon hidden lg:inline-flex items-center justify-center text-sm font-semibold px-7 h-11 rounded-xl"
+              className="btn-maroon hidden lg:inline-flex items-center justify-center text-sm font-semibold px-6 h-10 rounded-xl"
             >
               {isTagalog ? TAGALOG_COPY.portalLogin : 'Portal Login'}
             </button>
@@ -373,7 +373,7 @@ const LandingPage = () => {
 
         {mobileMenuOpen && (
           <div
-            className="lg:hidden anim-menu-drop px-4 sm:px-6 pt-1 pb-5 flex flex-col max-h-[calc(100vh-72px)] overflow-y-auto"
+            className="lg:hidden anim-menu-drop px-4 sm:px-6 pt-1 pb-5 flex flex-col max-h-[calc(100vh-64px)] overflow-y-auto"
             style={{ background: CREAM, borderTop: `1px solid ${BORDER}` }}
           >
             {NAV_LINKS.map(link => (

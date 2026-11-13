@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import axios from 'axios';
-import { ArrowLeft, ArrowRight, CheckCircle2, AlertCircle, Mail, Lock, ShieldCheck } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Mail, Lock, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
 // Official Apple Scholar logo — also the way back to the landing page
@@ -99,7 +99,7 @@ const ForgotPassword = () => {
             <p className="success-detail" style={sans}>{message}</p>
 
             <Link to="/login" className="submit-btn" style={sans}>
-                Return to Login <ArrowRight size={18} />
+                Return to Login
             </Link>
 
             {!resetToken && (
@@ -166,7 +166,7 @@ const ForgotPassword = () => {
                         Please wait…
                     </>
                 ) : (
-                    <>{resetToken ? 'Reset password' : 'Send Reset Link'} <ArrowRight size={18} /></>
+                    resetToken ? 'Reset password' : 'Send Reset Link'
                 )}
             </button>
         </form>
@@ -176,14 +176,10 @@ const ForgotPassword = () => {
         <div className="fp-root" style={{ ...sans, color: INK }}>
             <GlobalStyle />
 
-            {/* ── Background: cream → blush → maroon blend, bottom waves (same as Login) ── */}
+            {/* ── Background: cream → blush → maroon blend ── */}
             <div className="fp-bg" aria-hidden="true">
                 <svg viewBox="0 0 1440 900" preserveAspectRatio="none" className="bg-svg">
                     <path d="M1440,0 C1260,90 1180,210 1210,360 C1240,520 1330,600 1440,640 Z" fill={BURGUNDY_DEEP} opacity="0.35" />
-                    <path d="M0,790 C300,750 560,830 860,800 C1120,772 1300,810 1440,780 L1440,900 L0,900 Z" fill="#F4ECE0" opacity="0.9" />
-                    <path d="M0,812 C300,780 560,850 860,826 C1120,804 1300,838 1440,812" fill="none" stroke={GOLD} strokeWidth="1.8" vectorEffect="non-scaling-stroke" />
-                    <path d="M0,830 C320,806 580,872 880,852 C1140,834 1320,866 1440,846 L1440,900 L0,900 Z" fill={BURGUNDY} />
-                    <path d="M0,872 C340,856 600,890 900,884 C1160,878 1340,892 1440,884 L1440,900 L0,900 Z" fill={BURGUNDY_DEEP} />
                 </svg>
             </div>
 
@@ -244,7 +240,7 @@ const ForgotPassword = () => {
                             <div className="back-row">
                                 <span className="back-line" />
                                 <Link to="/login" className="return-nav" style={sans}>
-                                    <ArrowLeft size={15} /> Back to Login
+                                    Back to Login
                                 </Link>
                                 <span className="back-line" />
                             </div>
@@ -313,7 +309,7 @@ const GlobalStyle = () => (
             position: relative; z-index: 1;
             min-height: 100vh; min-height: 100dvh;
             display: flex; flex-direction: column; align-items: center;
-            padding: clamp(10px, 2.2vh, 26px) 16px clamp(30px, 7vh, 70px); box-sizing: border-box;
+            padding: clamp(10px, 2.2vh, 26px) 16px; box-sizing: border-box;
         }
         .fp-main {
             flex: 1; width: 100%;
@@ -394,15 +390,16 @@ const GlobalStyle = () => (
         }
 
         /* Secure recovery panel */
-        .secure-note { margin-top: var(--gap); padding: clamp(7px, 1.3vh, 12px) 14px; border-radius: 14px; background: ${SAND}; }
-        .secure-head { display: flex; align-items: center; gap: 12px; }
+        .secure-note { margin-top: var(--gap); padding: clamp(7px, 1.3vh, 12px) 14px; border-radius: 14px; background: ${SAND}; text-align: center; }
+        .secure-head { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; }
         .secure-chip {
             width: clamp(28px, 4.4vh, 36px); height: clamp(28px, 4.4vh, 36px); border-radius: 50%; flex-shrink: 0;
             display: flex; align-items: center; justify-content: center; background: rgba(185,139,78,0.22);
         }
+        .secure-head > div { text-align: center; }
         .secure-note-title { font-size: 0.86rem; font-weight: 700; color: ${BURGUNDY_DEEP}; margin: 0; }
         .secure-note-text { font-size: 0.76rem; color: ${TEXT_SOFT}; margin: 1px 0 0; }
-        .secure-list { margin: clamp(4px, 0.9vh, 8px) 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 2px 14px; }
+        .secure-list { margin: clamp(4px, 0.9vh, 8px) 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 14px; }
         .secure-list li { position: relative; padding-left: 11px; font-size: 0.72rem; color: ${MUTED}; line-height: 1.4; }
         .secure-list li::before {
             content: ''; position: absolute; left: 0; top: 6px; width: 4px; height: 4px; border-radius: 50%; background: ${GOLD};

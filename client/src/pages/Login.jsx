@@ -2,7 +2,7 @@ import { API_ORIGIN } from '../utils/apiConfig.js';
 import { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, AlertCircle, ShieldCheck, ArrowRight, UserRound } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, AlertCircle, ShieldCheck, UserRound } from 'lucide-react';
 
 // Official Apple Scholar logo — also the way back to the landing page
 import appleLogo from '../assets/logo/applelogo.png';
@@ -108,15 +108,11 @@ const Login = () => {
         <div className="login-root" style={{ ...sans, color: INK }}>
             <GlobalStyle />
 
-            {/* ── Background: cream → blush → maroon blend, gold line, bottom waves ── */}
+            {/* ── Background: cream → blush → maroon blend with gold line ── */}
             <div className="login-bg" aria-hidden="true">
                 <svg viewBox="0 0 1440 900" preserveAspectRatio="none" className="bg-svg">
                     <path d="M1440,0 C1260,90 1180,210 1210,360 C1240,520 1330,600 1440,640 Z" fill={PRIMARY_DEEP} opacity="0.35" />
                     <path d="M0,120 C260,60 520,200 760,150 C1000,100 1200,40 1440,110" fill="none" stroke={ACCENT} strokeWidth="1.5" opacity="0.6" vectorEffect="non-scaling-stroke" />
-                    <path d="M0,790 C300,750 560,830 860,800 C1120,772 1300,810 1440,780 L1440,900 L0,900 Z" fill="#F4ECE0" opacity="0.9" />
-                    <path d="M0,812 C300,780 560,850 860,826 C1120,804 1300,838 1440,812" fill="none" stroke={ACCENT} strokeWidth="1.8" vectorEffect="non-scaling-stroke" />
-                    <path d="M0,830 C320,806 580,872 880,852 C1140,834 1320,866 1440,846 L1440,900 L0,900 Z" fill={PRIMARY} />
-                    <path d="M0,872 C340,856 600,890 900,884 C1160,878 1340,892 1440,884 L1440,900 L0,900 Z" fill={PRIMARY_DEEP} />
                 </svg>
             </div>
 
@@ -223,10 +219,7 @@ const Login = () => {
                                         Logging in…
                                     </>
                                 ) : (
-                                    <>
-                                        Log in
-                                        <ArrowRight size={18} />
-                                    </>
+                                    'Log in'
                                 )}
                             </button>
                         </form>
@@ -278,7 +271,7 @@ const GlobalStyle = () => (
             position: relative; z-index: 1;
             min-height: 100vh; min-height: 100dvh;
             display: flex; flex-direction: column; align-items: center;
-            padding: clamp(10px, 2.4vh, 28px) 16px clamp(34px, 8vh, 80px); box-sizing: border-box;
+            padding: clamp(10px, 2.4vh, 28px) 16px; box-sizing: border-box;
         }
 
         .card-logo-wrap { display: flex; justify-content: center; margin-bottom: calc(var(--gap) * 0.6); }
@@ -293,7 +286,6 @@ const GlobalStyle = () => (
         .login-main {
             flex: 1; width: 100%;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            padding-top: clamp(6px, 1.6vh, 18px);
         }
 
         .auth-card {
@@ -368,14 +360,14 @@ const GlobalStyle = () => (
         }
 
         .secure-note {
-            display: flex; align-items: center; gap: 12px;
+            display: flex; align-items: center; justify-content: center; gap: 12px;
             margin-top: var(--gap); padding: clamp(7px, 1.4vh, 11px) 14px; border-radius: 14px; background: ${SAND};
         }
         .secure-chip {
             width: clamp(30px, 4.6vh, 36px); height: clamp(30px, 4.6vh, 36px); border-radius: 50%; flex-shrink: 0;
             display: flex; align-items: center; justify-content: center; background: rgba(185,139,78,0.22);
         }
-        .secure-text { min-width: 0; }
+        .secure-text { min-width: 0; text-align: center; }
         .secure-note-title { font-size: 0.86rem; font-weight: 700; color: ${PRIMARY_DEEP}; margin: 0; }
         .secure-note-meta { font-size: 0.74rem; color: ${INK_SOFT}; margin: 2px 0 0; line-height: 1.4; }
 

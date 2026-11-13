@@ -1,8 +1,26 @@
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Globe } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Mail } from 'lucide-react';
+
+// Official Apple Scholar logo — also the way back to the landing page
+import appleLogo from '../assets/logo/applelogo.png';
 
 const CONTACT_EMAIL = 'applescholar.official@gmail.com';
+const GMAIL_COMPOSE_URL = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(CONTACT_EMAIL)}&su=${encodeURIComponent('Apple Scholar inquiry')}`;
+
+/* ---------- Same token system as Login / ForgotPassword ---------- */
+const PRIMARY = '#6D2140';
+const PRIMARY_DEEP = '#4A1730';
+const ACCENT = '#B98B4E';
+const ACCENT_DARK = '#8F6A35';
+const CARD = '#FFFDF9';
+const BORDER = '#E7D8C7';
+const SAND = '#FBF1E6';
+const INK = '#241512';
+const INK_SOFT = '#5C4E42';
+
+const display = { fontFamily: "'Playfair Display', Georgia, serif" };
+const sans = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
 
 const CONTENT = {
   privacy: {
@@ -132,53 +150,188 @@ const CONTENT = {
 };
 
 const LegalInfoPage = () => {
-  const { pathname } = window.location;
+  const { pathname } = useLocation();
   const pageKey = pathname === '/terms' ? 'terms' : 'privacy';
   const navigate = useNavigate();
-  const [language, setLanguage] = useState(() => localStorage.getItem('landing-language') || 'en');
-  const content = CONTENT[pageKey][language === 'tl' ? 'tl' : 'en'];
-
-  const changeLanguage = (event) => {
-    const nextLanguage = event.target.value;
-    setLanguage(nextLanguage);
-    localStorage.setItem('landing-language', nextLanguage);
-  };
+  const [language] = useState(() => {
+    try { return localStorage.getItem('landing-language') || 'en'; } catch { return 'en'; }
+  });
+  const isTl = language === 'tl';
+  const content = CONTENT[pageKey][isTl ? 'tl' : 'en'];
 
   return (
-    <main className="min-h-screen px-4 py-8 sm:px-6 lg:py-12" style={{ background: '#F7F4EE', color: '#241512', fontFamily: "'Inter', system-ui, sans-serif" }}>
-      <article className="mx-auto max-w-3xl rounded-3xl border p-6 shadow-sm sm:p-10" style={{ background: '#FFFDF9', borderColor: '#E7D8C7' }}>
-        <div className="mb-8 flex flex-wrap items-center justify-between gap-4">
-          <button type="button" onClick={() => navigate('/')} className="inline-flex items-center gap-2 text-sm font-semibold hover:underline" style={{ color: '#6D2140' }}>
-            <ArrowLeft size={16} /> {language === 'tl' ? 'Bumalik sa tahanan' : 'Back to home'}
-          </button>
-          <label className="inline-flex items-center gap-2 text-sm" style={{ color: '#5C4E42' }}>
-            <Globe size={15} />
-            <select value={language} onChange={changeLanguage} aria-label="Language / Wika" className="rounded-lg border bg-transparent px-2 py-1.5" style={{ borderColor: '#E7D8C7' }}>
-              <option value="en">English</option>
-              <option value="tl">Tagalog</option>
-            </select>
-          </label>
-        </div>
+    <div className="legal-root" style={{ ...sans, color: INK }}>
+      <GlobalStyle />
 
-        <p className="mb-2 text-xs font-bold uppercase tracking-[0.2em]" style={{ color: '#8A5E38' }}>
-          {language === 'tl' ? 'Apple Scholar Program · Draft para sa pagsusuri' : 'Apple Scholar Program · Draft for review'}
-        </p>
-        <h1 className="mb-4 text-3xl font-bold sm:text-4xl" style={{ color: '#4A1730', fontFamily: "'Playfair Display', Georgia, serif" }}>{content.title}</h1>
-        <p className="mb-8 text-sm leading-7" style={{ color: '#5C4E42' }}>{content.intro}</p>
+      {/* ── Background: cream → blush → maroon blend (same as Login) ── */}
+      <div className="legal-bg" aria-hidden="true">
+        <svg viewBox="0 0 1440 900" preserveAspectRatio="none" className="bg-svg">
+          <path d="M1440,0 C1260,90 1180,210 1210,360 C1240,520 1330,600 1440,640 Z" fill={PRIMARY_DEEP} opacity="0.35" />
+        </svg>
+      </div>
 
-        <div className="space-y-7">
-          {content.sections.map((section) => (
-            <section key={section.title}>
-              <h2 className="mb-2 text-lg font-bold" style={{ color: '#4A1730' }}>{section.title}</h2>
-              {section.paragraphs.map((paragraph) => (
-                <p key={paragraph} className="text-sm leading-7" style={{ color: '#5C4E42' }}>{paragraph}</p>
+      <div className="legal-inner">
+        <main className="legal-main">
+          <article className="auth-card">
+            {/* Logo — click to go back to the landing page */}
+            <div className="card-logo-wrap">
+              <button
+                type="button"
+                onClick={() => navigate('/')}
+                aria-label="Back to Apple Scholar home"
+                className="logo-link"
+              >
+                <img src={appleLogo} alt="Apple Scholar" className="logo-img" />
+              </button>
+            </div>
+
+            <p className="auth-eyebrow">
+              {isTl ? 'Kalinga Foundation · Draft para sa pagsusuri' : 'Kalinga Foundation · Draft for review'}
+            </p>
+            <h1 className="auth-title" style={display}>{content.title}</h1>
+
+            <p className="intro-note">{content.intro}</p>
+
+            <div className="sections">
+              {content.sections.map((section) => (
+                <section key={section.title} className="legal-section">
+                  <h2 className="section-title">{section.title}</h2>
+                  {section.paragraphs.map((paragraph) => (
+                    <p key={paragraph} className="section-text">{paragraph}</p>
+                  ))}
+                </section>
               ))}
-            </section>
-          ))}
-        </div>
-      </article>
-    </main>
+            </div>
+
+            <a
+              href={GMAIL_COMPOSE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="secure-note"
+            >
+              <span className="secure-chip">
+                <Mail size={18} color={PRIMARY} strokeWidth={1.8} />
+              </span>
+              <span className="secure-text">
+                <span className="secure-note-title">{isTl ? 'May katanungan?' : 'Have a question?'}</span>
+                <span className="secure-note-meta">{CONTACT_EMAIL}</span>
+              </span>
+            </a>
+          </article>
+
+          <p className="year-note">Academic Year 2026–2027 · Scholarship Compliance Tracking System</p>
+        </main>
+      </div>
+    </div>
   );
 };
+
+const GlobalStyle = () => (
+  <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+    @keyframes card-slide-up {
+      from { opacity: 0; transform: translateY(18px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .legal-root {
+      --logo-w: clamp(78px, 12vh, 110px);
+      --pad-y: clamp(22px, 4vh, 38px);
+      --pad-x: clamp(22px, 4vw, 44px);
+      position: relative; width: 100%;
+      min-height: 100vh; min-height: 100dvh;
+      overflow-x: clip;
+      background: linear-gradient(115deg, #FFFDF9 0%, #F6E9E1 30%, #B25A78 66%, #6D2140 84%, ${PRIMARY_DEEP} 100%);
+      background-attachment: fixed;
+    }
+    .legal-bg { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+    .bg-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+    .legal-inner {
+      position: relative; z-index: 1;
+      min-height: 100vh; min-height: 100dvh;
+      display: flex; flex-direction: column; align-items: center;
+      padding: clamp(16px, 4vh, 40px) 16px clamp(20px, 4vh, 36px); box-sizing: border-box;
+    }
+    .legal-main { width: 100%; display: flex; flex-direction: column; align-items: center; }
+
+    .auth-card {
+      width: 100%; max-width: 760px; box-sizing: border-box;
+      background: ${CARD}; border: 1px solid ${BORDER}; border-top: 3px solid ${ACCENT};
+      border-radius: 22px; padding: var(--pad-y) var(--pad-x);
+      box-shadow: 0 34px 70px -26px rgba(30,8,18,0.6);
+      animation: card-slide-up 0.6s cubic-bezier(.16,1,.3,1) forwards;
+    }
+
+    .card-logo-wrap { display: flex; justify-content: center; margin-bottom: 14px; }
+    .logo-link {
+      background: none; border: none; padding: 0; margin: 0; cursor: pointer;
+      display: block; line-height: 0; border-radius: 10px; transition: transform 0.2s ease;
+    }
+    .logo-link:hover { transform: translateY(-2px); }
+    .logo-link:focus-visible { outline: 2px solid ${ACCENT}; outline-offset: 5px; }
+    .logo-img { width: var(--logo-w); height: auto; display: block; object-fit: contain; }
+
+    .secure-note:focus-visible {
+      outline: 2px solid ${ACCENT}; outline-offset: 3px;
+    }
+
+    .auth-eyebrow {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase;
+      color: ${ACCENT_DARK}; text-align: center; margin: 0 0 6px;
+    }
+    .auth-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: clamp(26px, 5vw, 36px); font-weight: 600; color: ${PRIMARY_DEEP};
+      text-align: center; margin: 0 0 18px; line-height: 1.15;
+    }
+
+    .intro-note {
+      margin: 0 0 24px; padding: 14px 18px; border-radius: 14px; background: ${SAND};
+      border-left: 3px solid ${ACCENT}; font-size: 0.86rem; line-height: 1.7; color: ${INK_SOFT};
+    }
+
+    .sections { display: flex; flex-direction: column; gap: 22px; }
+    .legal-section { padding-left: 16px; border-left: 1px solid ${BORDER}; }
+    .section-title {
+      font-family: 'Playfair Display', Georgia, serif;
+      font-size: 1.12rem; font-weight: 600; color: ${PRIMARY_DEEP}; margin: 0 0 6px; line-height: 1.3;
+    }
+    .section-text { font-size: 0.88rem; line-height: 1.75; color: ${INK_SOFT}; margin: 0; max-width: 68ch; }
+
+    .secure-note {
+      display: flex; align-items: center; gap: 12px; text-decoration: none;
+      margin-top: 28px; padding: 11px 14px; border-radius: 14px; background: ${SAND};
+      transition: background 0.2s ease;
+    }
+    .secure-note:hover { background: #F6E7D6; }
+    .secure-chip {
+      width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center; background: rgba(185,139,78,0.22);
+    }
+    .secure-text { display: flex; flex-direction: column; min-width: 0; }
+    .secure-note-title { font-size: 0.86rem; font-weight: 700; color: ${PRIMARY_DEEP}; }
+    .secure-note-meta { font-size: 0.78rem; color: ${INK_SOFT}; margin-top: 2px; overflow-wrap: anywhere; }
+
+    .year-note {
+      font-size: 0.74rem; font-weight: 600; color: #FFFDF9; text-align: center;
+      margin: 18px 0 0; line-height: 1.5;
+    }
+
+    @media (max-width: 639px) {
+      .legal-root {
+        background: linear-gradient(170deg, #FFFDF9 0%, #F6E9E1 28%, #B25A78 62%, ${PRIMARY} 85%, ${PRIMARY_DEEP} 100%);
+        background-attachment: fixed;
+      }
+      .legal-section { padding-left: 12px; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .auth-card { animation: none; }
+      .logo-link, .secure-note { transition: none; }
+    }
+  `}</style>
+);
 
 export default LegalInfoPage;
