@@ -32,7 +32,7 @@ const isArchivedScholar = (u) => {
 };
 const normalizeScholar = (u) => {
     const archivedAt = pick(u, ['archived_at', 'archivedAt', 'date_archived']);
-    const retention = pick(u, ['retention_until', 'retentionUntil']) || (archivedAt ? addYears(archivedAt, 3) : null);
+    const retention = pick(u, ['retention_until', 'retentionUntil']) || (archivedAt ? addYears(archivedAt, RETENTION_YEARS) : null);
     return {
         id: u.id,
         name: pick(u, ['full_name', 'name', 'scholar_name']) || [u.first_name, u.last_name].filter(Boolean).join(' ') || null,
@@ -97,6 +97,7 @@ const COMPLIANCE_META = {
 const PAGE_SIZE = 8;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const EXPIRING_YEARS = 0.5; // "within 6 months"
+const RETENTION_YEARS = 3;
 
 const auth = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
 const formatDate = (v) => (v ? formatAdminDate(v, { month: 'short' }) : '—');
@@ -662,14 +663,14 @@ export default function ArchiveManagement() {
                     <div className="flex-1" style={{ minWidth: 260 }}>
                         <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK }}>Retention Policy</h2>
                         <p style={{ ...body, fontSize: '0.83rem', lineHeight: 1.55, color: MUTED, marginTop: 2 }}>
-                            All archived scholar records and documents are retained for 5 years from the date of archive.
+                            All archived scholar records and documents are retained for {RETENTION_YEARS} years from the date of archive.
                         </p>
                         <p style={{ ...body, fontSize: '0.83rem', lineHeight: 1.55, color: MUTED }}>
-                            After 5 years, records become eligible for disposal review according to the organization's policy.
+                            After {RETENTION_YEARS} years, records become eligible for disposal review according to the organization's policy.
                         </p>
                     </div>
                     <div className="retention-aside text-center" style={{ minWidth: 140, paddingLeft: 22, borderLeft: `1px solid ${BORDER}` }}>
-                        <p style={{ ...display, fontSize: '1.5rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.1 }}>5 YEARS</p>
+                        <p style={{ ...display, fontSize: '1.5rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.1 }}>{RETENTION_YEARS} YEARS</p>
                         <p className="inline-flex items-center gap-1.5 mt-1" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: SUCCESS }}>
                             <span style={{ width: 8, height: 8, borderRadius: '50%', background: SUCCESS }} />Policy Active
                         </p>

@@ -68,11 +68,40 @@ test('archived documents listing includes archived submission records and preser
   assert.deepEqual(response.body.map(row => row.record_type || 'document'), ['document', 'submission']);
   assert.equal(response.body[1].record_id, 12);
   assert.equal(statements.length, 2);
+  assert.match(statements[0].sql, /THEN DATE_ADD\(d\.archived_at, INTERVAL 3 YEAR\)\s+ELSE d\.retention_until\s+END AS retention_until/);
   assert.ok(statements[1].sql.includes("s.archived_at IS NOT NULL OR s.archive_at IS NOT NULL"));
   assert.match(statements[1].sql, /INTERVAL 3 YEAR/);
   assert.ok(statements[1].sql.includes('s.submission_type LIKE ?'));
   assert.ok(statements[1].sql.includes('YEAR(s.submitted_at) = ?'));
   assert.deepEqual(statements[1].values, ['%Jovel%', '%Jovel%', '%Jovel%', '%Jovel%', '%letter%', 2026]);
+});
+
+test('archiving a document starts its three-year retention period at archive time', async () => {
+  let captured;
+  fakeDb.query = (sql, values, callback) => {
+    captured = { sql, values };
+    callback(null, { affectedRows: 1 });
+  };
+
+  const response = await invokeDocumentAction(archiveController.archiveDocument, '4');
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(captured.values, ['4']);
+  assert.match(captured.sql, /archived_at = NOW\(\)/);
+  assert.match(captured.sql, /retention_until = DATE_ADD\(NOW\(\), INTERVAL 3 YEAR\)/);
+});
+
+test('restoring a document returns its retention period to the upload date', async () => {
+  let captured;
+  fakeDb.query = (sql, values, callback) => {
+    captured = { sql, values };
+    callback(null, { affectedRows: 1 });
+  };
+
+  const response = await invokeDocumentAction(archiveController.restoreDocument, '4');
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(captured.values, ['4']);
+  assert.match(captured.sql, /archived_at = NULL/);
+  assert.match(captured.sql, /retention_until = DATE_ADD\(uploaded_at, INTERVAL 3 YEAR\)/);
 });
 
 test('restoring an archived submission clears its archive timestamps', async () => {
@@ -87,6 +116,19 @@ test('restoring an archived submission clears its archive timestamps', async () 
   assert.deepEqual(response.body, { message: 'Submission record restored.' });
   assert.deepEqual(captured.values, [12]);
   assert.match(captured.sql, /SET archived_at = NULL, archive_at = NULL/);
+});
+
+const invokeDocumentAction = (handler, id) => new Promise(resolve => {
+  const req = { params: { id } };
+  const res = {
+    json(body) {
+      resolve({ statusCode: 200, body });
+    },
+    status(statusCode) {
+      return { json: body => resolve({ statusCode, body }) };
+    },
+  };
+  handler(req, res);
 });
 
 test('restore rejects invalid submission identifiers without querying the database', async () => {

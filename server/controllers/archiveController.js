@@ -7,7 +7,12 @@ const query = (sql, params = []) => new Promise((resolve, reject) => {
 const documentSelect = `
     SELECT d.id, d.scholar_id, u.full_name AS scholar_name, d.category,
            d.file_name, d.file_path, d.file_size, d.mime_type, d.status,
-           d.uploaded_at, d.retention_until, d.is_archived, d.archived_at
+           d.uploaded_at,
+           CASE WHEN d.is_archived = 1 AND d.archived_at IS NOT NULL
+                THEN DATE_ADD(d.archived_at, INTERVAL 3 YEAR)
+                ELSE d.retention_until
+           END AS retention_until,
+           d.is_archived, d.archived_at
     FROM documents d
     LEFT JOIN users u ON u.scholar_id = d.scholar_id
 `;
@@ -117,7 +122,14 @@ exports.restoreSubmission = async (req, res) => {
 
 exports.archiveDocument = async (req, res) => {
     try {
-        const result = await query('UPDATE documents SET is_archived = 1, archived_at = NOW() WHERE id = ? AND is_archived = 0', [req.params.id]);
+        const result = await query(
+            `UPDATE documents
+             SET is_archived = 1,
+                 archived_at = NOW(),
+                 retention_until = DATE_ADD(NOW(), INTERVAL 3 YEAR)
+             WHERE id = ? AND is_archived = 0`,
+            [req.params.id]
+        );
         if (!result.affectedRows) return res.status(404).json({ error: 'Active document not found.' });
         res.json({ message: 'Document archived. The physical file was retained.' });
     } catch (error) {
@@ -128,7 +140,14 @@ exports.archiveDocument = async (req, res) => {
 
 exports.restoreDocument = async (req, res) => {
     try {
-        const result = await query('UPDATE documents SET is_archived = 0, archived_at = NULL WHERE id = ? AND is_archived = 1', [req.params.id]);
+        const result = await query(
+            `UPDATE documents
+             SET is_archived = 0,
+                 archived_at = NULL,
+                 retention_until = DATE_ADD(uploaded_at, INTERVAL 3 YEAR)
+             WHERE id = ? AND is_archived = 1`,
+            [req.params.id]
+        );
         if (!result.affectedRows) return res.status(404).json({ error: 'Archived document not found.' });
         res.json({ message: 'Document restored.' });
     } catch (error) {

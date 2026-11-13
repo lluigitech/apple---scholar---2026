@@ -693,8 +693,15 @@ const initializeDatabase = () => {
                 }
                 return runQuery(db, `
                               UPDATE documents
-                              SET retention_until = LEAST(retention_until, DATE_ADD(uploaded_at, INTERVAL 3 YEAR))
-                              WHERE retention_until > DATE_ADD(uploaded_at, INTERVAL 3 YEAR)
+                              SET retention_until = CASE
+                                  WHEN is_archived = 1 AND archived_at IS NOT NULL
+                                      THEN DATE_ADD(archived_at, INTERVAL 3 YEAR)
+                                  ELSE LEAST(retention_until, DATE_ADD(uploaded_at, INTERVAL 3 YEAR))
+                              END
+                              WHERE (is_archived = 1 AND archived_at IS NOT NULL
+                                     AND retention_until <> DATE_ADD(archived_at, INTERVAL 3 YEAR))
+                                 OR (is_archived = 0
+                                     AND retention_until > DATE_ADD(uploaded_at, INTERVAL 3 YEAR))
                 `).then(() => runQuery(db, `
                               INSERT INTO documents (scholar_id, category, file_name, file_path, mime_type, status, uploaded_at, retention_until, source_submission_id)
                               SELECT s.scholar_id,
