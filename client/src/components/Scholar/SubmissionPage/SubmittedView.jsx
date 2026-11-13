@@ -74,7 +74,7 @@ const SubmittedView = ({ info, body: letterBody, media, onNew, onViewHistory }) 
         { label: 'Name', value: info.name, icon: User },
         { label: 'Age', value: `${info.age} years old`, icon: Hash },
         { label: 'Year Level', value: info.year, icon: GraduationCap },
-        { label: 'Course', value: info.course, icon: BookOpen },
+        { label: info.track_strand ? 'Track / Strand' : 'Course', value: info.track_strand || info.course, icon: BookOpen },
         { label: 'School', value: info.school, icon: Building2 },
         { label: 'Date', value: info.date, icon: Calendar },
     ];

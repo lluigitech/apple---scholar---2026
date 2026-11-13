@@ -7,6 +7,10 @@ let queryResult = [];
 let capturedQuery;
 const routes = new Map();
 const fakeRouter = {
+  get(path, ...handlers) {
+    routes.set(`GET ${path}`, handlers.at(-1));
+    return this;
+  },
   post(path, ...handlers) {
     routes.set(`POST ${path}`, handlers.at(-1));
     return this;
@@ -43,6 +47,9 @@ Module._load = function (request, parent, isMain) {
   }
   if (parent?.filename === routePath && request === '../controllers/authController') {
     return { changePassword: () => {} };
+  }
+  if (parent?.filename === routePath && request === '../controllers/accountSetupController') {
+    return { getProfile: () => {}, completeSetup: () => {} };
   }
   return originalLoad.call(this, request, parent, isMain);
 };

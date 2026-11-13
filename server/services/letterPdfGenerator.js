@@ -95,8 +95,8 @@ async function generateLetterDocx(submissionId) {
   if (!rows || rows.length === 0) throw new Error('Submission not found');
   const sub = rows[0];
 
-  let userProfile = { full_name: '', age: '', year_level: '', course: '', school: '' };
-  const [uRows] = await promiseDb.query('SELECT full_name, age, year_level, course, school FROM users WHERE scholar_id = ? LIMIT 1', [sub.scholar_id]);
+  let userProfile = { full_name: '', age: '', year_level: '', course: '', track_strand: '', school: '' };
+  const [uRows] = await promiseDb.query('SELECT full_name, age, year_level, course, track_strand, school FROM users WHERE scholar_id = ? LIMIT 1', [sub.scholar_id]);
   if (uRows && uRows.length > 0) {
     userProfile = { ...userProfile, ...uRows[0] };
   }
@@ -104,7 +104,14 @@ async function generateLetterDocx(submissionId) {
   sub.full_name = userProfile.full_name || '';
   sub.age = userProfile.age ?? '';
   sub.year_level = formatYearLevelLabel(userProfile.year_level || '');
-  sub.course = userProfile.course || '';
+  const normalizedYearLevel = String(userProfile.year_level || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (/^grade_(11|12)$/.test(normalizedYearLevel)) {
+    sub.course = userProfile.track_strand || '';
+  } else if (/^grade_(7|8|9|10)$/.test(normalizedYearLevel)) {
+    sub.course = '';
+  } else {
+    sub.course = userProfile.course || '';
+  }
   sub.school = userProfile.school || '';
 
   const [mediaRows] = await promiseDb.query(

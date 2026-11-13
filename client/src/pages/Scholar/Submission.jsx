@@ -17,6 +17,7 @@ import SubmissionHistory from '../../components/Scholar/SubmissionPage/Submissio
 import ScholarGrades from '../../components/Scholar/SubmissionPage/ScholarGrades';
 import { CHECKLIST, LETTER_BODY_MAX, buildEval, calcInfoScore, calcMediaScore, classifyAcademicTone, classifyQualityScore, getRiskBg, getRiskBorder } from '../../utils/submissionScoring';
 import { uploadResumableFile } from '../../utils/resumableUpload';
+import { getEducationStage, hasEducationProgram } from '../../utils/educationStage';
 
 // ── Apple Scholar Portal design system (per redesign brief) ──
 const BG = '#F7F4EE';
@@ -246,6 +247,10 @@ const WorkflowSteps = ({ steps, onStepClick }) => (
 const scholarInfoStorageKey = (scholarId) => `scholar_info_cache_${scholarId}`;
 const scholarDraftStorageKey = (scholarId) => `scholar_submission_draft_${scholarId}`;
 
+const getEducationProgramValue = (info) => (
+  getEducationStage(info.year) === 'senior_high' ? info.track_strand : info.course
+);
+
 const formatYearLevelLabel = (value) => {
   if (!value) return '';
   const normalized = String(value).trim().toLowerCase().replace(/_/g, ' ');
@@ -283,7 +288,7 @@ function Submission() {
   const userId = localStorage.getItem('id');
 
   const [info, setInfo] = useState({
-    name: '', age: '', year: '', course: '', school: '',
+    name: '', age: '', year: '', course: '', track_strand: '', school: '',
     date: '',
   });
   const [body_, setBody] = useState('');
@@ -311,6 +316,7 @@ function Submission() {
 
   const scholarId = localStorage.getItem('scholar_id');
   const updateInfo = (key) => (val) => setInfo(prev => ({ ...prev, [key]: val }));
+  const educationStage = getEducationStage(info.year);
   const wordCount = body_.trim().split(/\s+/).filter(Boolean).length;
   const hasContent = info.name.trim().length > 0 && body_.trim().length > 20;
   const datePresent = asText(info.date).length > 0;
@@ -357,7 +363,7 @@ function Submission() {
     if (!scholarId) return;
     try {
       localStorage.setItem(scholarDraftStorageKey(scholarId), JSON.stringify({
-        info: { name: info.name, age: info.age, year: info.year, course: info.course, school: info.school },
+        info: { name: info.name, age: info.age, year: info.year, course: info.course, track_strand: info.track_strand, school: info.school },
         body: body_,
         selectedType,
         savedAt: new Date().toISOString(),
@@ -365,7 +371,7 @@ function Submission() {
     } catch (err) {
       console.warn('Could not save submission draft', err);
     }
-  }, [scholarId, info.name, info.age, info.year, info.course, info.school, body_, selectedType]);
+  }, [scholarId, info.name, info.age, info.year, info.course, info.track_strand, info.school, body_, selectedType]);
 
   useEffect(() => {
     const applyProfileInfo = (profile) => {
@@ -375,6 +381,7 @@ function Submission() {
         age: profile.age || '',
         year: formatYearLevelLabel(profile.year_level),
         course: profile.course || '',
+        track_strand: profile.track_strand || '',
         school: profile.school || '',
       };
       setInfo(prev => ({ ...prev, ...nextInfo }));
@@ -408,14 +415,14 @@ function Submission() {
   // Keep the cache in sync as the scholar edits their info fields.
   useEffect(() => {
     if (!scholarId) return;
-    const { name, age, year, course, school } = info;
-    if (!name && !age && !year && !course && !school) return;
+    const { name, age, year, course, track_strand, school } = info;
+    if (!name && !age && !year && !course && !track_strand && !school) return;
     try {
-      localStorage.setItem(scholarInfoStorageKey(scholarId), JSON.stringify({ name, age, year, course, school }));
+      localStorage.setItem(scholarInfoStorageKey(scholarId), JSON.stringify({ name, age, year, course, track_strand, school }));
     } catch (err) {
       console.warn('Could not cache scholar info', err);
     }
-  }, [info.name, info.age, info.year, info.course, info.school, scholarId]);
+  }, [info.name, info.age, info.year, info.course, info.track_strand, info.school, scholarId]);
 
   const fetchHistory = useCallback(async () => {
     if (!scholarId) return;
@@ -595,7 +602,8 @@ function Submission() {
       formData.append('name', info.name || '');
       formData.append('age', info.age || '');
       formData.append('year', info.year || '');
-      formData.append('course', info.course || '');
+      formData.append('course', educationStage === 'college' || educationStage === 'other' ? info.course || '' : '');
+      formData.append('track_strand', educationStage === 'senior_high' ? info.track_strand || '' : '');
       formData.append('school', info.school || '');
       formData.append('quality_score', evalResult.overallScore);
       formData.append('quality_status', evalResult.qualityStatus);
@@ -670,7 +678,8 @@ function Submission() {
   // ---- Presentation-only derived values for the new hierarchy ----
   const overallCompletionPct = CHECKLIST.length ? (checklistPassedCount / CHECKLIST.length) * 100 : 0;
 
-  const infoComplete = Boolean(info.name && info.year && info.course && info.school);
+  const programComplete = !hasEducationProgram(info.year) || Boolean(getEducationProgramValue(info));
+  const infoComplete = Boolean(info.name && info.year && programComplete && info.school);
   const letterComplete = wordCount >= 150;
   const mediaComplete = media.length > 0;
   const automatedReviewComplete = view === 'evaluation' || view === 'submitted';
@@ -822,7 +831,12 @@ function Submission() {
                       <div className="sm:col-span-2"><InfoField label="Full Name" value={info.name} onChange={updateInfo('name')} placeholder="e.g. Juan Dela Cruz" /></div>
                       <InfoField label="Age" value={info.age} onChange={updateInfo('age')} placeholder="e.g. 20" type="number" />
                       <InfoField label="Year Level" value={info.year} onChange={updateInfo('year')} placeholder="e.g. 2nd Year" />
-                      <InfoField label="Course" value={info.course} onChange={updateInfo('course')} placeholder="e.g. BS Computer Science" />
+                      {educationStage === 'senior_high' && (
+                        <InfoField label="Track / Strand" value={info.track_strand || ''} onChange={updateInfo('track_strand')} placeholder="e.g. STEM, ABM, HUMSS, GAS, or TVL" />
+                      )}
+                      {(educationStage === 'college' || educationStage === 'other') && (
+                        <InfoField label="Course" value={info.course} onChange={updateInfo('course')} placeholder="e.g. BS Computer Science" />
+                      )}
                       <InfoField label="School" value={info.school} onChange={updateInfo('school')} placeholder="e.g. University of the Philippines" />
                       <div className="sm:col-span-2">
                         <label style={fieldLabel}>DATE <span style={{ color: PRIMARY }}>*</span></label>

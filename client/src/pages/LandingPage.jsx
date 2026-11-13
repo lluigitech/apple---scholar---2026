@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom';
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect } from 'react';
 import TAGALOG_COPY from '../locales/landingTagalog';
 import {
   Globe,
@@ -13,7 +13,6 @@ import {
   ClipboardCheck,
   Headset,
   GraduationCap,
-  Upload,
   ChevronLeft,
   ChevronRight,
   ChevronDown,
@@ -74,17 +73,14 @@ const features = [
 
 const workflowSteps = [
   {
-    Icon: Upload,
     title: 'Submit requirements',
     desc: 'Scholars upload their compliance files, reports, and updates through a simple and guided process.',
   },
   {
-    Icon: ClipboardCheck,
     title: 'Review and validate',
     desc: 'Officers and staff verify submissions, assign follow-ups, and keep records accurate and timely.',
   },
   {
-    Icon: BarChart2,
     title: 'Track progress',
     desc: 'Administrators monitor overall performance, deadlines, and report status from one centralized dashboard.',
   },
@@ -108,6 +104,16 @@ const extraPhotos = [
 const SLIDE_COUNT = extraPhotos.length - 1; // the volunteer photo lives in the hero
 
 const NAV_LINKS = ['Home', 'About', 'Workflow', 'Features', 'Scholars'];
+
+const CONTACT_EMAIL = 'applescholar.official@gmail.com';
+const FOOTER_LINKS = [
+  { label: 'Privacy Policy', to: '/privacy' },
+  { label: 'Terms of Use', to: '/terms' },
+  { label: 'Contact Us', subject: 'Apple Scholar inquiry' },
+];
+const getGmailComposeUrl = subject => (
+  `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(CONTACT_EMAIL)}&su=${encodeURIComponent(subject)}`
+);
 
 // ─── Small helpers ─────────────────────────────────────────────────────────
 const PhotoFill = ({ src, failed, onFail, alt = '', position = 'center', fallback }) =>
@@ -173,7 +179,7 @@ const LandingPage = () => {
       key: p.key,
       src: p.src, failed: !!failedExtra[p.key], onFail: () => failExtra(p.key), alt: p.alt, position: 'center 40%',
       title: isTagalog ? TAGALOG_COPY.photoCaptions[idx] : p.title,
-      sub: isTagalog ? 'Programa ng Apple Scholar · Payatas' : 'Apple Scholar Program · Payatas',
+      sub: isTagalog ? 'Programa ng Apple Scholar · Rodriguez, Rizal' : 'Apple Scholar Program · Rodriguez, Rizal',
     }))
     .filter(sl => sl.key !== 'volunteer');
 
@@ -414,7 +420,7 @@ const LandingPage = () => {
                 <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(36,21,18,0.75), transparent)' }} />
                 <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-5 right-3 sm:right-5">
                   <p className="font-display font-semibold text-sm sm:text-lg text-white leading-tight">Papaya Academy</p>
-                  <p className="text-[11px] sm:text-[12px] text-white/90">Payatas, Manila</p>
+                  <p className="text-[11px] sm:text-[12px] text-white/90">Rodriguez, Rizal</p>
                 </div>
               </div>
 
@@ -454,7 +460,7 @@ const LandingPage = () => {
           <div className="space-y-3 text-[15px] leading-[1.7]" style={{ color: INK_SOFT }}>
             <p>{isTagalog ? TAGALOG_COPY.aboutParagraphs[0] : <>
               The <strong className="font-semibold" style={{ color: INK }}>Kalinga Foundation</strong> is devoted to children in extreme poverty
-              living in and around the Payatas rubbish dump in Manila, Philippines.
+              living in Rodriguez and nearby communities in Rizal, Philippines.
               Kalinga offers them tools with which they can build a better future for themselves.
             </>}</p>
             <p>{isTagalog ? TAGALOG_COPY.aboutParagraphs[1] : <>
@@ -522,48 +528,59 @@ const LandingPage = () => {
         <h2 className="font-display font-bold text-[1.75rem] sm:text-4xl leading-tight mb-9" style={{ color: MAROON_DEEP }}>
           {isTagalog ? TAGALOG_COPY.detailHeadings[1] : 'A simple and organized process'}
         </h2>
-        <div className="relative">
-          <div className="hidden lg:block absolute left-[16%] right-[16%] top-[26px] h-[2px]" style={{ background: BRONZE, opacity: 0.7 }} aria-hidden="true" />
-          <div className="relative grid md:grid-cols-3 gap-5 text-left">
-            {localizedWorkflowSteps.map(step => (
-              <div key={step.title} className="rounded-[22px] p-7" style={cardBase}>
-                <div className="flex items-center justify-between mb-4">
-                  <span className="w-[52px] h-[52px] rounded-2xl flex items-center justify-center" style={{ background: MAROON, color: BRONZE_LIGHT }}>
-                    <step.Icon size={22} />
-                  </span>
-                </div>
-                <h3 className="font-display font-bold text-xl mb-2" style={{ color: MAROON_DEEP }}>{step.title}</h3>
-                <p className="text-sm leading-[1.6]" style={{ color: INK_SOFT }}>{step.desc}</p>
-              </div>
-            ))}
-          </div>
+        {/* One wide card, three columns */}
+        <div className="grid md:grid-cols-3 rounded-[22px] overflow-hidden text-left" style={cardBase}>
+          {localizedWorkflowSteps.map((step, idx) => (
+            <div
+              key={step.title}
+              className={`p-7 sm:p-9 ${idx > 0 ? 'border-t md:border-t-0 md:border-l' : ''}`}
+              style={{ borderColor: BORDER }}
+            >
+              <span className="font-display font-bold text-[2.75rem] leading-none" style={{ color: BRONZE }}>0{idx + 1}</span>
+              <h3 className="font-display font-bold text-xl mt-5 mb-2" style={{ color: MAROON_DEEP }}>{step.title}</h3>
+              <p className="text-sm leading-[1.65]" style={{ color: INK_SOFT }}>{step.desc}</p>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* ── FEATURES ─────────────────────────────────────────────────────────── */}
-      <section id="features" className={`${WRAP} scroll-mt-24 pt-20 lg:pt-24 grid lg:grid-cols-[420px_1fr] gap-6 lg:gap-14 items-start`}>
-        <div className="rounded-[26px] p-8 sm:p-9" style={{ background: MAROON_DEEP, color: CREAM }}>
-          <Eyebrow light>{isTagalog ? 'Mga Tampok' : 'Key Features'}</Eyebrow>
-          <h2 className="font-display font-bold text-[1.7rem] sm:text-[2.1rem] leading-[1.15] mb-4 text-white">
-            {isTagalog ? TAGALOG_COPY.detailHeadings[0] : 'A complete scholarship management portal'}
-          </h2>
-          <p className="text-sm leading-relaxed mb-6" style={{ color: '#EAD9C2' }}>
-            {isTagalog ? 'Mga madaling gamiting tool para sa pagsunod, komunikasyon, pagsubaybay, at iba pa.' : 'Streamlined tools for compliance, communication, monitoring, and more.'}
-          </p>
-        </div>
+      <section id="features" className={`${WRAP} scroll-mt-24 pt-20 lg:pt-24`}>
+        {/* Bento grid: heading tile + three feature tiles */}
+        <div className="grid lg:grid-cols-[1.1fr_1fr] gap-4 lg:gap-5">
+          <div className="lg:row-span-2 rounded-[26px] p-8 sm:p-10 flex flex-col justify-between gap-10" style={{ background: MAROON_DEEP, color: CREAM }}>
+            <div>
+              <Eyebrow light>{isTagalog ? 'Mga Tampok' : 'Key Features'}</Eyebrow>
+              <h2 className="font-display font-bold text-[1.9rem] sm:text-[2.4rem] leading-[1.12] text-white">
+                {isTagalog ? TAGALOG_COPY.detailHeadings[0] : 'A complete scholarship management portal'}
+              </h2>
+            </div>
+            <p className="text-sm sm:text-[15px] leading-relaxed max-w-[420px]" style={{ color: '#EAD9C2' }}>
+              {isTagalog ? 'Mga madaling gamiting tool para sa pagsunod, komunikasyon, pagsubaybay, at iba pa.' : 'Streamlined tools for compliance, communication, monitoring, and more.'}
+            </p>
+          </div>
 
-        <div className="grid gap-4">
-          {localizedFeatures.map(f => (
-            <div key={f.title} className="lift rounded-[22px] p-6 flex gap-5 items-start" style={cardBase}>
-              <span className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: PILL_ICON, color: MAROON }}>
+          {localizedFeatures.slice(0, 1).map(f => (
+            <div key={f.title} className="lift rounded-[22px] p-7" style={cardBase}>
+              <span className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: PILL_ICON, color: MAROON }}>
                 <f.Icon size={22} />
               </span>
-              <div>
-                <h3 className="font-display font-bold text-xl leading-snug mb-1.5" style={{ color: MAROON_DEEP }}>{f.title}</h3>
-                <p className="text-sm leading-[1.6]" style={{ color: INK_SOFT }}>{f.desc}</p>
-              </div>
+              <h3 className="font-display font-bold text-xl leading-snug mb-2" style={{ color: MAROON_DEEP }}>{f.title}</h3>
+              <p className="text-sm leading-[1.65]" style={{ color: INK_SOFT }}>{f.desc}</p>
             </div>
           ))}
+
+          <div className="grid sm:grid-cols-2 gap-4 lg:gap-5">
+            {localizedFeatures.slice(1).map(f => (
+              <div key={f.title} className="lift rounded-[22px] p-7" style={cardBase}>
+                <span className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: PILL_ICON, color: MAROON }}>
+                  <f.Icon size={22} />
+                </span>
+                <h3 className="font-display font-bold text-xl leading-snug mb-2" style={{ color: MAROON_DEEP }}>{f.title}</h3>
+                <p className="text-sm leading-[1.65]" style={{ color: INK_SOFT }}>{f.desc}</p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -574,7 +591,7 @@ const LandingPage = () => {
         <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
           <div>
             <Eyebrow>{isTagalog ? 'Ang Aming Komunidad' : 'Our Community'}</Eyebrow>
-            <h2 className="font-display font-bold text-[1.75rem] sm:text-4xl leading-tight max-w-[520px]" style={{ color: MAROON_DEEP }}>
+            <h2 className="font-display font-bold text-[1.75rem] sm:text-4xl leading-tight" style={{ color: MAROON_DEEP }}>
               {isTagalog ? TAGALOG_COPY.detailHeadings[2] : 'The scholars behind every record'}
             </h2>
           </div>
@@ -600,8 +617,8 @@ const LandingPage = () => {
         </div>
 
         {/* Featured photo + clickable thumbnails */}
-        <div className="grid lg:grid-cols-[1fr_300px] gap-4 lg:gap-5">
-          <div className="zoom relative overflow-hidden rounded-[26px] h-[260px] sm:h-[380px] lg:h-[450px]" style={{ border: `1px solid ${BORDER}`, background: MAROON_DEEP, boxShadow: cardShadow }}>
+        <div className="flex flex-col gap-3 sm:gap-4">
+          <div className="zoom relative overflow-hidden rounded-[26px] h-[240px] sm:h-[380px] lg:h-[480px]" style={{ border: `1px solid ${BORDER}`, background: MAROON_DEEP, boxShadow: cardShadow }}>
             {slides.map((sl, i) => (
               <div key={i} className="slide-layer absolute inset-0" style={{ opacity: slide === i ? 1 : 0 }} aria-hidden={slide === i ? undefined : 'true'}>
                 <PhotoFill src={sl.src} failed={sl.failed} onFail={sl.onFail} alt={sl.alt} position={sl.position} fallback={fallbackGradient} />
@@ -614,7 +631,7 @@ const LandingPage = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-5 lg:grid-cols-2 gap-3 content-start" role="tablist" aria-label={isTagalog ? TAGALOG_COPY.featuredPhotos : 'Featured photos'}>
+          <div className="grid grid-cols-5 gap-3 sm:gap-4" role="tablist" aria-label={isTagalog ? TAGALOG_COPY.featuredPhotos : 'Featured photos'}>
             {slides.map((sl, i) => (
               <button
                 key={i}
@@ -622,7 +639,7 @@ const LandingPage = () => {
                 role="tab"
                 aria-selected={slide === i}
                 aria-label={`${isTagalog ? TAGALOG_COPY.showPhoto : 'Show photo'} ${i + 1}`}
-                className="relative overflow-hidden rounded-2xl h-[64px] sm:h-[72px] lg:h-[100px]"
+                className="relative overflow-hidden rounded-2xl h-[56px] sm:h-[84px] lg:h-[104px]"
                 style={{
                   background: MAROON_DEEP,
                   outline: slide === i ? `3px solid ${MAROON}` : '3px solid transparent',
@@ -639,48 +656,49 @@ const LandingPage = () => {
         </div>
       </section>
 
-      {/* ── FOOTER ───────────────────────────────────────────────────────────── */}
-      <footer style={{ background: MAROON_DEEP }}>
-        <div
-          className={`${WRAP} py-8 flex flex-col lg:flex-row lg:justify-between items-start lg:items-center gap-6`}
-          style={{ color: 'rgba(247,244,238,0.88)' }}
-        >
+      {/* ── FOOTER — one clean row ───────────────────────────────────────────── */}
+      <footer style={{ background: MAROON_DEEP, color: 'rgba(247,244,238,0.88)' }}>
+        <div className={`${WRAP} py-7 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5`}>
           <div className="flex items-center gap-4">
             <div className="rounded-xl px-2.5 py-1.5 flex-shrink-0" style={{ background: SURFACE }}>
               <img src={appleLogo} alt="Apple Scholar" className="h-9 w-auto" style={{ objectFit: 'contain' }} />
             </div>
-            <div className="text-[12.5px] leading-relaxed">
-              <p>{isTagalog ? '© 2026 Kalinga Foundation. Nakalaan ang lahat ng karapatan.' : '© 2026 Kalinga Foundation. All rights reserved.'}</p>
-            </div>
+            <p className="text-[12.5px] leading-relaxed">
+              {isTagalog ? '© 2026 Kalinga Foundation. Nakalaan ang lahat ng karapatan.' : '© 2026 Kalinga Foundation. All rights reserved.'}
+            </p>
           </div>
 
-          <div className="flex flex-wrap items-center lg:justify-end gap-x-4 gap-y-3 text-[13px]">
-            <div className="flex items-center gap-3">
-              {(isTagalog ? TAGALOG_COPY.legalLinks : ['Privacy Policy', 'Terms of Use', 'Contact Us']).map((t, i) => (
-                <Fragment key={t}>
-                  {i > 0 && <span aria-hidden="true" style={{ opacity: 0.4 }}>|</span>}
-                  <a href="#" onClick={e => e.preventDefault()} className="hover:underline">{t}</a>
-                </Fragment>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-[13px]">
+            <nav aria-label={isTagalog ? 'Mga legal na link' : 'Legal'} className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              {FOOTER_LINKS.map((l, k) => (
+                <a
+                  key={l.to || l.label}
+                  href={l.to || getGmailComposeUrl(l.subject)}
+                  onClick={l.to ? e => { e.preventDefault(); navigate(l.to); window.scrollTo(0, 0); } : undefined}
+                  target={l.to ? undefined : '_blank'}
+                  rel={l.to ? undefined : 'noopener noreferrer'}
+                  className="hover:underline"
+                >
+                  {isTagalog ? TAGALOG_COPY.legalLinks[k] : l.label}
+                </a>
               ))}
-            </div>
-            <label
-              className="flex items-center gap-2 rounded-xl px-3.5 h-10 text-[13px]"
-              style={{ border: '1px solid rgba(247,244,238,0.35)', color: CREAM }}
-            >
-              <Globe size={14} />
-              <span className="sr-only">Language / Wika</span>
+            </nav>
+
+            {/* The select fills the whole box, so clicking anywhere (including the arrow) opens it */}
+            <div className="relative inline-flex items-center">
+              <Globe size={14} aria-hidden="true" className="absolute left-3.5 pointer-events-none" style={{ color: CREAM }} />
               <select
                 value={language}
                 onChange={changeLanguage}
                 aria-label="Language / Wika"
-                className="bg-transparent text-inherit outline-none cursor-pointer"
-                style={{ color: CREAM, colorScheme: 'dark' }}
+                className="appearance-none h-10 rounded-xl pl-10 pr-10 text-[13px] cursor-pointer outline-none"
+                style={{ background: 'transparent', color: CREAM, border: '1px solid rgba(247,244,238,0.35)' }}
               >
-                <option value="en">English</option>
-                <option value="tl">Tagalog</option>
+                <option value="en" style={{ background: MAROON_DEEP, color: CREAM }}>English</option>
+                <option value="tl" style={{ background: MAROON_DEEP, color: CREAM }}>Tagalog</option>
               </select>
-              <ChevronDown size={14} aria-hidden="true" />
-            </label>
+              <ChevronDown size={14} aria-hidden="true" className="absolute right-3.5 pointer-events-none" style={{ color: CREAM }} />
+            </div>
           </div>
         </div>
       </footer>

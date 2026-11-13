@@ -275,14 +275,15 @@ const initializeDatabase = () => {
 
     ensureColumns(db, 'users', {
         archived_at: 'DATETIME DEFAULT NULL',
+        track_strand: 'VARCHAR(255) DEFAULT NULL',
     }).then(() => runQuery(db, `
         UPDATE users
         SET archived_at = COALESCE(updated_at, created_at, NOW())
         WHERE role = 'scholar' AND status = 'archived' AND archived_at IS NULL
     `)).then(() => {
-        console.log('✅ Scholar archive timestamps ensured');
+        console.log('✅ Scholar profile and archive columns ensured');
     }).catch((migrationError) => {
-        console.error('Failed to ensure scholar archive timestamps:', migrationError.message);
+        console.error('Failed to ensure scholar profile and archive columns:', migrationError.message);
     });
 
     db.query('SELECT 1', (err) => {
@@ -372,6 +373,7 @@ const initializeDatabase = () => {
             phone VARCHAR(64) DEFAULT NULL,
             address VARCHAR(255) DEFAULT NULL,
             course VARCHAR(255) DEFAULT NULL,
+            track_strand VARCHAR(255) DEFAULT NULL,
             school VARCHAR(255) DEFAULT NULL,
             qr_code VARCHAR(255) DEFAULT NULL,
             status VARCHAR(32) DEFAULT 'active',
@@ -407,6 +409,7 @@ const initializeDatabase = () => {
                     phone: 'VARCHAR(64) DEFAULT NULL',
                     address: 'VARCHAR(255) DEFAULT NULL',
                     course: 'VARCHAR(255) DEFAULT NULL',
+                    track_strand: 'VARCHAR(255) DEFAULT NULL',
                     school: 'VARCHAR(255) DEFAULT NULL',
                 });
                 console.log('✅ Users profile columns ensured.');

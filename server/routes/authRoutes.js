@@ -7,6 +7,7 @@ const { logAuditEvent } = require('../utils/auditLogger');
 const { verifyToken } = require('../middleware/authMiddleware');
 const { sendPasswordResetEmail } = require('../utils/notifyHelpers');
 const authController = require('../controllers/authController');
+const accountSetupController = require('../controllers/accountSetupController');
 
 const jwtSecret = process.env.JWT_SECRET || 'apple_scholar_secret_2026';
 
@@ -176,5 +177,7 @@ router.post('/logout', verifyToken, async (req, res) => {
 
 // ─── CHANGE PASSWORD ─────────────────────────────────────────
 router.post('/change-password', verifyToken, authController.changePassword);
+router.get('/account/setup', verifyToken, accountSetupController.getProfile);
+router.post('/account/setup', verifyToken, accountSetupController.completeSetup);
 
 module.exports = router;

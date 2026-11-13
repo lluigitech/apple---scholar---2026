@@ -1,8 +1,10 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import LandingPage from './pages/LandingPage';
 import Login from './pages/Login';
-import New from './pages/new';
+import AccountSetupScholar from './pages/AccountSetupScholar';
+import AccountSetup from './pages/AccountSetup';
 import ForgotPassword from './pages/ForgotPassword';
+import LegalInfoPage from './pages/LegalInfoPage';
 
 // 📂 Administrator Pages
 // 📂 Admin Pages
@@ -61,7 +63,7 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   const role = localStorage.getItem('role');
   const token = localStorage.getItem('token');
   if (!token || !role) return <Navigate to="/login" replace />;
-  if (role.toLowerCase() === 'scholar' && localStorage.getItem('must_change_password') === 'true') {
+  if (localStorage.getItem('must_change_password') === 'true') {
     return <Navigate to="/account/setup" replace />;
   }
   const allowed = Array.isArray(allowedRoles)
@@ -71,12 +73,18 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   return children;
 };
 
-const AccountSetupRoute = ({ children }) => {
-  const role = localStorage.getItem('role');
+const AccountSetupRoute = () => {
+  const role = localStorage.getItem('role')?.toLowerCase();
   const token = localStorage.getItem('token');
-  if (!token || role?.toLowerCase() !== 'scholar') return <Navigate to="/login" replace />;
-  if (localStorage.getItem('must_change_password') !== 'true') return <Navigate to="/scholar" replace />;
-  return children;
+  const roleHome = {
+    admin: '/admin',
+    staff: '/staff',
+    officer: '/officer',
+    scholar: '/scholar',
+  };
+  if (!token || !roleHome[role]) return <Navigate to="/login" replace />;
+  if (localStorage.getItem('must_change_password') !== 'true') return <Navigate to={roleHome[role]} replace />;
+  return role === 'scholar' ? <AccountSetupScholar /> : <AccountSetup />;
 };
 
 // 🔑 Key wrapper — forces full remount when scholar :id changes
@@ -97,7 +105,9 @@ function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<Login />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/account/setup" element={<AccountSetupRoute><New /></AccountSetupRoute>} />
+          <Route path="/account/setup" element={<AccountSetupRoute />} />
+          <Route path="/privacy" element={<LegalInfoPage />} />
+          <Route path="/terms" element={<LegalInfoPage />} />
 
           {/* 🛡️ ADMIN ROUTES */}
           <Route path="/admin" element={

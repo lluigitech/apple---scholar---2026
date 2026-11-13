@@ -71,7 +71,7 @@ exports.getProfile = (req, res) => {
         return res.status(403).json({ error: 'You can only view your own profile.' });
     }
     const sql = `
-        SELECT id, scholar_id, full_name, email, role, year_level, birth_date, age, course, school, phone, address, status, created_at
+        SELECT id, scholar_id, full_name, email, role, year_level, birth_date, age, course, track_strand, school, phone, address, status, created_at
         FROM users WHERE id = ?
     `;
     db.query(sql, [req.params.id], (err, data) => {
@@ -90,7 +90,7 @@ exports.updateProfile = (req, res) => {
         return res.status(403).json({ error: 'You can only update your own profile.' });
     }
 
-    const allowedFields = ['full_name', 'email', 'year_level', 'birth_date', 'age', 'phone', 'address', 'course', 'school'];
+    const allowedFields = ['full_name', 'email', 'year_level', 'birth_date', 'age', 'phone', 'address', 'course', 'track_strand', 'school'];
     const updates = {};
 
     allowedFields.forEach((field) => {
@@ -129,6 +129,7 @@ exports.updateProfile = (req, res) => {
         if (field === 'phone' && typeof value === 'string') value = value.trim();
         if (field === 'address' && typeof value === 'string') value = value.trim();
         if (field === 'course' && typeof value === 'string') value = value.trim();
+        if (field === 'track_strand' && typeof value === 'string') value = value.trim();
         if (field === 'school' && typeof value === 'string') value = value.trim();
 
         updates[field] = value;
@@ -156,7 +157,7 @@ exports.updateProfile = (req, res) => {
         if (err) return res.status(500).json({ error: 'Error updating profile.' });
 
         const fetchSql = `
-            SELECT id, scholar_id, full_name, email, role, year_level, birth_date, age, course, school, phone, address, status, created_at
+            SELECT id, scholar_id, full_name, email, role, year_level, birth_date, age, course, track_strand, school, phone, address, status, created_at
             FROM users WHERE id = ?
         `;
 
@@ -877,7 +878,7 @@ exports.exportMyData = async (req, res) => {
         const userId = req.user.id;
         const scholarId = req.user.scholar_id;
         const [profile, submissions, grades, attendance, consent, requests] = await Promise.all([
-            queryRows(`SELECT id, scholar_id, full_name, email, role, year_level, age, phone, address, course, school, status, created_at FROM users WHERE id = ? AND role = 'scholar'`, [userId]),
+            queryRows(`SELECT id, scholar_id, full_name, email, role, year_level, age, phone, address, course, track_strand, school, status, created_at FROM users WHERE id = ? AND role = 'scholar'`, [userId]),
             queryRows(`SELECT id, submission_type, letter_content, sentiment_score, sentiment_label, report_card_path, cor_path, service_activity, service_hours, service_date, quality_score, quality_status, status, officer_comment, submitted_at, reviewed_at FROM submissions WHERE scholar_id = ? ORDER BY submitted_at DESC`, [scholarId]),
             queryRows(`SELECT semester, academic_year, subject_name, units, grade, grade_scale, proof_path, verification_status, officer_comment, created_at FROM grades WHERE scholar_id = ? ORDER BY created_at DESC`, [scholarId]),
             queryRows(`SELECT da.duty_id, d.title AS duty, d.location, d.duty_date, da.status, da.method, da.marked_at, da.check_out_at, da.is_makeup FROM duty_attendance da LEFT JOIN duties d ON d.id = da.duty_id WHERE da.scholar_id = ? ORDER BY da.marked_at DESC`, [scholarId]),

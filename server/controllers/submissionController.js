@@ -479,6 +479,7 @@ exports.submitCompliance = async (req, res) => {
         age,
         year,
         course,
+        track_strand,
         school,
         sentiment_score,
         sentiment_label,
@@ -543,6 +544,7 @@ exports.submitCompliance = async (req, res) => {
             age: normalizeSubmissionValue(age),
             year: normalizeSubmissionValue(year),
             course: normalizeSubmissionValue(course),
+            track_strand: normalizeSubmissionValue(track_strand),
             school: normalizeSubmissionValue(school),
             sentiment_score: normalizeSubmissionValue(sentiment_score),
             sentiment_label: normalizeSubmissionValue(sentiment_label),
@@ -687,7 +689,7 @@ exports.submitCompliance = async (req, res) => {
                     cor: 'COR',
                 });
 
-                if (resolvedType === 'letter' && (normalizedPayload.name || normalizedPayload.year || normalizedPayload.course || normalizedPayload.school)) {
+                if (resolvedType === 'letter' && (normalizedPayload.name || normalizedPayload.year || normalizedPayload.course || normalizedPayload.track_strand || normalizedPayload.school)) {
                     const setClauses = [];
                     const params = [];
 
@@ -702,6 +704,10 @@ exports.submitCompliance = async (req, res) => {
                     if (normalizedPayload.course) {
                         setClauses.push('course = ?');
                         params.push(normalizedPayload.course);
+                    }
+                    if (normalizedPayload.track_strand) {
+                        setClauses.push('track_strand = ?');
+                        params.push(normalizedPayload.track_strand);
                     }
                     if (normalizedPayload.school) {
                         setClauses.push('school = ?');

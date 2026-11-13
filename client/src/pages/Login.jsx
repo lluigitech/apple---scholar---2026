@@ -61,7 +61,7 @@ const Login = () => {
                 localStorage.setItem('email', res.data.email || email);
                 localStorage.setItem('id', res.data.id);
                 localStorage.setItem('scholar_id', res.data.scholar_id);
-                if (res.data.must_change_password && userRole === 'scholar') {
+                if (res.data.must_change_password) {
                     localStorage.setItem('must_change_password', 'true');
                 } else {
                     localStorage.removeItem('must_change_password');
@@ -73,7 +73,7 @@ const Login = () => {
                     scholar: '/scholar',
                     officer: '/officer',
                 };
-                navigate(res.data.must_change_password && userRole === 'scholar' ? '/account/setup' : (rolesMapping[userRole] || '/scholar'));
+                navigate(res.data.must_change_password ? '/account/setup' : (rolesMapping[userRole] || '/scholar'));
             } else {
                 setError('Invalid credentials. Please try again.');
             }

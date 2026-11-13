@@ -1,3 +1,5 @@
+import { getEducationStage, hasEducationProgram } from './educationStage.js';
+
 // ─── Scoring (LOCAL — temporary stand-in until Naive Bayes dataset is ready) ──
 // This rule-based utility provides consistent output for the UI. When the
 // ML scoring service is available, swap out buildEval while preserving the
@@ -62,7 +64,7 @@ export const CHECKLIST = [
     { id: 'name',    label: 'Scholar name filled in',              check: (i) => asText(i.name).length > 2 },
     { id: 'age',     label: 'Age provided',                        check: (i) => asText(i.age).length > 0 },
     { id: 'year',    label: 'Year level provided',                 check: (i) => asText(i.year).length > 0 },
-    { id: 'course',  label: 'Course provided',                     check: (i) => asText(i.course).length > 2 },
+    { id: 'course',  label: 'Course or track/strand provided',     check: (i) => !hasEducationProgram(i.year) || asText(getEducationStage(i.year) === 'senior_high' ? i.track_strand : i.course).length > 2 },
     { id: 'school',  label: 'School provided',                     check: (i) => asText(i.school).length > 2 },
     { id: 'body',    label: 'Letter body written (50+ words)',      check: (_, b) => asText(b).split(/\s+/).filter(Boolean).length >= 50 },
     { id: 'length',  label: 'Letter meets length (150+ words)',    check: (_, b) => asText(b).split(/\s+/).filter(Boolean).length >= 150 },
@@ -106,7 +108,7 @@ export function calcInfoScore(info) {
     score += asText(info.name).length > 2 ? 3 : 0;
     score += asText(info.age).length > 0 ? 1 : 0;
     score += asText(info.year).length > 0 ? 1.5 : 0;
-    score += asText(info.course).length > 2 ? 2 : 0;
+    score += !hasEducationProgram(info.year) || asText(getEducationStage(info.year) === 'senior_high' ? info.track_strand : info.course).length > 2 ? 2 : 0;
     score += asText(info.school).length > 2 ? 2 : 0;
     score += asText(info.date).length > 0 ? 0.5 : 0;
     return Math.min(Math.round(score), 10);
@@ -117,6 +119,7 @@ export function isInfoBlank(info) {
         && !asText(info.age)
         && !asText(info.year)
         && !asText(info.course)
+        && !asText(info.track_strand)
         && !asText(info.school)
         && !asText(info.date);
 }

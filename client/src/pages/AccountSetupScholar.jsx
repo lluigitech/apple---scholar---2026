@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { AlertCircle, ArrowRight, Eye, EyeOff, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getEducationStage } from '../utils/educationStage';
 
 const API_BASE = `${(import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '').replace(/\/api$/, '')}/api`;
 
@@ -26,6 +27,7 @@ const initialDetails = {
     phone: '',
     address: '',
     course: '',
+    track_strand: '',
     school: '',
     year_level: '',
 };
@@ -94,6 +96,7 @@ const New = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [isComplete, setIsComplete] = useState(false);
     const [fileNo, setFileNo] = useState('000000');
+    const educationStage = getEducationStage(details.year_level);
 
     useEffect(() => {
         const token = localStorage.getItem('token');
@@ -115,6 +118,7 @@ const New = () => {
                 phone: data.phone ?? '',
                 address: data.address ?? '',
                 course: data.course ?? '',
+                track_strand: data.track_strand ?? '',
                 school: data.school ?? '',
                 year_level: data.year_level ?? '',
             });
@@ -146,7 +150,8 @@ const New = () => {
                 birth_date: details.birth_date || null,
                 phone: details.phone,
                 address: details.address,
-                course: details.course,
+                course: educationStage === 'college' || educationStage === 'other' ? details.course : '',
+                track_strand: educationStage === 'senior_high' ? details.track_strand : '',
                 school: details.school,
                 year_level: details.year_level,
             }, { headers: { Authorization: `Bearer ${token}` } });
@@ -234,15 +239,22 @@ const New = () => {
                                     <Field label="Phone number" htmlFor="sa-phone">
                                         <input id="sa-phone" className="sa-input" type="tel" value={details.phone} onChange={(e) => updateDetail('phone', e.target.value)} required />
                                     </Field>
-                                    <Field label="Course" htmlFor="sa-course">
-                                        <input id="sa-course" className="sa-input" value={details.course} onChange={(e) => updateDetail('course', e.target.value)} required />
-                                    </Field>
                                     <Field label="Year level" htmlFor="sa-year-level">
                                         <select id="sa-year-level" className="sa-input sa-select" value={details.year_level} onChange={(e) => updateDetail('year_level', e.target.value)} required>
                                             <option value="">Select year level</option>
                                             {yearLevels.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                                         </select>
                                     </Field>
+                                    {educationStage === 'senior_high' && (
+                                        <Field label="Track / Strand" htmlFor="sa-track-strand">
+                                            <input id="sa-track-strand" className="sa-input" value={details.track_strand} onChange={(e) => updateDetail('track_strand', e.target.value)} placeholder="e.g. STEM, ABM, HUMSS, GAS, or TVL" required />
+                                        </Field>
+                                    )}
+                                    {(educationStage === 'college' || educationStage === 'other') && (
+                                        <Field label="Course" htmlFor="sa-course">
+                                            <input id="sa-course" className="sa-input" value={details.course} onChange={(e) => updateDetail('course', e.target.value)} placeholder="e.g. BS Computer Science" required />
+                                        </Field>
+                                    )}
                                     <Field label="School" htmlFor="sa-school" span2>
                                         <input id="sa-school" className="sa-input" value={details.school} onChange={(e) => updateDetail('school', e.target.value)} required />
                                     </Field>
