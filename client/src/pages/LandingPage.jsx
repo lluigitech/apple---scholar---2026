@@ -33,6 +33,17 @@ import scholarGathering from '../assets/landing/scholar-community-gathering.jpg'
 import scholarService from '../assets/landing/scholar-community-service.jpg';
 import scholarLaptops from '../assets/landing/scholar-laptop-distribution.jpg';
 import scholarVolunteer from '../assets/landing/scholar-volunteer-activity.jpg';
+import communityGroundsCleanup from '../assets/landing/community-grounds-cleanup.jpg';
+import communityProgramAudience from '../assets/landing/community-program-audience.jpg';
+import communityRiceDistribution from '../assets/landing/community-rice-distribution.jpg';
+import communityRoadsideCleanup from '../assets/landing/community-roadside-cleanup.jpg';
+import scholarDancePerformance from '../assets/landing/scholar-dance-performance.jpg';
+import scholarGroupGameActivity1 from '../assets/landing/scholar-group-game-activity-1.jpg';
+import scholarGroupGameActivity2 from '../assets/landing/scholar-group-game-activity-2.jpg';
+import scholarLaptopSorting from '../assets/landing/scholar-laptop-sorting.jpg';
+import scholarNutritionMonthCleanup from '../assets/landing/scholar-nutrition-month-cleanup.jpg';
+import scholarRiceDistributionGroup from '../assets/landing/scholar-rice-distribution-group.jpg';
+import scholarRiceDistributionTeam from '../assets/landing/scholar-rice-distribution-team.jpg';
 
 // ─── Token system — same as the Login / Access Portal page ─────────────────
 const MAROON = '#6D2140';
@@ -100,6 +111,17 @@ const extraPhotos = [
   { key: 'service', src: scholarService, title: 'Community Service', alt: 'Scholars doing community service' },
   { key: 'laptops', src: scholarLaptops, title: 'Laptop Distribution', alt: 'Laptop distribution to Apple Scholars' },
   { key: 'volunteer', src: scholarVolunteer, title: 'Volunteer Activity', alt: 'Scholars volunteering together' },
+  { key: 'grounds-cleanup', src: communityGroundsCleanup, title: 'Community Grounds Cleanup', alt: 'Volunteers cleaning the grounds beside a community building' },
+  { key: 'program-audience', src: communityProgramAudience, title: 'Community Program', alt: 'Community members gathered for a program' },
+  { key: 'community-rice', src: communityRiceDistribution, title: 'Community Rice Distribution', alt: 'Community members receiving rice support' },
+  { key: 'roadside-cleanup', src: communityRoadsideCleanup, title: 'Roadside Cleanup', alt: 'Volunteers cleaning along a neighborhood roadside' },
+  { key: 'dance-performance', src: scholarDancePerformance, title: 'Scholar Dance Performance', alt: 'Scholars performing a dance for a community audience' },
+  { key: 'game-activity-1', src: scholarGroupGameActivity1, title: 'Scholar Group Activity', alt: 'Scholars working together during a group activity' },
+  { key: 'game-activity-2', src: scholarGroupGameActivity2, title: 'Scholar Group Activity', alt: 'Scholars participating in a team game' },
+  { key: 'laptop-sorting', src: scholarLaptopSorting, title: 'Laptop Preparation', alt: 'Scholars sorting laptops for distribution' },
+  { key: 'nutrition-cleanup', src: scholarNutritionMonthCleanup, title: 'Nutrition Month Activity', alt: 'Scholars displaying Nutrition Month artwork at school' },
+  { key: 'rice-group', src: scholarRiceDistributionGroup, title: 'Scholar Rice Distribution', alt: 'Scholars holding rice bags during a distribution' },
+  { key: 'rice-team', src: scholarRiceDistributionTeam, title: 'Rice Distribution Team', alt: 'Scholar volunteers holding rice bags together' },
 ];
 const SLIDE_COUNT = extraPhotos.length - 1; // the volunteer photo lives in the hero
 
@@ -146,6 +168,7 @@ const LandingPage = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [activeNav, setActiveNav] = useState('Home');
   const [slide, setSlide] = useState(0);
+  const [touchStartX, setTouchStartX] = useState(null);
   const [failedExtra, setFailedExtra] = useState({});
   const failExtra = key => setFailedExtra(f => ({ ...f, [key]: true }));
 
@@ -201,6 +224,13 @@ const LandingPage = () => {
     if (typeof link === 'string') setActiveNav(link);
   };
   const goSlide = i => setSlide((i + slides.length) % slides.length);
+  const onTouchStart = event => setTouchStartX(event.touches[0].clientX);
+  const onTouchEnd = event => {
+    if (touchStartX === null) return;
+    const dx = event.changedTouches[0].clientX - touchStartX;
+    if (Math.abs(dx) > 40) goSlide(slide + (dx < 0 ? 1 : -1));
+    setTouchStartX(null);
+  };
 
   const cardShadow = '0 14px 34px -20px rgba(74,23,48,0.30)';
   const cardBase = {
@@ -223,7 +253,8 @@ const LandingPage = () => {
         .font-display { font-family: 'Playfair Display', Georgia, serif; }
         .font-body    { font-family: 'Inter', system-ui, sans-serif; }
 
-        html { scroll-behavior: smooth; }
+        html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+        img { max-width: 100%; }
 
         @keyframes slide-up {
           from { opacity: 0; transform: translateY(18px); }
@@ -277,6 +308,11 @@ const LandingPage = () => {
         .arrow-btn:hover { background: ${MAROON}; color: #fff; border-color: ${MAROON}; }
 
         a:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid ${BRONZE}; outline-offset: 3px; }
+
+        @media (hover: none) {
+          .lift:hover { transform: none; }
+          .zoom:hover img { transform: none; }
+        }
 
         @media (prefers-reduced-motion: reduce) {
           html { scroll-behavior: auto; }
@@ -337,7 +373,7 @@ const LandingPage = () => {
 
         {mobileMenuOpen && (
           <div
-            className="lg:hidden anim-menu-drop px-4 sm:px-6 pt-1 pb-5 flex flex-col"
+            className="lg:hidden anim-menu-drop px-4 sm:px-6 pt-1 pb-5 flex flex-col max-h-[calc(100vh-72px)] overflow-y-auto"
             style={{ background: CREAM, borderTop: `1px solid ${BORDER}` }}
           >
             {NAV_LINKS.map(link => (
@@ -365,12 +401,12 @@ const LandingPage = () => {
       <section id="home" className="relative scroll-mt-24 overflow-hidden">
         <div className="hero-bg absolute inset-0" aria-hidden="true" />
 
-        <div className={`${WRAP} relative z-10 pt-14 sm:pt-[72px] pb-24 sm:pb-28 text-center`}>
+        <div className={`${WRAP} relative z-10 pt-14 sm:pt-[72px] pb-20 sm:pb-28 text-center`}>
           <p className="anim-slide-up delay-100 text-[11px] font-semibold uppercase mb-3" style={{ color: BRONZE_DARK, letterSpacing: '0.24em' }}>
             Kalinga Foundation · Apple Scholar Program
           </p>
 
-          <h1 className="anim-slide-up delay-200 hero-h1 font-display font-bold leading-[1.05] mb-3" style={{ color: MAROON_DEEP }}>
+          <h1 className="anim-slide-up delay-200 hero-h1 break-words font-display font-bold leading-[1.05] mb-3" style={{ color: MAROON_DEEP }}>
             <span className="block">{isTagalog ? TAGALOG_COPY.heroTitle[0] : 'Support every'}</span>
             <span className="block">{isTagalog ? TAGALOG_COPY.heroTitle[1] : 'scholar journey.'}</span>
           </h1>
@@ -393,9 +429,9 @@ const LandingPage = () => {
           </div>
 
           {/* Three-photo strip — middle one is taller */}
-          <div className="anim-fade-in delay-300 mt-12 sm:mt-14 relative">
-            <div className="grid grid-cols-[1fr_1.35fr_1fr] gap-3 sm:gap-5 items-end text-left">
-              <div className="zoom relative overflow-hidden rounded-[18px] sm:rounded-[24px] h-[130px] sm:h-[250px] lg:h-[290px]" style={{ background: MAROON_DEEP, border: `1px solid ${BORDER}`, boxShadow: cardShadow }}>
+          <div className="anim-fade-in delay-300 mt-10 sm:mt-14 mb-8 sm:mb-0 relative">
+            <div className="grid grid-cols-2 sm:grid-cols-[1fr_1.35fr_1fr] gap-3 sm:gap-5 items-end text-left">
+              <div className="zoom relative overflow-hidden rounded-[18px] sm:rounded-[24px] h-[150px] sm:h-[250px] lg:h-[290px]" style={{ background: MAROON_DEEP, border: `1px solid ${BORDER}`, boxShadow: cardShadow }}>
                 <PhotoFill
                   src={galleryPhoto}
                   failed={galleryPhotoFailed}
@@ -405,10 +441,10 @@ const LandingPage = () => {
                   fallback={fallbackGradient}
                 />
                 <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(36,21,18,0.7), transparent)' }} />
-                <p className="absolute bottom-2.5 left-3 right-3 font-display font-semibold text-[13px] sm:text-base text-white leading-tight">{isTagalog ? 'Mga Iskolar' : 'Our Scholars'}</p>
+                <p className="absolute bottom-2.5 left-3 right-3 font-display font-semibold text-sm sm:text-base text-white leading-tight">{isTagalog ? 'Mga Iskolar' : 'Our Scholars'}</p>
               </div>
 
-              <div className="zoom relative overflow-hidden rounded-[18px] sm:rounded-[24px] h-[170px] sm:h-[340px] lg:h-[390px]" style={{ background: MAROON_DEEP, border: `1px solid ${BORDER}`, boxShadow: '0 30px 60px -32px rgba(74,23,48,0.45)' }}>
+              <div className="zoom relative overflow-hidden rounded-[18px] sm:rounded-[24px] col-span-2 sm:col-span-1 order-first sm:order-none h-[220px] sm:h-[340px] lg:h-[390px]" style={{ background: MAROON_DEEP, border: `1px solid ${BORDER}`, boxShadow: '0 30px 60px -32px rgba(74,23,48,0.45)' }}>
                 <PhotoFill
                   src={heroPhoto}
                   failed={heroPhotoFailed}
@@ -434,16 +470,16 @@ const LandingPage = () => {
                   fallback={fallbackGradient}
                 />
                 <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(36,21,18,0.7), transparent)' }} />
-                <p className="absolute bottom-2.5 left-3 right-3 font-display font-semibold text-[13px] sm:text-base text-white leading-tight">{isTagalog ? TAGALOG_COPY.photoCaptions[5] : 'Volunteer Activity'}</p>
+                <p className="absolute bottom-2.5 left-3 right-3 font-display font-semibold text-sm sm:text-base text-white leading-tight">{isTagalog ? TAGALOG_COPY.photoCaptions[5] : 'Volunteer Activity'}</p>
               </div>
             </div>
 
             {/* trust pill overlapping the strip */}
             <span
-              className="absolute left-1/2 -translate-x-1/2 -bottom-5 inline-flex items-center gap-2 h-10 px-5 rounded-full text-[12.5px] font-semibold whitespace-nowrap"
+              className="absolute left-1/2 -translate-x-1/2 -bottom-6 sm:-bottom-5 inline-flex items-center justify-center gap-2 min-h-10 py-2 px-4 sm:px-5 rounded-full text-[12px] sm:text-[12.5px] font-semibold text-center w-max max-w-[92%]"
               style={{ background: PILL, color: MAROON_DEEP, border: `1px solid ${BORDER}`, boxShadow: '0 12px 24px -14px rgba(74,23,48,0.5)' }}
             >
-              <GraduationCap size={15} color={MAROON} /> {heroSub}
+              <GraduationCap size={15} color={MAROON} className="flex-shrink-0" /> {heroSub}
             </span>
           </div>
         </div>
@@ -510,7 +546,7 @@ const LandingPage = () => {
         </p>
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 text-left">
           {localizedRoles.map(r => (
-            <div key={r.role} className="lift rounded-[22px] p-7" style={cardBase}>
+            <div key={r.role} className="lift rounded-[22px] p-5 sm:p-7" style={cardBase}>
               <span className="w-[52px] h-[52px] rounded-2xl flex items-center justify-center mb-4" style={{ background: PILL_ICON, color: MAROON }}>
                 <r.Icon size={22} />
               </span>
@@ -533,7 +569,7 @@ const LandingPage = () => {
           {localizedWorkflowSteps.map((step, idx) => (
             <div
               key={step.title}
-              className={`p-7 sm:p-9 ${idx > 0 ? 'border-t md:border-t-0 md:border-l' : ''}`}
+              className={`p-6 sm:p-9 ${idx > 0 ? 'border-t md:border-t-0 md:border-l' : ''}`}
               style={{ borderColor: BORDER }}
             >
               <span className="font-display font-bold text-[2.75rem] leading-none" style={{ color: BRONZE }}>0{idx + 1}</span>
@@ -548,20 +584,38 @@ const LandingPage = () => {
       <section id="features" className={`${WRAP} scroll-mt-24 pt-20 lg:pt-24`}>
         {/* Bento grid: heading tile + three feature tiles */}
         <div className="grid lg:grid-cols-[1.1fr_1fr] gap-4 lg:gap-5">
-          <div className="lg:row-span-2 rounded-[26px] p-8 sm:p-10 flex flex-col justify-between gap-10" style={{ background: MAROON_DEEP, color: CREAM }}>
+          <div className="lg:row-span-2 rounded-[26px] p-6 sm:p-10 flex flex-col justify-between gap-10" style={{ background: MAROON_DEEP, color: CREAM }}>
             <div>
               <Eyebrow light>{isTagalog ? 'Mga Tampok' : 'Key Features'}</Eyebrow>
               <h2 className="font-display font-bold text-[1.9rem] sm:text-[2.4rem] leading-[1.12] text-white">
                 {isTagalog ? TAGALOG_COPY.detailHeadings[0] : 'A complete scholarship management portal'}
               </h2>
             </div>
+            <div className="grid grid-cols-3 gap-2 sm:gap-3 max-w-[500px]" aria-label={isTagalog ? 'Mga pangunahing kakayahan' : 'Core portal capabilities'}>
+              {[
+                { Icon: ClipboardCheck, label: isTagalog ? 'Mga Kinakailangan' : 'Requirements' },
+                { Icon: BookOpen, label: isTagalog ? 'Buwanang Liham' : 'Monthly Letters' },
+                { Icon: BarChart2, label: isTagalog ? 'Pagsubaybay sa Progreso' : 'Progress Tracking' },
+              ].map(({ Icon, label }) => (
+                <div
+                  key={label}
+                  className="flex min-w-0 flex-col items-center gap-3 rounded-2xl border px-2 py-4 text-center sm:px-4 sm:py-5"
+                  style={{ background: 'rgba(255,255,255,0.06)', borderColor: 'rgba(247,244,238,0.18)' }}
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-xl" style={{ background: 'rgba(221,186,134,0.16)', color: BRONZE_LIGHT }}>
+                    <Icon size={21} strokeWidth={1.8} />
+                  </span>
+                  <span className="text-[11px] font-semibold leading-snug text-white sm:text-xs">{label}</span>
+                </div>
+              ))}
+            </div>
             <p className="text-sm sm:text-[15px] leading-relaxed max-w-[420px]" style={{ color: '#EAD9C2' }}>
-              {isTagalog ? 'Mga madaling gamiting tool para sa pagsunod, komunikasyon, pagsubaybay, at iba pa.' : 'Streamlined tools for compliance, communication, monitoring, and more.'}
+              {isTagalog ? 'Pamahalaan sa iisang lugar ang mga requirement, buwanang liham, deadline, at progreso ng mga iskolar.' : 'Manage scholar requirements, monthly letters, deadlines, and progress—all in one place.'}
             </p>
           </div>
 
           {localizedFeatures.slice(0, 1).map(f => (
-            <div key={f.title} className="lift rounded-[22px] p-7" style={cardBase}>
+            <div key={f.title} className="lift rounded-[22px] p-5 sm:p-7" style={cardBase}>
               <span className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: PILL_ICON, color: MAROON }}>
                 <f.Icon size={22} />
               </span>
@@ -572,7 +626,7 @@ const LandingPage = () => {
 
           <div className="grid sm:grid-cols-2 gap-4 lg:gap-5">
             {localizedFeatures.slice(1).map(f => (
-              <div key={f.title} className="lift rounded-[22px] p-7" style={cardBase}>
+              <div key={f.title} className="lift rounded-[22px] p-5 sm:p-7" style={cardBase}>
                 <span className="w-12 h-12 rounded-2xl flex items-center justify-center mb-4" style={{ background: PILL_ICON, color: MAROON }}>
                   <f.Icon size={22} />
                 </span>
@@ -585,10 +639,10 @@ const LandingPage = () => {
       </section>
 
       {/* ── SCHOLARS — featured photo with thumbnail picker ─────────────────── */}
-      <section id="scholars" className="scroll-mt-24 mt-20 lg:mt-24 py-16 lg:py-20" style={{ background: SAND }}>
+      <section id="scholars" className="scroll-mt-24 mt-14 lg:mt-24 py-10 sm:py-16 lg:py-20" style={{ background: SAND }}>
         <div className={WRAP}>
         {/* Heading on the left, controls on the right */}
-        <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
+        <div className="flex flex-wrap items-end justify-between gap-4 mb-6 sm:mb-8">
           <div>
             <Eyebrow>{isTagalog ? 'Ang Aming Komunidad' : 'Our Community'}</Eyebrow>
             <h2 className="font-display font-bold text-[1.75rem] sm:text-4xl leading-tight" style={{ color: MAROON_DEEP }}>
@@ -602,14 +656,14 @@ const LandingPage = () => {
             <button
               onClick={() => goSlide(slide - 1)}
               aria-label={isTagalog ? TAGALOG_COPY.previousPhoto : 'Previous photo'}
-              className="arrow-btn w-11 h-11 rounded-xl flex items-center justify-center"
+              className="arrow-btn hidden sm:flex w-11 h-11 rounded-xl items-center justify-center"
             >
               <ChevronLeft size={18} />
             </button>
             <button
               onClick={() => goSlide(slide + 1)}
               aria-label={isTagalog ? TAGALOG_COPY.nextPhoto : 'Next photo'}
-              className="arrow-btn w-11 h-11 rounded-xl flex items-center justify-center"
+              className="arrow-btn hidden sm:flex w-11 h-11 rounded-xl items-center justify-center"
             >
               <ChevronRight size={18} />
             </button>
@@ -617,21 +671,26 @@ const LandingPage = () => {
         </div>
 
         {/* Featured photo + clickable thumbnails */}
-        <div className="flex flex-col gap-3 sm:gap-4">
-          <div className="zoom relative overflow-hidden rounded-[26px] h-[240px] sm:h-[380px] lg:h-[480px]" style={{ border: `1px solid ${BORDER}`, background: MAROON_DEEP, boxShadow: cardShadow }}>
+        <div className="flex flex-col gap-2 sm:gap-4">
+          <div
+            onTouchStart={onTouchStart}
+            onTouchEnd={onTouchEnd}
+            className="zoom relative overflow-hidden rounded-[26px] h-[240px] sm:h-[380px] lg:h-[480px] touch-pan-y"
+            style={{ border: `1px solid ${BORDER}`, background: MAROON_DEEP, boxShadow: cardShadow }}
+          >
             {slides.map((sl, i) => (
               <div key={i} className="slide-layer absolute inset-0" style={{ opacity: slide === i ? 1 : 0 }} aria-hidden={slide === i ? undefined : 'true'}>
                 <PhotoFill src={sl.src} failed={sl.failed} onFail={sl.onFail} alt={sl.alt} position={sl.position} fallback={fallbackGradient} />
               </div>
             ))}
             <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(36,21,18,0.78), transparent)' }} />
-            <div className="absolute bottom-5 left-6 right-6">
+            <div className="absolute bottom-4 sm:bottom-5 left-4 sm:left-6 right-4 sm:right-6">
               <p className="font-display font-semibold text-xl text-white leading-tight">{slides[slide].title}</p>
               <p className="text-[12.5px] text-white/90">{slides[slide].sub}</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-5 gap-3 sm:gap-4" role="tablist" aria-label={isTagalog ? TAGALOG_COPY.featuredPhotos : 'Featured photos'}>
+          <div className="flex sm:hidden justify-center items-center gap-1" role="tablist" aria-label={isTagalog ? TAGALOG_COPY.featuredPhotos : 'Featured photos'}>
             {slides.map((sl, i) => (
               <button
                 key={i}
@@ -639,7 +698,29 @@ const LandingPage = () => {
                 role="tab"
                 aria-selected={slide === i}
                 aria-label={`${isTagalog ? TAGALOG_COPY.showPhoto : 'Show photo'} ${i + 1}`}
-                className="relative overflow-hidden rounded-2xl h-[56px] sm:h-[84px] lg:h-[104px]"
+                className="h-11 px-1 flex items-center"
+              >
+                <span
+                  className="block h-2 rounded-full"
+                  style={{
+                    width: slide === i ? 26 : 8,
+                    background: slide === i ? MAROON : BRONZE_LIGHT,
+                    transition: 'width 0.3s ease, background 0.3s ease',
+                  }}
+                />
+              </button>
+            ))}
+          </div>
+
+          <div className="hidden sm:grid grid-cols-4 gap-4" role="tablist" aria-label={isTagalog ? TAGALOG_COPY.featuredPhotos : 'Featured photos'}>
+            {slides.map((sl, i) => (
+              <button
+                key={i}
+                onClick={() => goSlide(i)}
+                role="tab"
+                aria-selected={slide === i}
+                aria-label={`${isTagalog ? TAGALOG_COPY.showPhoto : 'Show photo'} ${i + 1}`}
+                className="relative overflow-hidden rounded-2xl min-w-0 h-[84px] lg:h-[104px]"
                 style={{
                   background: MAROON_DEEP,
                   outline: slide === i ? `3px solid ${MAROON}` : '3px solid transparent',
@@ -658,7 +739,10 @@ const LandingPage = () => {
 
       {/* ── FOOTER — one clean row ───────────────────────────────────────────── */}
       <footer style={{ background: MAROON_DEEP, color: 'rgba(247,244,238,0.88)' }}>
-        <div className={`${WRAP} py-7 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5`}>
+        <div
+          className={`${WRAP} pt-8 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between lg:py-7`}
+          style={{ paddingBottom: 'max(2rem, env(safe-area-inset-bottom))' }}
+        >
           <div className="flex items-center gap-4">
             <div className="rounded-xl px-2.5 py-1.5 flex-shrink-0" style={{ background: SURFACE }}>
               <img src={appleLogo} alt="Apple Scholar" className="h-9 w-auto" style={{ objectFit: 'contain' }} />
@@ -668,8 +752,11 @@ const LandingPage = () => {
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-3 text-[13px]">
-            <nav aria-label={isTagalog ? 'Mga legal na link' : 'Legal'} className="flex flex-wrap items-center gap-x-5 gap-y-2">
+          <div
+            className="flex flex-col gap-4 pt-5 border-t sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-x-5 lg:border-t-0 lg:pt-0 lg:justify-end text-[13px]"
+            style={{ borderColor: 'rgba(247,244,238,0.18)' }}
+          >
+            <nav aria-label={isTagalog ? 'Mga legal na link' : 'Legal'} className="flex flex-wrap items-center gap-x-5 gap-y-1">
               {FOOTER_LINKS.map((l, k) => (
                 <a
                   key={l.to || l.label}
@@ -677,7 +764,7 @@ const LandingPage = () => {
                   onClick={l.to ? e => { e.preventDefault(); navigate(l.to); window.scrollTo(0, 0); } : undefined}
                   target={l.to ? undefined : '_blank'}
                   rel={l.to ? undefined : 'noopener noreferrer'}
-                  className="hover:underline"
+                  className="hover:underline py-2 inline-block"
                 >
                   {isTagalog ? TAGALOG_COPY.legalLinks[k] : l.label}
                 </a>
@@ -685,13 +772,13 @@ const LandingPage = () => {
             </nav>
 
             {/* The select fills the whole box, so clicking anywhere (including the arrow) opens it */}
-            <div className="relative inline-flex items-center">
+            <div className="relative flex items-center w-full sm:w-auto">
               <Globe size={14} aria-hidden="true" className="absolute left-3.5 pointer-events-none" style={{ color: CREAM }} />
               <select
                 value={language}
                 onChange={changeLanguage}
                 aria-label="Language / Wika"
-                className="appearance-none h-10 rounded-xl pl-10 pr-10 text-[13px] cursor-pointer outline-none"
+                className="appearance-none w-full sm:w-auto h-11 rounded-xl pl-10 pr-10 text-[13px] cursor-pointer outline-none"
                 style={{ background: 'transparent', color: CREAM, border: '1px solid rgba(247,244,238,0.35)' }}
               >
                 <option value="en" style={{ background: MAROON_DEEP, color: CREAM }}>English</option>
