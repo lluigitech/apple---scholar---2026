@@ -5,7 +5,6 @@ import {
   Globe,
   ArrowRight,
   BookOpen,
-  Users,
   BarChart2,
   ShieldCheck,
   Menu,
@@ -14,8 +13,6 @@ import {
   ClipboardCheck,
   Headset,
   GraduationCap,
-  Clock,
-  Activity,
   Upload,
   ChevronLeft,
   ChevronRight,
@@ -44,14 +41,15 @@ const MAROON_DEEP = '#4A1730';
 const CREAM = '#F7F4EE';
 const SURFACE = '#FFFDF9';
 const BORDER = '#E7D8C7';
-const BRONZE = '#B98B4E';
-const BRONZE_DARK = '#8F6A35';
+const BRONZE = '#A9784E';
+const BRONZE_DARK = '#8A5E38'; // darker bronze so small text stays readable on cream
 const BRONZE_LIGHT = '#DDBA86';
-const PILL = '#FAEEE3';
+const PILL = '#F4E9DC';
+const SAND = '#F1E8DA';
 const PILL_ICON = '#EFD9C9';
 const INK = '#241512';
 const INK_SOFT = '#5C4E42';
-const MUTED = '#6B5B4D';
+const MUTED = '#8A7A68';
 
 const WRAP = 'w-full px-4 sm:px-6 lg:px-12';
 
@@ -72,18 +70,6 @@ const features = [
     title: 'Attendance & Duty Monitoring',
     desc: 'Staff and officers can record attendance, manage duty logs, and monitor scholar participation through the portal.',
   },
-  {
-    Icon: Users,
-    title: 'Role-Based Portal Access',
-    desc: 'The platform is built for four user roles: Administrator, Officer, Staff, and Scholar, each with specific permissions.',
-  },
-];
-
-const stats = [
-  { Icon: Users, value: '4', label: 'Portal Roles' },
-  { Icon: Clock, value: '24/7', label: 'Monitoring' },
-  { Icon: Activity, value: 'Real-Time', label: 'Updates' },
-  { Icon: ShieldCheck, value: 'Secure', label: 'Audit Trail' },
 ];
 
 const workflowSteps = [
@@ -119,7 +105,7 @@ const extraPhotos = [
   { key: 'laptops', src: scholarLaptops, title: 'Laptop Distribution', alt: 'Laptop distribution to Apple Scholars' },
   { key: 'volunteer', src: scholarVolunteer, title: 'Volunteer Activity', alt: 'Scholars volunteering together' },
 ];
-const SLIDE_COUNT = 4 + extraPhotos.length;
+const SLIDE_COUNT = extraPhotos.length - 1; // the volunteer photo lives in the hero
 
 const NAV_LINKS = ['Home', 'About', 'Workflow', 'Features', 'Scholars'];
 
@@ -182,17 +168,14 @@ const LandingPage = () => {
 
   const heroSub = isTagalog ? 'Proyekto ng Kalinga · Kinikilala ng DepEd' : 'A Kalinga Project · DepEd Recognized';
 
-  const slides = [
-    { src: aboutFrontPhoto, failed: aboutFrontPhotoFailed, onFail: () => setAboutFrontPhotoFailed(true), alt: 'Apple Scholar students and staff seated together indoors', position: 'center 40%', title: 'Papaya Academy', sub: heroSub },
-    { src: galleryPhoto, failed: galleryPhotoFailed, onFail: () => setGalleryPhotoFailed(true), alt: 'Apple Scholar students at Papaya Academy', position: 'center 40%', title: 'Papaya Academy', sub: heroSub },
-    { src: aboutBackPhoto, failed: aboutBackPhotoFailed, onFail: () => setAboutBackPhotoFailed(true), alt: 'Scholars waving in front of the Papaya Academy building', position: 'center 30%', title: 'Papaya Academy', sub: heroSub },
-    { src: heroPhoto, failed: heroPhotoFailed, onFail: () => setHeroPhotoFailed(true), alt: 'Apple Scholar students gathered in front of Papaya Academy', position: 'center 75%', title: 'Papaya Academy', sub: heroSub },
-    ...extraPhotos.map((p, idx) => ({
+  const slides = extraPhotos
+    .map((p, idx) => ({
+      key: p.key,
       src: p.src, failed: !!failedExtra[p.key], onFail: () => failExtra(p.key), alt: p.alt, position: 'center 40%',
       title: isTagalog ? TAGALOG_COPY.photoCaptions[idx] : p.title,
       sub: isTagalog ? 'Programa ng Apple Scholar · Payatas' : 'Apple Scholar Program · Payatas',
-    })),
-  ];
+    }))
+    .filter(sl => sl.key !== 'volunteer');
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40);
@@ -213,11 +196,11 @@ const LandingPage = () => {
   };
   const goSlide = i => setSlide((i + slides.length) % slides.length);
 
-  const cardShadow = '0 26px 50px -28px rgba(74,23,48,0.45)';
+  const cardShadow = '0 14px 34px -20px rgba(74,23,48,0.30)';
   const cardBase = {
     background: SURFACE,
     border: `1px solid ${BORDER}`,
-    boxShadow: `inset 0 3px 0 ${BRONZE}, ${cardShadow}`,
+    boxShadow: cardShadow,
   };
 
   const navLabel = link => (isTagalog ? TAGALOG_COPY.nav[NAV_LINKS.indexOf(link)] : link);
@@ -253,8 +236,8 @@ const LandingPage = () => {
         .delay-300 { animation-delay: 0.3s; opacity: 0; }
         .delay-400 { animation-delay: 0.4s; opacity: 0; }
 
-        /* Hero backdrop: cream → blush → rose → maroon (same blend as Login) */
-        .hero-bg { background: linear-gradient(180deg, #FFFCF7 0%, #F6E9E1 42%, #D9A6B5 80%, #9A4064 100%); }
+        /* Hero backdrop: calm cream that settles into the off-white of the cards */
+        .hero-bg { background: linear-gradient(180deg, ${CREAM} 0%, ${CREAM} 55%, ${SAND} 100%); }
 
         .hero-h1 { font-size: clamp(2.5rem, 9vw, 4.25rem); }
 
@@ -276,13 +259,16 @@ const LandingPage = () => {
         .slide-layer { transition: opacity 0.7s ease; }
 
         .btn-maroon {
-          background: linear-gradient(90deg, ${MAROON} 0%, ${MAROON_DEEP} 100%);
-          color: #fff; box-shadow: 0 12px 24px -14px rgba(109,33,64,0.6);
-          transition: transform 0.25s, box-shadow 0.25s, filter 0.25s;
+          background: ${MAROON};
+          color: #fff; box-shadow: 0 10px 22px -14px rgba(109,33,64,0.55);
+          transition: transform 0.25s, box-shadow 0.25s, background 0.25s;
         }
-        .btn-maroon:hover { transform: translateY(-2px); filter: brightness(1.12); }
+        .btn-maroon:hover { transform: translateY(-1px); background: ${MAROON_DEEP}; }
         .btn-outline-maroon { border: 1.5px solid ${MAROON}; color: ${MAROON}; background: ${SURFACE}; transition: background 0.25s, color 0.25s; }
         .btn-outline-maroon:hover { background: ${MAROON}; color: #fff; }
+
+        .arrow-btn { border: 1.5px solid ${BRONZE}; color: ${MAROON}; background: ${SURFACE}; transition: background 0.25s, color 0.25s; }
+        .arrow-btn:hover { background: ${MAROON}; color: #fff; border-color: ${MAROON}; }
 
         a:focus-visible, button:focus-visible, select:focus-visible { outline: 2px solid ${BRONZE}; outline-offset: 3px; }
 
@@ -297,20 +283,19 @@ const LandingPage = () => {
       <nav
         className="sticky top-0 z-50 font-body"
         style={{
-          background: scrolled ? 'rgba(255,252,247,0.93)' : '#FFFCF7',
+          background: scrolled ? 'rgba(247,244,238,0.95)' : CREAM,
           backdropFilter: scrolled ? 'blur(10px)' : 'none',
           WebkitBackdropFilter: scrolled ? 'blur(10px)' : 'none',
           borderBottom: `1px solid ${BORDER}`,
-          boxShadow: scrolled ? '0 8px 24px rgba(74,23,48,0.08)' : 'none',
-          transition: 'box-shadow 0.3s ease, background 0.3s ease',
+          transition: 'background 0.3s ease',
         }}
       >
-        <div className={`${WRAP} h-[76px] flex lg:grid lg:grid-cols-[1fr_auto_1fr] items-center justify-between gap-4`}>
+        <div className={`${WRAP} h-[72px] sm:h-[84px] flex lg:grid lg:grid-cols-[1fr_auto_1fr] items-center justify-between gap-4`}>
           <a href="#home" onClick={() => handleNavClick('Home')} className="flex-shrink-0 justify-self-start" aria-label="Apple Scholar — home">
-            <img src={appleLogo} alt="Apple Scholar" className="h-10 sm:h-11 w-auto" style={{ objectFit: 'contain' }} />
+            <img src={appleLogo} alt="Apple Scholar" className="h-12 sm:h-14 w-auto" style={{ objectFit: 'contain' }} />
           </a>
 
-          <div className="hidden lg:flex items-center gap-9 text-sm font-medium" style={{ color: INK_SOFT }}>
+          <div className="hidden lg:flex items-center gap-10 text-sm font-medium" style={{ color: INK_SOFT }}>
             {NAV_LINKS.map(link => (
               <a
                 key={link}
@@ -327,10 +312,9 @@ const LandingPage = () => {
           <div className="flex items-center gap-3 justify-self-end">
             <button
               onClick={() => navigate('/login')}
-              className="btn-maroon hidden sm:flex items-center gap-2 text-sm font-semibold px-6 h-12 rounded-xl"
+              className="btn-maroon hidden lg:inline-flex items-center justify-center text-sm font-semibold px-7 h-11 rounded-xl"
             >
-              <span>{isTagalog ? TAGALOG_COPY.portalLogin : 'Portal Login'}</span>
-              <ArrowRight size={15} />
+              {isTagalog ? TAGALOG_COPY.portalLogin : 'Portal Login'}
             </button>
 
             <button
@@ -348,7 +332,7 @@ const LandingPage = () => {
         {mobileMenuOpen && (
           <div
             className="lg:hidden anim-menu-drop px-4 sm:px-6 pt-1 pb-5 flex flex-col"
-            style={{ background: '#FFFCF7', borderTop: `1px solid ${BORDER}` }}
+            style={{ background: CREAM, borderTop: `1px solid ${BORDER}` }}
           >
             {NAV_LINKS.map(link => (
               <a
@@ -363,17 +347,16 @@ const LandingPage = () => {
             ))}
             <button
               onClick={() => navigate('/login')}
-              className="btn-maroon sm:hidden text-sm font-semibold px-6 h-12 rounded-xl flex items-center justify-center gap-2 mt-5"
+              className="btn-maroon text-sm font-semibold px-6 h-12 rounded-xl flex items-center justify-center mt-5"
             >
-              <span>{isTagalog ? TAGALOG_COPY.portalLogin : 'Portal Login'}</span>
-              <ArrowRight size={15} />
+              {isTagalog ? TAGALOG_COPY.portalLogin : 'Portal Login'}
             </button>
           </div>
         )}
       </nav>
 
       {/* ── HERO — centered headline, wide photo card ────────────────────────── */}
-      <section id="home" className="relative scroll-mt-20 overflow-hidden">
+      <section id="home" className="relative scroll-mt-24 overflow-hidden">
         <div className="hero-bg absolute inset-0" aria-hidden="true" />
 
         <div className={`${WRAP} relative z-10 pt-14 sm:pt-[72px] pb-24 sm:pb-28 text-center`}>
@@ -395,21 +378,31 @@ const LandingPage = () => {
           </p>
 
           <div className="anim-slide-up delay-400 flex flex-wrap gap-3 justify-center">
-            <button onClick={() => navigate('/login')} className="btn-maroon h-12 px-7 rounded-xl text-sm font-semibold inline-flex items-center gap-2">
-              {isTagalog ? TAGALOG_COPY.portalLogin : 'Portal Login'} <ArrowRight size={15} />
-            </button>
-            <a href="#about" onClick={() => handleNavClick('About')} className="btn-outline-maroon h-12 px-7 rounded-xl text-sm font-semibold inline-flex items-center">
+            <a href="#workflow" onClick={() => handleNavClick('Workflow')} className="btn-maroon w-full sm:w-auto justify-center h-12 px-7 rounded-xl text-sm font-semibold inline-flex items-center gap-2">
+              {isTagalog ? 'Paano ito gumagana' : 'How It Works'} <ArrowRight size={15} />
+            </a>
+            <a href="#about" onClick={() => handleNavClick('About')} className="btn-outline-maroon w-full sm:w-auto justify-center h-12 px-7 rounded-xl text-sm font-semibold inline-flex items-center">
               {isTagalog ? TAGALOG_COPY.learnMore : 'Learn More'}
             </a>
           </div>
 
-          {/* Wide photo card */}
-          <div className="anim-fade-in delay-300 mt-12 sm:mt-14">
-            <div
-              className="rounded-[30px] p-2.5"
-              style={{ background: SURFACE, boxShadow: `inset 0 3px 0 ${BRONZE}, 0 40px 70px -30px rgba(36,10,22,0.65)` }}
-            >
-              <div className="zoom relative rounded-[22px] overflow-hidden h-[230px] sm:h-[340px] lg:h-[400px]" style={{ background: MAROON_DEEP }}>
+          {/* Three-photo strip — middle one is taller */}
+          <div className="anim-fade-in delay-300 mt-12 sm:mt-14 relative">
+            <div className="grid grid-cols-[1fr_1.35fr_1fr] gap-3 sm:gap-5 items-end text-left">
+              <div className="zoom relative overflow-hidden rounded-[18px] sm:rounded-[24px] h-[130px] sm:h-[250px] lg:h-[290px]" style={{ background: MAROON_DEEP, border: `1px solid ${BORDER}`, boxShadow: cardShadow }}>
+                <PhotoFill
+                  src={galleryPhoto}
+                  failed={galleryPhotoFailed}
+                  onFail={() => setGalleryPhotoFailed(true)}
+                  alt="Apple Scholar students at Papaya Academy"
+                  position="center 40%"
+                  fallback={fallbackGradient}
+                />
+                <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(36,21,18,0.7), transparent)' }} />
+                <p className="absolute bottom-2.5 left-3 right-3 font-display font-semibold text-[13px] sm:text-base text-white leading-tight">{isTagalog ? 'Mga Iskolar' : 'Our Scholars'}</p>
+              </div>
+
+              <div className="zoom relative overflow-hidden rounded-[18px] sm:rounded-[24px] h-[170px] sm:h-[340px] lg:h-[390px]" style={{ background: MAROON_DEEP, border: `1px solid ${BORDER}`, boxShadow: '0 30px 60px -32px rgba(74,23,48,0.45)' }}>
                 <PhotoFill
                   src={heroPhoto}
                   failed={heroPhotoFailed}
@@ -419,43 +412,37 @@ const LandingPage = () => {
                   fallback={fallbackGradient}
                 />
                 <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(36,21,18,0.75), transparent)' }} />
-                <div className="absolute bottom-4 left-5 right-5 text-left">
-                  <p className="font-display font-semibold text-lg text-white leading-tight">Papaya Academy</p>
-                  <p className="text-[12px] text-white/90">{heroSub} · Payatas, Manila</p>
+                <div className="absolute bottom-3 sm:bottom-4 left-3 sm:left-5 right-3 sm:right-5">
+                  <p className="font-display font-semibold text-sm sm:text-lg text-white leading-tight">Papaya Academy</p>
+                  <p className="text-[11px] sm:text-[12px] text-white/90">Payatas, Manila</p>
                 </div>
               </div>
+
+              <div className="zoom relative overflow-hidden rounded-[18px] sm:rounded-[24px] h-[130px] sm:h-[250px] lg:h-[290px]" style={{ background: MAROON_DEEP, border: `1px solid ${BORDER}`, boxShadow: cardShadow }}>
+                <PhotoFill
+                  src={scholarVolunteer}
+                  failed={!!failedExtra.volunteer}
+                  onFail={() => failExtra('volunteer')}
+                  alt="Scholars volunteering together"
+                  position="center 40%"
+                  fallback={fallbackGradient}
+                />
+                <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(36,21,18,0.7), transparent)' }} />
+                <p className="absolute bottom-2.5 left-3 right-3 font-display font-semibold text-[13px] sm:text-base text-white leading-tight">{isTagalog ? TAGALOG_COPY.photoCaptions[5] : 'Volunteer Activity'}</p>
+              </div>
             </div>
+
+            {/* trust pill overlapping the strip */}
+            <span
+              className="absolute left-1/2 -translate-x-1/2 -bottom-5 inline-flex items-center gap-2 h-10 px-5 rounded-full text-[12.5px] font-semibold whitespace-nowrap"
+              style={{ background: PILL, color: MAROON_DEEP, border: `1px solid ${BORDER}`, boxShadow: '0 12px 24px -14px rgba(74,23,48,0.5)' }}
+            >
+              <GraduationCap size={15} color={MAROON} /> {heroSub}
+            </span>
           </div>
         </div>
 
-        {/* bottom waves */}
-        <svg className="absolute left-0 bottom-0 w-full h-12 sm:h-[60px] pointer-events-none" viewBox="0 0 1440 60" preserveAspectRatio="none" aria-hidden="true">
-          <path d="M0,30 C260,0 520,56 800,30 C1080,6 1300,48 1440,20 L1440,60 L0,60 Z" fill={MAROON} />
-          <path d="M0,42 C260,16 520,60 800,42 C1080,22 1300,56 1440,34 L1440,60 L0,60 Z" fill={CREAM} />
-          <path d="M0,37 C260,11 520,55 800,37 C1080,17 1300,51 1440,29" fill="none" stroke={BRONZE} strokeWidth="1.4" vectorEffect="non-scaling-stroke" />
-        </svg>
       </section>
-
-      {/* ── STATS STRIP ──────────────────────────────────────────────────────── */}
-      <div className={`${WRAP} relative z-20 -mt-8 sm:-mt-10`}>
-        <div className="grid grid-cols-2 lg:grid-cols-4 rounded-[22px] overflow-hidden" style={cardBase}>
-          {stats.map((s, i) => (
-            <div
-              key={i}
-              className={`flex items-center gap-3 px-5 py-4 sm:px-7 sm:py-5 ${['', 'border-l', 'border-t lg:border-t-0 lg:border-l', 'border-l border-t lg:border-t-0'][i]}`}
-              style={{ borderColor: BORDER }}
-            >
-              <span className="hidden sm:flex w-11 h-11 rounded-full items-center justify-center flex-shrink-0" style={{ background: PILL_ICON, color: MAROON }}>
-                <s.Icon size={18} />
-              </span>
-              <div className="min-w-0">
-                <p className="font-display font-bold text-xl lg:text-[1.75rem] leading-tight truncate" style={{ color: MAROON_DEEP }}>{isTagalog ? TAGALOG_COPY.statsValues[i] : s.value}</p>
-                <p className="text-xs lg:text-[13px]" style={{ color: MUTED }}>{isTagalog ? TAGALOG_COPY.stats[i] : s.label}</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
 
       {/* ── ABOUT ────────────────────────────────────────────────────────────── */}
       <section id="about" className={`${WRAP} scroll-mt-24 pt-20 lg:pt-24 grid lg:grid-cols-[1.1fr_1fr] gap-10 lg:gap-16 items-center`}>
@@ -481,12 +468,9 @@ const LandingPage = () => {
               evaluating correspondence, and generating analytics to support every scholar's journey.
             </>}</p>
           </div>
-          <a href="#features" onClick={() => handleNavClick('Features')} className="btn-outline-maroon mt-6 h-12 px-7 rounded-xl text-sm font-semibold inline-flex items-center gap-2">
-            {isTagalog ? TAGALOG_COPY.learnMore : 'Learn More'} <ArrowRight size={14} />
-          </a>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="relative grid grid-cols-2 gap-4">
           <div className="zoom relative overflow-hidden rounded-[22px] h-[220px] sm:h-[300px]" style={{ background: MAROON_DEEP, boxShadow: cardShadow }}>
             <PhotoFill
               src={aboutFrontPhoto}
@@ -511,7 +495,8 @@ const LandingPage = () => {
       </section>
 
       {/* ── PORTAL ROLES ─────────────────────────────────────────────────────── */}
-      <section id="roles" className={`${WRAP} scroll-mt-24 pt-20 lg:pt-24 text-center`}>
+      <section id="roles" className="scroll-mt-24 mt-20 lg:mt-24 py-16 lg:py-20" style={{ background: SAND }}>
+        <div className={`${WRAP} text-center`}>
         <h2 className="sr-only">{isTagalog ? TAGALOG_COPY.roleAccessibleHeading : 'Built for Every Member of the Scholarship Community'}</h2>
         <Eyebrow>{isTagalog ? TAGALOG_COPY.portalRoles : 'Portal Roles'}</Eyebrow>
         <p className="font-display font-bold text-[1.75rem] sm:text-4xl leading-tight mb-8" style={{ color: MAROON_DEEP }} aria-hidden="true">
@@ -520,13 +505,14 @@ const LandingPage = () => {
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 text-left">
           {localizedRoles.map(r => (
             <div key={r.role} className="lift rounded-[22px] p-7" style={cardBase}>
-              <span className="w-[52px] h-[52px] rounded-full flex items-center justify-center mb-4" style={{ background: PILL_ICON, color: MAROON }}>
+              <span className="w-[52px] h-[52px] rounded-2xl flex items-center justify-center mb-4" style={{ background: PILL_ICON, color: MAROON }}>
                 <r.Icon size={22} />
               </span>
               <h3 className="font-display font-bold text-xl mb-2" style={{ color: MAROON_DEEP }}>{r.role}</h3>
               <p className="text-sm leading-[1.6]" style={{ color: INK_SOFT }}>{r.desc}</p>
             </div>
           ))}
+        </div>
         </div>
       </section>
 
@@ -539,13 +525,12 @@ const LandingPage = () => {
         <div className="relative">
           <div className="hidden lg:block absolute left-[16%] right-[16%] top-[26px] h-[2px]" style={{ background: BRONZE, opacity: 0.7 }} aria-hidden="true" />
           <div className="relative grid md:grid-cols-3 gap-5 text-left">
-            {localizedWorkflowSteps.map((step, index) => (
+            {localizedWorkflowSteps.map(step => (
               <div key={step.title} className="rounded-[22px] p-7" style={cardBase}>
                 <div className="flex items-center justify-between mb-4">
-                  <span className="w-[52px] h-[52px] rounded-full flex items-center justify-center" style={{ background: MAROON, color: BRONZE_LIGHT }}>
+                  <span className="w-[52px] h-[52px] rounded-2xl flex items-center justify-center" style={{ background: MAROON, color: BRONZE_LIGHT }}>
                     <step.Icon size={22} />
                   </span>
-                  <span className="font-display font-bold text-4xl leading-none" style={{ color: `${BRONZE}99` }}>0{index + 1}</span>
                 </div>
                 <h3 className="font-display font-bold text-xl mb-2" style={{ color: MAROON_DEEP }}>{step.title}</h3>
                 <p className="text-sm leading-[1.6]" style={{ color: INK_SOFT }}>{step.desc}</p>
@@ -557,7 +542,7 @@ const LandingPage = () => {
 
       {/* ── FEATURES ─────────────────────────────────────────────────────────── */}
       <section id="features" className={`${WRAP} scroll-mt-24 pt-20 lg:pt-24 grid lg:grid-cols-[420px_1fr] gap-6 lg:gap-14 items-start`}>
-        <div className="rounded-[26px] p-8 sm:p-9" style={{ background: `linear-gradient(160deg, ${MAROON}, ${MAROON_DEEP})`, color: CREAM }}>
+        <div className="rounded-[26px] p-8 sm:p-9" style={{ background: MAROON_DEEP, color: CREAM }}>
           <Eyebrow light>{isTagalog ? 'Mga Tampok' : 'Key Features'}</Eyebrow>
           <h2 className="font-display font-bold text-[1.7rem] sm:text-[2.1rem] leading-[1.15] mb-4 text-white">
             {isTagalog ? TAGALOG_COPY.detailHeadings[0] : 'A complete scholarship management portal'}
@@ -565,101 +550,93 @@ const LandingPage = () => {
           <p className="text-sm leading-relaxed mb-6" style={{ color: '#EAD9C2' }}>
             {isTagalog ? 'Mga madaling gamiting tool para sa pagsunod, komunikasyon, pagsubaybay, at iba pa.' : 'Streamlined tools for compliance, communication, monitoring, and more.'}
           </p>
-          <button onClick={() => navigate('/login')} className="h-12 px-7 rounded-xl text-sm font-semibold inline-flex items-center gap-2" style={{ background: SURFACE, color: MAROON_DEEP }}>
-            {isTagalog ? TAGALOG_COPY.portalLogin : 'Portal Login'} <ArrowRight size={15} />
-          </button>
         </div>
 
-        <div className="grid sm:grid-cols-2 gap-5">
+        <div className="grid gap-4">
           {localizedFeatures.map(f => (
-            <div key={f.title} className="lift rounded-[22px] p-7" style={cardBase}>
-              <span className="w-11 h-11 rounded-2xl flex items-center justify-center mb-4" style={{ background: PILL_ICON, color: MAROON }}>
-                <f.Icon size={20} />
+            <div key={f.title} className="lift rounded-[22px] p-6 flex gap-5 items-start" style={cardBase}>
+              <span className="w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0" style={{ background: PILL_ICON, color: MAROON }}>
+                <f.Icon size={22} />
               </span>
-              <h3 className="font-display font-bold text-xl leading-snug mb-2" style={{ color: MAROON_DEEP }}>{f.title}</h3>
-              <p className="text-sm leading-[1.6]" style={{ color: INK_SOFT }}>{f.desc}</p>
+              <div>
+                <h3 className="font-display font-bold text-xl leading-snug mb-1.5" style={{ color: MAROON_DEEP }}>{f.title}</h3>
+                <p className="text-sm leading-[1.6]" style={{ color: INK_SOFT }}>{f.desc}</p>
+              </div>
             </div>
           ))}
         </div>
       </section>
 
-      {/* ── SCHOLARS — mosaic gallery with the photo carousel ────────────────── */}
-      <section id="scholars" className={`${WRAP} scroll-mt-24 pt-20 lg:pt-24`}>
-        <div className="text-center mb-8">
-          <Eyebrow>{isTagalog ? 'Ang Aming Komunidad' : 'Our Community'}</Eyebrow>
-          <h2 className="font-display font-bold text-[1.75rem] sm:text-4xl leading-tight" style={{ color: MAROON_DEEP }}>
-            {isTagalog ? TAGALOG_COPY.detailHeadings[2] : 'The scholars behind every record'}
-          </h2>
+      {/* ── SCHOLARS — featured photo with thumbnail picker ─────────────────── */}
+      <section id="scholars" className="scroll-mt-24 mt-20 lg:mt-24 py-16 lg:py-20" style={{ background: SAND }}>
+        <div className={WRAP}>
+        {/* Heading on the left, controls on the right */}
+        <div className="flex flex-wrap items-end justify-between gap-4 mb-8">
+          <div>
+            <Eyebrow>{isTagalog ? 'Ang Aming Komunidad' : 'Our Community'}</Eyebrow>
+            <h2 className="font-display font-bold text-[1.75rem] sm:text-4xl leading-tight max-w-[520px]" style={{ color: MAROON_DEEP }}>
+              {isTagalog ? TAGALOG_COPY.detailHeadings[2] : 'The scholars behind every record'}
+            </h2>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="font-display text-lg tabular-nums mr-1" style={{ color: MAROON_DEEP }} aria-live="polite">
+              {String(slide + 1).padStart(2, '0')}<span style={{ color: MUTED }}> / {String(slides.length).padStart(2, '0')}</span>
+            </span>
+            <button
+              onClick={() => goSlide(slide - 1)}
+              aria-label={isTagalog ? TAGALOG_COPY.previousPhoto : 'Previous photo'}
+              className="arrow-btn w-11 h-11 rounded-xl flex items-center justify-center"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              onClick={() => goSlide(slide + 1)}
+              aria-label={isTagalog ? TAGALOG_COPY.nextPhoto : 'Next photo'}
+              className="arrow-btn w-11 h-11 rounded-xl flex items-center justify-center"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Carousel tile */}
-          <div className="col-span-2 lg:row-span-2 flex flex-col">
-            <div className="zoom relative overflow-hidden rounded-[22px] min-h-[260px] lg:min-h-[416px] flex-1" style={{ border: `1px solid ${BORDER}`, background: MAROON_DEEP, boxShadow: cardShadow }}>
-              {slides.map((s, i) => (
-                <div key={i} className="slide-layer absolute inset-0" style={{ opacity: slide === i ? 1 : 0 }} aria-hidden={slide === i ? undefined : 'true'}>
-                  <PhotoFill src={s.src} failed={s.failed} onFail={s.onFail} alt={s.alt} position={s.position} fallback={fallbackGradient} />
-                </div>
-              ))}
-              <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(36,21,18,0.78), transparent)' }} />
-              <button
-                onClick={() => goSlide(slide - 1)}
-                aria-label={isTagalog ? TAGALOG_COPY.previousPhoto : 'Previous photo'}
-                className="absolute left-3 bottom-4 w-10 h-10 rounded-xl flex items-center justify-center text-white"
-                style={{ border: '1px solid rgba(255,255,255,0.55)', background: 'rgba(36,21,18,0.35)' }}
-              >
-                <ChevronLeft size={18} />
-              </button>
-              <button
-                onClick={() => goSlide(slide + 1)}
-                aria-label={isTagalog ? TAGALOG_COPY.nextPhoto : 'Next photo'}
-                className="absolute right-3 bottom-4 w-10 h-10 rounded-xl flex items-center justify-center text-white"
-                style={{ border: '1px solid rgba(255,255,255,0.55)', background: 'rgba(36,21,18,0.35)' }}
-              >
-                <ChevronRight size={18} />
-              </button>
-              <div className="absolute bottom-4 left-16 right-16">
-                <p className="font-display font-semibold text-lg text-white leading-tight">{slides[slide].title}</p>
-                <p className="text-[12px] text-white/90">{slides[slide].sub}</p>
+        {/* Featured photo + clickable thumbnails */}
+        <div className="grid lg:grid-cols-[1fr_300px] gap-4 lg:gap-5">
+          <div className="zoom relative overflow-hidden rounded-[26px] h-[260px] sm:h-[380px] lg:h-[450px]" style={{ border: `1px solid ${BORDER}`, background: MAROON_DEEP, boxShadow: cardShadow }}>
+            {slides.map((sl, i) => (
+              <div key={i} className="slide-layer absolute inset-0" style={{ opacity: slide === i ? 1 : 0 }} aria-hidden={slide === i ? undefined : 'true'}>
+                <PhotoFill src={sl.src} failed={sl.failed} onFail={sl.onFail} alt={sl.alt} position={sl.position} fallback={fallbackGradient} />
               </div>
-            </div>
-            <div className="flex items-center justify-center gap-2 pt-3" role="tablist" aria-label={isTagalog ? TAGALOG_COPY.featuredPhotos : 'Featured photos'}>
-              {slides.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => goSlide(i)}
-                  aria-label={`${isTagalog ? TAGALOG_COPY.showPhoto : 'Show photo'} ${i + 1}`}
-                  aria-selected={slide === i}
-                  role="tab"
-                  className="rounded-full"
-                  style={{ width: 8, height: 8, background: slide === i ? MAROON : '#E3D3C0', transition: 'background 0.3s ease' }}
-                />
-              ))}
+            ))}
+            <div className="absolute inset-x-0 bottom-0 h-1/2 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(36,21,18,0.78), transparent)' }} />
+            <div className="absolute bottom-5 left-6 right-6">
+              <p className="font-display font-semibold text-xl text-white leading-tight">{slides[slide].title}</p>
+              <p className="text-[12.5px] text-white/90">{slides[slide].sub}</p>
             </div>
           </div>
 
-          {/* Four community tiles */}
-          {extraPhotos.slice(1, 5).map((p, idx) => (
-            <div key={p.key} className="zoom lift relative overflow-hidden rounded-[22px] h-[170px] lg:h-auto lg:min-h-[200px]" style={{ border: `1px solid ${BORDER}`, background: MAROON_DEEP }}>
-              <PhotoFill src={p.src} failed={!!failedExtra[p.key]} onFail={() => failExtra(p.key)} alt={p.alt} position="center 40%" fallback={fallbackGradient} />
-              <div className="absolute inset-x-0 bottom-0 h-3/5 pointer-events-none" style={{ background: 'linear-gradient(to top, rgba(36,21,18,0.8), transparent)' }} />
-              <p className="absolute bottom-3 left-4 right-4 font-display font-semibold text-sm text-white leading-tight">{isTagalog ? TAGALOG_COPY.photoCaptions[idx + 1] : p.title}</p>
-            </div>
-          ))}
+          <div className="grid grid-cols-5 lg:grid-cols-2 gap-3 content-start" role="tablist" aria-label={isTagalog ? TAGALOG_COPY.featuredPhotos : 'Featured photos'}>
+            {slides.map((sl, i) => (
+              <button
+                key={i}
+                onClick={() => goSlide(i)}
+                role="tab"
+                aria-selected={slide === i}
+                aria-label={`${isTagalog ? TAGALOG_COPY.showPhoto : 'Show photo'} ${i + 1}`}
+                className="relative overflow-hidden rounded-2xl h-[64px] sm:h-[72px] lg:h-[100px]"
+                style={{
+                  background: MAROON_DEEP,
+                  outline: slide === i ? `3px solid ${MAROON}` : '3px solid transparent',
+                  outlineOffset: 2,
+                  opacity: slide === i ? 1 : 0.7,
+                  transition: 'opacity 0.3s ease, outline-color 0.3s ease',
+                }}
+              >
+                <PhotoFill src={sl.src} failed={sl.failed} onFail={sl.onFail} alt="" position={sl.position} fallback={fallbackGradient} />
+              </button>
+            ))}
+          </div>
         </div>
-
-        <p className="font-display italic text-center text-lg sm:text-xl mt-8 max-w-[640px] mx-auto leading-snug" style={{ color: INK }}>
-          “Behind every data point is a real student working toward a better future from Payatas, Manila.”
-        </p>
-      </section>
-
-      {/* ── JOIN THE MISSION BAND ────────────────────────────────────────────── */}
-      <section className="mt-20 lg:mt-24 px-4 sm:px-6 lg:px-[120px] py-16 text-center" style={{ background: `linear-gradient(115deg, ${MAROON}, ${MAROON_DEEP})` }}>
-        <h2 className="font-display font-bold text-[1.9rem] sm:text-[2.4rem] text-white mb-3">{isTagalog ? TAGALOG_COPY.joinMission : 'Join the mission.'}</h2>
-        <p className="text-base mb-7" style={{ color: '#EAD9C2' }}>{isTagalog ? TAGALOG_COPY.joinMissionDescription : 'Help a scholar achieve their dream.'}</p>
-        <button onClick={() => navigate('/login')} className="h-12 px-8 rounded-xl text-sm font-semibold inline-flex items-center gap-2" style={{ background: BRONZE, color: INK }}>
-          {isTagalog ? TAGALOG_COPY.portalLogin : 'Portal Login'} <ArrowRight size={15} />
-        </button>
+        </div>
       </section>
 
       {/* ── FOOTER ───────────────────────────────────────────────────────────── */}
@@ -674,7 +651,6 @@ const LandingPage = () => {
             </div>
             <div className="text-[12.5px] leading-relaxed">
               <p>{isTagalog ? '© 2026 Kalinga Foundation. Nakalaan ang lahat ng karapatan.' : '© 2026 Kalinga Foundation. All rights reserved.'}</p>
-              <p>Apple Scholar Program · {isTagalog ? TAGALOG_COPY.footerDescription : 'Scholarship Compliance Tracking System'} · 2026</p>
             </div>
           </div>
 
