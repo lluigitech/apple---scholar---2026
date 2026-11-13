@@ -78,11 +78,13 @@ const calculateOverdueTasksByScholar = (scholars, tasks, records, today = new Da
     for (const scholar of scholars) {
         const scholarId = scholar.scholar_id;
         const yearLevel = normalizeYearLevel(scholar.year_level);
+        const accountCreatedDate = toDateKey(scholar.created_at);
         const assignedOverdueTasks = tasks
             .filter((task) => {
                 const dueDate = toDateKey(task.due_date);
                 const taskLevels = parseTaskYearLevels(task.target_year_levels).map(normalizeYearLevel);
                 return dueDate && dueDate < todayKey
+                    && (!accountCreatedDate || dueDate >= accountCreatedDate)
                     && getTaskSubmissionTypes(task.type).length > 0
                     && (!taskLevels.length || taskLevels.includes(yearLevel));
             })
@@ -561,13 +563,17 @@ const calculateCurrentCompliance = (scholarId, callback) => {
                         const att = attRows && attRows[0] ? attRows[0] : null;
 
                         db.query(
-                            `SELECT year_level FROM users WHERE scholar_id = ? AND role = 'scholar' LIMIT 1`,
+                            `SELECT year_level, created_at FROM users WHERE scholar_id = ? AND role = 'scholar' LIMIT 1`,
                             [scholarId],
                             (userErr, userRows) => {
                                 if (userErr) return callback(userErr, null);
                                 const today = new Date();
                                 getOverdueComplianceTaskCounts(
-                                    [{ scholar_id: scholarId, year_level: userRows[0]?.year_level }],
+                                    [{
+                                        scholar_id: scholarId,
+                                        year_level: userRows[0]?.year_level,
+                                        created_at: userRows[0]?.created_at,
+                                    }],
                                     today,
                                     (taskErr, overdueTasksByScholar) => {
                                         if (taskErr) return callback(taskErr, null);

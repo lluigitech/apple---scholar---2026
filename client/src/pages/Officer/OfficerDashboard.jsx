@@ -588,7 +588,7 @@ const OfficerDashboard = () => {
 
         {/* ── Standard Officer header: title card + date card (+ notifications) ──
             No overflow:hidden anywhere here so the notifications dropdown is never clipped. */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]" style={{ position: 'relative', zIndex: 30 }}>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]">
           <div style={{ ...tile, padding: '20px 24px' }}>
             <p style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', color: GOLD }}>OFFICER PORTAL</p>
             <h1 style={{ ...serif, fontSize: '1.75rem', fontWeight: 700, color: MAROON_DEEP, marginTop: 4, lineHeight: 1.2 }}>Dashboard</h1>

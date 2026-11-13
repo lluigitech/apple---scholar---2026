@@ -160,8 +160,6 @@ const CardSkeleton = () => (
 );
 
 const ScholarAnnouncements = () => {
-    const yearLevel = localStorage.getItem('year_level') || '';
-
     const [announcements, setAnnouncements] = useState([]);
     const [loading, setLoading]             = useState(true);
     const [search, setSearch]               = useState('');
@@ -171,8 +169,10 @@ const ScholarAnnouncements = () => {
     useEffect(() => {
         const fetchAnnouncements = async () => {
             try {
-                const params = yearLevel ? { year_level: yearLevel } : {};
-                const res = await axios.get('http://localhost:5000/api/scholar/announcements', { params });
+                const token = localStorage.getItem('token');
+                const res = await axios.get('http://localhost:5000/api/scholar/announcements', {
+                    headers: { Authorization: 'Bearer ' + token },
+                });
                 setAnnouncements(res.data);
             } catch (err) {
                 console.error('Error fetching announcements:', err);

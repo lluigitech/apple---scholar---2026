@@ -104,6 +104,7 @@ const OfficerSidebar = ({ isOpen, onClose, collapsed = false }) => {
             {isOpen && (
                 <div
                     className="fixed inset-0 bg-black/25 backdrop-blur-sm z-20 lg:hidden"
+                    style={{ zIndex: 9998 }}
                     onClick={onClose}
                 />
             )}
@@ -167,7 +168,7 @@ const OfficerSidebar = ({ isOpen, onClose, collapsed = false }) => {
                     ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
                     ${rail ? 'as-rail' : ''}
                 `}
-                style={{ background: SURFACE, borderRight: `1px solid ${BORDER}` }}
+                style={{ background: SURFACE, borderRight: `1px solid ${BORDER}`, zIndex: isOpen ? 9999 : undefined }}
             >
                 {/* Branding */}
                 <div

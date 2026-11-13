@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
-    PieChart, Pie, Cell, BarChart, Bar, AreaChart, Area, LabelList,
+    Cell, BarChart, Bar, AreaChart, Area, LabelList, Legend,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
     Users, ShieldCheck, Megaphone,
     AlertTriangle, Clock,
     ArrowRight, MessageSquare, ShieldAlert, CalendarDays,
-    ClipboardList, Settings, Star, BarChart3, PieChart as PieChartIcon,
+    ClipboardList, Settings, Star, BarChart3,
 } from 'lucide-react';
 import { formatAdminDate, formatAdminMonth } from '../../utils/adminPreferences';
 import AdminNotifications from '../../components/Admin/AdminNotifications';
@@ -28,6 +28,12 @@ const WARNING      = '#C08A3E';
 const DANGER       = '#A24A4A';
 const RADIUS       = 18;
 const SHADOW       = '0 1px 2px rgba(74, 23, 48, 0.04), 0 8px 24px -16px rgba(74, 23, 48, 0.12)';
+const QUALITY_SCORE_BANDS = [
+    { key: 'excellent', name: 'Excellent (90–100)', color: SUCCESS },
+    { key: 'good', name: 'Good (75–89)', color: '#4B91A8' },
+    { key: 'needsImprovement', name: 'Needs Improvement (50–74)', color: WARNING },
+    { key: 'nonCompliant', name: 'Non-Compliant (0–49)', color: DANGER },
+];
 
 // ── Operations routes ────────────────────────────────────────────
 // NOTE: verify these two against your router config (the sidebar's
@@ -80,14 +86,17 @@ const EmptyState = ({ children }) => (
 );
 
 // ── Chart card ────────────────────────────────────────────────────
-const ChartCard = ({ icon, title, subtitle, children, className = '' }) => (
+const ChartCard = ({ icon, title, subtitle, headerAction, children, className = '' }) => (
     <div className={`min-w-0 ${className}`} style={{ ...cardStyle, padding: 22 }}>
-        <div className="flex items-center gap-3 mb-4">
-            <IconBubble icon={icon} color={PRIMARY} size={40} iconSize={18} />
-            <div className="min-w-0">
-                <h3 style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY }}>{title}</h3>
-                {subtitle && <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1 }}>{subtitle}</p>}
+        <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="flex min-w-0 items-center gap-3">
+                <IconBubble icon={icon} color={PRIMARY} size={40} iconSize={18} />
+                <div className="min-w-0">
+                    <h3 style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY }}>{title}</h3>
+                    {subtitle && <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1 }}>{subtitle}</p>}
+                </div>
             </div>
+            {headerAction}
         </div>
         {children}
     </div>
@@ -131,8 +140,9 @@ const AdminDashboard = () => {
     const [dashboardError, setDashboardError] = useState('');
 
     const [scholarGrowth, setScholarGrowth] = useState([]);
-    const [complianceBreakdown, setComplianceBreakdown] = useState([]);
-    const [complianceRate, setComplianceRate] = useState(0);
+    const [qualityScoreByMonthLevel, setQualityScoreByMonthLevel] = useState([]);
+    const [selectedScoringMonth, setSelectedScoringMonth] = useState('');
+    const [qualityScoreAvailable, setQualityScoreAvailable] = useState(false);
     const [riskDistribution, setRiskDistribution] = useState([]);
     const [sentimentBreakdown, setSentimentBreakdown] = useState([]);
 
@@ -141,12 +151,12 @@ const AdminDashboard = () => {
             try {
                 const config = authConfig();
                 setDashboardError('');
-                const [summaryRes, scholarComplianceRes] = await Promise.all([
+                const [summaryRes, flaggedScholarsRes] = await Promise.all([
                     axios.get(`${API}/admin/dashboard-summary`, config),
-                    axios.get(`${API}/admin/reports/compliance-summary`, config),
+                    axios.get(`${API}/flagged/scholars`, config),
                 ]);
                 const summary = summaryRes.data;
-                const complianceData = scholarComplianceRes.data;
+                const flaggedScholars = flaggedScholarsRes.data;
                 setNotificationSummary(summary);
 
                 setStats({
@@ -169,22 +179,29 @@ const AdminDashboard = () => {
                 }
                 setScholarGrowth(growth);
 
-                setComplianceBreakdown([
-                    { name: 'Approved', value: summary.submissions.approved, color: SUCCESS },
-                    { name: 'Pending', value: summary.submissions.pending, color: WARNING },
-                    { name: 'Rejected', value: summary.submissions.rejected, color: DANGER },
-                ]);
-                setComplianceRate(summary.submissions.totalRecords
-                    ? Math.round((summary.submissions.approved / summary.submissions.totalRecords) * 100)
-                    : 0);
+                const qualityScore = summary.submissions.qualityScore;
+                const qualityScoreFields = ['scoredRecords', 'excellent', 'good', 'needsImprovement', 'nonCompliant', 'average'];
+                const hasQualityScore = qualityScore
+                    && qualityScoreFields.every((field) => qualityScore[field] !== null
+                        && qualityScore[field] !== undefined
+                        && Number.isFinite(Number(qualityScore[field])));
+                const monthlyQualityScores = summary.submissions.qualityScoreByMonthLevel;
+                const hasMonthlyQualityScores = Array.isArray(monthlyQualityScores);
+                setQualityScoreAvailable(Boolean(hasQualityScore && hasMonthlyQualityScores));
+                setQualityScoreByMonthLevel(hasMonthlyQualityScores ? monthlyQualityScores : []);
+                if (hasMonthlyQualityScores) {
+                    const availableMonths = monthlyQualityScores.map((item) => item.month);
+                    setSelectedScoringMonth((current) => (
+                        availableMonths.includes(current) ? current : [...new Set(availableMonths)].sort().reverse()[0] || ''
+                    ));
+                }
 
                 const riskLevels = [
-                    { level: 'Low', value: 0, color: SUCCESS },
-                    { level: 'Moderate', value: 0, color: WARNING },
-                    { level: 'High', value: 0, color: DANGER },
+                    { level: 'Moderate', riskLevel: 'medium', value: 0, color: WARNING },
+                    { level: 'High', riskLevel: 'high', value: 0, color: DANGER },
                 ];
-                complianceData.forEach(({ riskStatus }) => {
-                    const level = riskLevels.find((item) => item.level.toLowerCase() === riskStatus);
+                flaggedScholars.forEach(({ risk_level: riskLevel }) => {
+                    const level = riskLevels.find((item) => item.riskLevel === riskLevel);
                     if (level) level.value += 1;
                 });
                 setRiskDistribution(riskLevels);
@@ -294,8 +311,46 @@ const AdminDashboard = () => {
           desc: 'Coordinate scholar duty schedules and assignments.', count: stats.upcomingDuties },
     ];
 
-    const complianceTotal = complianceBreakdown.reduce((sum, c) => sum + c.value, 0);
-    const pct = (value, total) => (total ? Math.round((value / total) * 100) : 0);
+    const scoringMonths = [...new Set(qualityScoreByMonthLevel.map((item) => item.month))].sort().reverse();
+    const activeScoringMonth = scoringMonths.includes(selectedScoringMonth) ? selectedScoringMonth : scoringMonths[0] || '';
+    const scoreRowsByLevel = new Map();
+    qualityScoreByMonthLevel
+        .filter((item) => item.month === activeScoringMonth)
+        .forEach((item) => {
+            const rawLevel = String(item.yearLevel || 'Unspecified').trim();
+            const normalizedLevel = rawLevel.toLowerCase().replace(/[_-]/g, ' ').replace(/\s+/g, ' ');
+            const collegeNumber = normalizedLevel.match(/^(?:college\s+([1-5])|(1st|2nd|3rd|4th|5th)\s+year(?:\s+college)?)$/);
+            const gradeNumber = normalizedLevel.match(/^grade\s*(\d+)$/);
+            const collegeOrdinal = collegeNumber
+                ? collegeNumber[1]
+                    ? { 1: '1st', 2: '2nd', 3: '3rd', 4: '4th', 5: '5th' }[collegeNumber[1]]
+                    : collegeNumber[2]
+                : '';
+            const level = collegeNumber
+                ? `${collegeOrdinal} Year College`
+                : gradeNumber ? `Grade ${gradeNumber[1]}` : rawLevel || 'Unspecified';
+            const current = scoreRowsByLevel.get(level) || {
+                yearLevel: level,
+                scoredRecords: 0,
+                totalScore: 0,
+                excellent: 0,
+                good: 0,
+                needsImprovement: 0,
+                nonCompliant: 0,
+            };
+            const scoredRecords = Number(item.scoredRecords) || 0;
+            current.scoredRecords += scoredRecords;
+            current.totalScore += (Number(item.average) || 0) * scoredRecords;
+            QUALITY_SCORE_BANDS.forEach(({ key }) => { current[key] += Number(item[key]) || 0; });
+            scoreRowsByLevel.set(level, current);
+        });
+    const monthlyScoreByLevel = [...scoreRowsByLevel.values()]
+        .map(({ totalScore, ...item }) => ({ ...item, average: item.scoredRecords ? Math.round(totalScore / item.scoredRecords) : 0 }))
+        .sort((left, right) => left.yearLevel.localeCompare(right.yearLevel, undefined, { numeric: true }));
+    const selectedMonthScoredTotal = monthlyScoreByLevel.reduce((sum, item) => sum + item.scoredRecords, 0);
+    const selectedMonthAverageScore = selectedMonthScoredTotal
+        ? Math.round(monthlyScoreByLevel.reduce((sum, item) => sum + item.average * item.scoredRecords, 0) / selectedMonthScoredTotal)
+        : 0;
 
     const todayLabel = formatAdminDate(new Date(), { weekday: 'long' });
 
@@ -310,7 +365,7 @@ const AdminDashboard = () => {
             <div className="w-full px-5 sm:px-8 py-8" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
                 {/* ── Page header ── */}
-                <header className="flex flex-col lg:flex-row lg:items-start justify-between gap-5" style={{ position: 'relative', zIndex: 30 }}>
+                <header className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
                     <div className="min-w-0">
                         <span style={{ ...sans, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.24em', textTransform: 'uppercase', color: BRONZE }}>Admin Portal</span>
                         <h1 style={{ ...serif, fontSize: '2rem', fontWeight: 700, color: PRIMARY, marginTop: 4, letterSpacing: '-0.01em', lineHeight: 1.15 }}>Executive Intelligence Dashboard</h1>
@@ -417,7 +472,7 @@ const AdminDashboard = () => {
                     </div>
                 ) : (
                     <>
-                        {/* Row 1: Scholar Growth + Compliance Status */}
+                        {/* Row 1: Scholar Growth + Scoring Status */}
                         <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-5">
                             <ChartCard icon={BarChart3} title="Scholar Growth" subtitle="Monthly registrations of scholars.">
                                 {scholarGrowth.length === 0 ? (
@@ -442,37 +497,54 @@ const AdminDashboard = () => {
                                 )}
                             </ChartCard>
 
-                            <ChartCard icon={PieChartIcon} title="Compliance Status" subtitle="Approved • Pending • Rejected submissions.">
-                                {complianceTotal === 0 ? (
-                                    <EmptyState>No compliance submissions yet.</EmptyState>
+                            <ChartCard
+                                icon={BarChart3}
+                                title="Scoring Status"
+                                subtitle="Monthly letter score bands by scholar year level."
+                                headerAction={qualityScoreAvailable && scoringMonths.length > 0 && (
+                                    <select
+                                        aria-label="Filter scoring by month"
+                                        value={activeScoringMonth}
+                                        onChange={(event) => setSelectedScoringMonth(event.target.value)}
+                                        className="dash-focus min-w-0 max-w-[150px] rounded-lg px-2 py-2"
+                                        style={{ ...sans, border: `1px solid ${BORDER}`, background: SURFACE, color: INK, fontSize: '0.72rem' }}
+                                    >
+                                        {scoringMonths.map((month) => (
+                                            <option key={month} value={month}>
+                                                {formatAdminMonth(new Date(`${month}-01T12:00:00`), { month: 'short', year: 'numeric' })}
+                                            </option>
+                                        ))}
+                                    </select>
+                                )}
+                            >
+                                {!qualityScoreAvailable ? (
+                                    <EmptyState>Scoring data is unavailable. Ensure the backend is updated, then reload.</EmptyState>
+                                ) : monthlyScoreByLevel.length === 0 ? (
+                                    <EmptyState>No scored submissions for this month.</EmptyState>
                                 ) : (
-                                    <div className="flex flex-col sm:flex-row items-center gap-4">
-                                        <div className="relative min-w-0 flex-shrink-0 w-full sm:w-[210px]" style={{ height: 210 }}>
-                                            <ResponsiveContainer width="100%" height="100%">
-                                                <PieChart>
-                                                    <Pie data={complianceBreakdown} cx="50%" cy="50%" innerRadius={62} outerRadius={92} paddingAngle={2} dataKey="value" nameKey="name">
-                                                        {complianceBreakdown.map((entry) => (
-                                                            <Cell key={entry.name} fill={entry.color} stroke="none" />
-                                                        ))}
-                                                    </Pie>
-                                                    <Tooltip content={<ChartTooltip />} />
-                                                </PieChart>
-                                            </ResponsiveContainer>
-                                            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                                <span style={{ ...serif, fontSize: '1.6rem', fontWeight: 700, color: INK }}>{complianceRate}%</span>
-                                                <span style={{ ...sans, fontSize: '0.6rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em', color: MUTED }}>Approved</span>
-                                            </div>
-                                        </div>
-                                        <ul className="flex-1 w-full flex flex-col gap-3" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                                            {complianceBreakdown.map((item) => (
-                                                <li key={item.name} className="flex items-center gap-3">
-                                                    <span className="rounded-full flex-shrink-0" style={{ width: 12, height: 12, background: item.color }} />
-                                                    <span className="flex-1" style={{ ...sans, fontSize: '0.82rem', color: INK }}>{item.name}</span>
-                                                    <span style={{ ...sans, fontSize: '0.82rem', fontWeight: 600, color: INK, minWidth: 24, textAlign: 'right' }}>{item.value}</span>
-                                                    <span style={{ ...sans, fontSize: '0.8rem', fontWeight: 700, color: item.color, minWidth: 40, textAlign: 'right' }}>{pct(item.value, complianceTotal)}%</span>
-                                                </li>
-                                            ))}
-                                        </ul>
+                                    <div>
+                                        <p style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginBottom: 8 }}>
+                                            {selectedMonthScoredTotal} scored submissions · average {selectedMonthAverageScore}%
+                                        </p>
+                                        <ResponsiveContainer width="100%" height={Math.max(230, monthlyScoreByLevel.length * 52)}>
+                                            <BarChart data={monthlyScoreByLevel} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
+                                                <CartesianGrid {...gridProps} horizontal={false} />
+                                                <XAxis type="number" tick={axisStyle} stroke={BORDER} allowDecimals={false} />
+                                                <YAxis type="category" dataKey="yearLevel" tick={axisStyle} stroke={BORDER} width={110} />
+                                                <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
+                                                <Legend wrapperStyle={{ ...sans, fontSize: '0.66rem' }} />
+                                                {QUALITY_SCORE_BANDS.map((band) => (
+                                                    <Bar
+                                                        key={band.key}
+                                                        dataKey={band.key}
+                                                        name={band.name}
+                                                        stackId="quality-score"
+                                                        fill={band.color}
+                                                        radius={band.key === 'nonCompliant' ? [0, 5, 5, 0] : undefined}
+                                                    />
+                                                ))}
+                                            </BarChart>
+                                        </ResponsiveContainer>
                                     </div>
                                 )}
                             </ChartCard>
@@ -480,7 +552,7 @@ const AdminDashboard = () => {
 
                         {/* Row 2: Risk Distribution + NLP Sentiment */}
                         <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-5">
-                            <ChartCard icon={ShieldCheck} title="Risk Distribution" subtitle="Active scholars by compliance risk level.">
+                            <ChartCard icon={ShieldCheck} title="Risk Distribution" subtitle="Flagged scholars by risk level.">
                                 {riskDistribution.reduce((sum, item) => sum + item.value, 0) === 0 ? (
                                     <EmptyState>No risk data yet.</EmptyState>
                                 ) : (

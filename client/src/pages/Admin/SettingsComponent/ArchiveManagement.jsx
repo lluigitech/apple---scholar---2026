@@ -7,25 +7,16 @@ import {
 import { formatAdminDate } from '../../../utils/adminPreferences';
 import AdminPageHeader from '../../../components/Admin/AdminPageHeader';
 
-const API = 'http://localhost:5000/api';
+const API_ROOT = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
+const API = API_ROOT.endsWith('/api') ? API_ROOT : `${API_ROOT}/api`;
 
 /* ════════════════════════════════════════════════════════════════
-   SCHOLAR ARCHIVE — BACKEND CONTRACT (EDIT THIS BLOCK ONLY)
-   I could not see the backend, so nothing here is invented as fact.
-   Point these at the endpoints User Management already uses for
-   "Archive Scholar". Anything left null shows a clear message
-   instead of calling a made-up URL.
+   SCHOLAR ARCHIVE API
    ════════════════════════════════════════════════════════════════ */
 const SCHOLAR_API = {
-    // Existing user list endpoint (named in the spec). Archived scholars are
-    // picked out client-side by isArchivedScholar() below.
-    list: `${API}/admin/users`,
-    // VERIFY: the restore call User Management uses, e.g. (id) => ({ method: 'put', url: `${API}/admin/users/${id}/...` })
-    restore: null,
-    // VERIFY: scholar profile / history endpoint, e.g. (id) => `${API}/...`
+    list: `${API}/admin/archive/scholars`,
+    restore: (id) => ({ url: `${API}/admin/users/${id}/restore` }),
     detail: null,
-    // Existing endpoint already used by the Analytics Dashboard: one row per scholar with `completionRate`.
-    // Used ONLY to attach a compliance status to archived scholars (see complianceFor() below).
     complianceSummary: `${API}/admin/reports/compliance-summary`,
 };
 
@@ -41,7 +32,7 @@ const isArchivedScholar = (u) => {
 };
 const normalizeScholar = (u) => {
     const archivedAt = pick(u, ['archived_at', 'archivedAt', 'date_archived']);
-    const retention = pick(u, ['retention_until', 'retentionUntil']) || (archivedAt ? addYears(archivedAt, 5) : null);
+    const retention = pick(u, ['retention_until', 'retentionUntil']) || (archivedAt ? addYears(archivedAt, 3) : null);
     return {
         id: u.id,
         name: pick(u, ['full_name', 'name', 'scholar_name']) || [u.first_name, u.last_name].filter(Boolean).join(' ') || null,
@@ -357,8 +348,7 @@ export default function ArchiveManagement() {
         }
     }, []);
 
-    // Optional enrichment: a failure here never raises the page error banner; the
-    // Compliance Status filter is simply withheld (see complianceAvailable).
+    // Optional enrichment: a failure here never raises the page error banner.
     const loadCompliance = useCallback(async () => {
         setComplianceLoading(true);
         try {
@@ -455,11 +445,6 @@ export default function ArchiveManagement() {
     };
 
     const confirmRestore = async () => {
-        if (!SCHOLAR_API.restore) {
-            setRestoring(null);
-            setError('Scholar restore is not connected yet. Set SCHOLAR_API.restore to the endpoint User Management uses.');
-            return;
-        }
         setRestoreBusy(true); setError(''); setMessage('');
         try {
             const { method = 'put', url, data = {} } = SCHOLAR_API.restore(restoring.id);
@@ -645,14 +630,14 @@ export default function ArchiveManagement() {
                     <div className="flex-1" style={{ minWidth: 260 }}>
                         <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK }}>Retention Policy</h2>
                         <p style={{ ...body, fontSize: '0.83rem', lineHeight: 1.55, color: MUTED, marginTop: 2 }}>
-                            All archived scholar records and documents are retained for 5 years from the date of archive.
+                            Documents are retained for 3 years from upload; archived submission records are retained for 3 years from the archive date.
                         </p>
                         <p style={{ ...body, fontSize: '0.83rem', lineHeight: 1.55, color: MUTED }}>
-                            After 5 years, records become eligible for disposal review according to the organization's policy.
+                            After 3 years, records become eligible for disposal review. They are not automatically deleted.
                         </p>
                     </div>
                     <div className="retention-aside text-center" style={{ minWidth: 140, paddingLeft: 22, borderLeft: `1px solid ${BORDER}` }}>
-                        <p style={{ ...display, fontSize: '1.5rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.1 }}>5 YEARS</p>
+                        <p style={{ ...display, fontSize: '1.5rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.1 }}>3 YEARS</p>
                         <p className="inline-flex items-center gap-1.5 mt-1" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: SUCCESS }}>
                             <span style={{ width: 8, height: 8, borderRadius: '50%', background: SUCCESS }} />Policy Active
                         </p>

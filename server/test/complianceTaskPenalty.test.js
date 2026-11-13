@@ -36,6 +36,29 @@ test('overdue required tasks are counted only for assigned scholars and matching
   assert.deepEqual(counts, { 'A-001': 1, 'A-002': 2 });
 });
 
+test('new scholars are not penalized for required tasks that were already overdue before account creation', () => {
+  const createdAt = '2026-10-27 09:00:00';
+  const overdueTaskCount = calculateOverdueTasksByScholar(
+    [{ scholar_id: 'NEW-001', year_level: 'Grade 10', created_at: createdAt }],
+    [
+      { id: 1, type: 'Monthly Report', due_date: '2026-10-10', created_at: '2026-10-01 08:00:00', target_year_levels: '["Grade 10"]' },
+      { id: 2, type: 'Monthly Report', due_date: '2026-10-25', created_at: '2026-10-01 08:00:00', target_year_levels: '["Grade 10"]' },
+    ],
+    [],
+    new Date(2026, 9, 27)
+  )['NEW-001'];
+  const score = calculateComplianceScore({
+    settings: { ...defaults },
+    overdueTaskCount,
+    sub: null,
+    att: null,
+    today: new Date(2026, 9, 27),
+  });
+
+  assert.equal(overdueTaskCount, 0);
+  assert.equal(score.overallCompliance, 100);
+});
+
 test('each overdue task beyond the existing missed-task grace allowances applies the configured deduction', () => {
   const settings = {
     ...defaults,

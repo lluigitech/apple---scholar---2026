@@ -16,7 +16,7 @@ import {
   Legend,
 } from 'recharts';
 import {
-  Users, GraduationCap, Clock, Sparkles, Download, X, HeartHandshake, FileText, CheckCircle2,
+  Users, GraduationCap, Clock, Download, X, HeartHandshake, FileText, CheckCircle2,
   Search, ChevronLeft, ChevronRight, AlertTriangle,
 } from 'lucide-react';
 import { formatAdminMonth } from '../../utils/adminPreferences';
@@ -118,7 +118,6 @@ const reportsOf = (row) => num(row.reports_submitted);
 const hoursOf = (row) => num(row.total_duty_hours);
 const activitiesOf = (row) => num(row.activities_attended);
 // Only a real backend value counts. No proxy / estimate is ever made.
-const complianceOf = (row) => num(row.compliance_rate);
 
 const joinList = (items) => {
   if (items.length <= 1) return items[0] || '';
@@ -298,8 +297,8 @@ const PageSkeleton = () => (
       <Skeleton w={420} h={44} r={12} />
     </div>
     <div style={{ ...surfaceCard, padding: '1.1rem 1.3rem', marginBottom: 16 }}><Skeleton w={180} h={16} /><Skeleton w="70%" h={12} style={{ marginTop: 10 }} /></div>
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-4">
-      {Array.from({ length: 4 }).map((_, i) => (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 mb-4">
+      {Array.from({ length: 3 }).map((_, i) => (
         <div key={i} style={{ ...surfaceCard, padding: '1rem 1.15rem', display: 'flex', gap: 14 }}>
           <Skeleton w={40} h={40} r={12} /><div style={{ flex: 1 }}><Skeleton w="60%" h={10} /><Skeleton w="35%" h={24} style={{ marginTop: 8 }} /></div>
         </div>
@@ -362,22 +361,6 @@ const PhotoMasonry = ({ photos, scholarName }) => (
     })}
   </div>
 );
-
-const StatusPill = ({ status }) => {
-  if (!status) return <span style={{ ...body, fontSize: '0.78rem', color: MUTED }}>—</span>;
-  const active = String(status).toLowerCase() === 'active';
-  return (
-    <span
-      style={{
-        ...body, fontSize: '0.72rem', fontWeight: 600, borderRadius: 999, padding: '3px 10px', whiteSpace: 'nowrap',
-        color: active ? SUCCESS : MUTED, background: active ? `${SUCCESS}1f` : '#F1ECE3',
-        border: `1px solid ${active ? `${SUCCESS}44` : BORDER}`, textTransform: 'capitalize',
-      }}
-    >
-      {status}
-    </span>
-  );
-};
 
 // ---------------------------------------------------------------------------
 // Donor Report Modal (per scholar)
@@ -559,28 +542,44 @@ const REPORT_PAGE = {
 
 const MonthlyReportModal = ({ rows, month, totals, distributionData, gpaByLevelData, onClose }) => {
   const monthLabel = formatMonthLabel(month);
-  const complianceRate = totals.complianceRate; // null unless backend supplies compliance_rate
-  const showCompliance = rows.some((row) => complianceOf(row) !== null);
+  const aggregatedScholarStats = useMemo(() => {
+    const groups = new Map();
+    rows.forEach((row) => {
+      const level = row.year_level ? formatYearLevel(row.year_level) : 'Unspecified';
+      const current = groups.get(level) || { level, scholars: 0, gpas: [], hours: [], activities: [] };
+      current.scholars += 1;
+      const gpa = gpaOf(row);
+      const hours = hoursOf(row);
+      const activities = activitiesOf(row);
+      if (gpa !== null) current.gpas.push(gpa);
+      if (hours !== null) current.hours.push(hours);
+      if (activities !== null) current.activities.push(activities);
+      groups.set(level, current);
+    });
+    return [...groups.values()].map((group) => ({
+      ...group,
+      averageGpa: avgValid(group.gpas),
+      totalHours: sumValid(group.hours),
+      totalActivities: sumValid(group.activities),
+    }));
+  }, [rows]);
 
   const narrative = useMemo(() => {
     const clauses = [];
     if (totals.averageGpa !== null) clauses.push(`maintained an average GPA of ${totals.averageGpa.toFixed(2)}`);
     if (totals.totalDutyHours !== null) clauses.push(`completed ${totals.totalDutyHours.toFixed(0)} community service hours`);
     if (totals.totalActivities !== null) clauses.push(`took part in ${totals.totalActivities} program activit${totals.totalActivities === 1 ? 'y' : 'ies'}`);
-    if (complianceRate !== null) clauses.push(`reached ${complianceRate.toFixed(0)}% reporting compliance`);
     const lead = `During ${monthLabel}, ${totals.totalScholars} scholar${totals.totalScholars === 1 ? '' : 's'} took part in the scholarship program`;
     const detail = clauses.length ? `, and together they ${joinList(clauses)}` : '';
     return `${lead}${detail}. Donor support helps sustain scholarship access, academic progress, and community engagement across the foundation's scholar community.`;
-  }, [monthLabel, totals, complianceRate]);
+  }, [monthLabel, totals]);
 
-  // Photos come from whatever scholars already carry on their row. No extra API calls.
   const communityPhotos = useMemo(() => {
     const items = [];
     rows.forEach((row) => {
       (Array.isArray(row.photos) ? row.photos : []).forEach((photo) => {
         const src = typeof photo === 'string' ? photo : photo.url;
-        const caption = typeof photo === 'string' ? '' : photo.caption;
-        if (src) items.push({ src, caption, scholar: row.scholar });
+        if (src) items.push({ src });
       });
     });
     return items.slice(0, 6);
@@ -592,9 +591,7 @@ const MonthlyReportModal = ({ rows, month, totals, distributionData, gpaByLevelD
     { label: 'Active Scholars', value: totals.totalScholars, accent: PRIMARY },
     { label: 'Average GPA', value: fmtNum(totals.averageGpa, 2), accent: BRONZE },
     { label: 'Community Service Hours', value: totals.totalDutyHours === null ? '—' : `${totals.totalDutyHours.toFixed(0)} hrs`, accent: WARNING },
-    complianceRate !== null
-      ? { label: 'Reporting Compliance', value: `${complianceRate.toFixed(0)}%`, accent: SUCCESS }
-      : { label: 'Program Activities', value: fmtNum(totals.totalActivities), accent: SUCCESS },
+    { label: 'Program Activities', value: fmtNum(totals.totalActivities), accent: SUCCESS },
   ];
 
   const th = { ...body, textAlign: 'left', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: MUTED, padding: '8px 6px' };
@@ -717,50 +714,43 @@ const MonthlyReportModal = ({ rows, month, totals, distributionData, gpaByLevelD
             </div>
           </div>
 
-          {/* Scholar summary — chunked so large rosters paginate when printed */}
-          {(() => {
-            const ROWS_PER_PRINT_PAGE = 28;
-            const chunks = [];
-            for (let i = 0; i < rows.length; i += ROWS_PER_PRINT_PAGE) chunks.push(rows.slice(i, i + ROWS_PER_PRINT_PAGE));
-            if (chunks.length === 0) chunks.push([]);
-            const heads = ['Scholar', 'Year', 'GPA', ...(showCompliance ? ['Compliance'] : []), 'Hours'];
-
-            return chunks.map((chunk, chunkIndex) => (
-              <div className="monthly-report-page" style={{ ...REPORT_PAGE, marginBottom: 20 }} key={chunkIndex}>
-                <div className="flex items-baseline justify-between" style={{ marginBottom: 14 }}>
-                  <h2 style={{ ...display, fontSize: '1.3rem', color: INK, margin: 0 }}>Scholar Summary</h2>
-                  {chunks.length > 1 && <span style={{ ...body, fontSize: '0.72rem', color: MUTED }}>Page {chunkIndex + 1} of {chunks.length}</span>}
-                </div>
-                <table className="w-full" style={{ borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: `2px solid ${INK}` }}>{heads.map((h) => <th key={h} style={th}>{h}</th>)}</tr>
-                  </thead>
-                  <tbody>
-                    {chunk.map((row) => (
-                      <tr key={row.scholar_id || row.scholar} style={{ borderBottom: `1px solid ${BORDER}` }}>
-                        <td style={td}>{row.scholar || '—'}</td>
-                        <td style={{ ...td, color: MUTED }}>{formatYearLevel(row.year_level)}</td>
-                        <td style={td}>{fmtNum(gpaOf(row), 2)}</td>
-                        {showCompliance && <td style={td}>{complianceOf(row) === null ? '—' : `${complianceOf(row).toFixed(0)}%`}</td>}
-                        <td style={td}>{fmtNum(hoursOf(row), 1)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  {chunkIndex === chunks.length - 1 && rows.length > 0 && (
-                    <tfoot>
-                      <tr style={{ borderTop: `2px solid ${INK}` }}>
-                        <td style={tf}>Totals / Averages</td>
-                        <td style={{ padding: '9px 6px' }} />
-                        <td style={tf}>{fmtNum(totals.averageGpa, 2)}</td>
-                        {showCompliance && <td style={tf}>{complianceRate === null ? '—' : `${complianceRate.toFixed(0)}%`}</td>}
-                        <td style={tf}>{fmtNum(totals.totalDutyHours, 1)}</td>
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
-            ));
-          })()}
+          <div className="monthly-report-page" style={{ ...REPORT_PAGE, marginBottom: 20 }}>
+            <h2 style={{ ...display, fontSize: '1.3rem', color: INK, marginBottom: 14 }}>Scholar Progress by Year Level</h2>
+            <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginBottom: 12 }}>
+              Aggregated statistics only; individual scholar details are not included in this donor report.
+            </p>
+            <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: `2px solid ${INK}` }}>
+                  {['Year Level', 'Scholars', 'Average GPA', 'Service Hours', 'Activities'].map((heading) => (
+                    <th key={heading} style={th}>{heading}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {aggregatedScholarStats.map((group) => (
+                  <tr key={group.level} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                    <td style={td}>{group.level}</td>
+                    <td style={td}>{group.scholars}</td>
+                    <td style={td}>{fmtNum(group.averageGpa, 2)}</td>
+                    <td style={td}>{fmtNum(group.totalHours, 1)}</td>
+                    <td style={td}>{fmtNum(group.totalActivities)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              {aggregatedScholarStats.length > 0 && (
+                <tfoot>
+                  <tr style={{ borderTop: `2px solid ${INK}` }}>
+                    <td style={tf}>All levels</td>
+                    <td style={tf}>{totals.totalScholars}</td>
+                    <td style={tf}>{fmtNum(totals.averageGpa, 2)}</td>
+                    <td style={tf}>{fmtNum(totals.totalDutyHours, 1)}</td>
+                    <td style={tf}>{fmtNum(totals.totalActivities)}</td>
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
 
           {/* Community impact */}
           <div className="monthly-report-page" style={{ ...REPORT_PAGE, marginBottom: 20 }}>
@@ -769,8 +759,7 @@ const MonthlyReportModal = ({ rows, month, totals, distributionData, gpaByLevelD
               <div className="grid grid-cols-2 gap-3">
                 {communityPhotos.map((photo, i) => (
                   <figure key={i} style={{ margin: 0 }}>
-                    <img src={photo.src} alt={photo.caption || photo.scholar} style={{ width: '100%', height: 130, objectFit: 'cover', borderRadius: 12, border: `1px solid ${BORDER}` }} />
-                    <figcaption style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 5 }}>{photo.caption || photo.scholar}</figcaption>
+                    <img src={photo.src} alt="Scholar community activity" style={{ width: '100%', height: 130, objectFit: 'cover', borderRadius: 12, border: `1px solid ${BORDER}` }} />
                   </figure>
                 ))}
               </div>
@@ -823,7 +812,6 @@ const AdminDonorPage = () => {
   const [reportRow, setReportRow] = useState(null);
   const [showMonthlyReport, setShowMonthlyReport] = useState(false);
   const [scholarSearch, setScholarSearch] = useState('');
-  const [tableLevel, setTableLevel] = useState('');
   const [scholarPage, setScholarPage] = useState(1);
   const [impactView, setImpactView] = useState('hours'); // 'hours' | 'activities'
 
@@ -848,17 +836,15 @@ const AdminDonorPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, yearLevel]);
 
-  useEffect(() => { setTableLevel(''); }, [rows]);
-  useEffect(() => { setScholarPage(1); }, [scholarSearch, tableLevel, rows]);
+  useEffect(() => { setScholarPage(1); }, [scholarSearch, rows]);
 
   const filteredScholarRows = useMemo(() => {
     const query = scholarSearch.trim().toLowerCase();
     return rows.filter((row) => {
       if (query && !(row.scholar || '').toLowerCase().includes(query)) return false;
-      if (tableLevel && formatYearLevel(row.year_level) !== tableLevel) return false;
       return true;
     });
-  }, [rows, scholarSearch, tableLevel]);
+  }, [rows, scholarSearch]);
 
   const scholarPageCount = Math.max(1, Math.ceil(filteredScholarRows.length / SCHOLARS_PER_PAGE));
   const pageStart = (scholarPage - 1) * SCHOLARS_PER_PAGE;
@@ -873,7 +859,6 @@ const AdminDonorPage = () => {
     averageGpa: avgValid(rows.map(gpaOf)),
     totalDutyHours: sumValid(rows.map(hoursOf)),
     totalActivities: sumValid(rows.map(activitiesOf)),
-    complianceRate: avgValid(rows.map(complianceOf)),
   }), [rows]);
 
   // One grouping reused by every chart. Only year levels that exist in the data appear.
@@ -907,7 +892,6 @@ const AdminDonorPage = () => {
   );
 
   const panelStats = useMemo(() => [...levelStats].reverse(), [levelStats]); // highest level first
-  const hasGpaData = levelStats.some((s) => s.gpa !== null);
   const impactKey = impactView === 'hours' ? 'hours' : 'activities';
   const hasImpactData = levelStats.some((s) => s[impactKey] !== null);
   const maxOf = (key) => Math.max(0, ...levelStats.map((s) => s[key] ?? 0));
@@ -958,17 +942,6 @@ const AdminDonorPage = () => {
                     {YEAR_LEVEL_ORDER.map((lvl) => <option key={lvl} value={lvl}>{lvl}</option>)}
                   </select>
                 </label>
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  style={{
-                    ...body, fontSize: '0.82rem', fontWeight: 600, color: '#fff', background: PRIMARY, border: 'none',
-                    borderRadius: 12, padding: '10px 18px', whiteSpace: 'nowrap', minHeight: 40,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer',
-                  }}
-                >
-                  <Download size={15} /> Export Data
-                </button>
               </div>
               }
             />
@@ -1016,7 +989,7 @@ const AdminDonorPage = () => {
             </section>
 
             {/* KPI cards */}
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 mb-5">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 mb-5">
               <KPICard
                 icon={Users} label="Active Scholars" accent={PRIMARY}
                 value={hasRows ? totals.totalScholars : '—'}
@@ -1032,18 +1005,13 @@ const AdminDonorPage = () => {
                 value={fmtNum(totals.totalDutyHours, 1)}
                 note={totals.totalDutyHours === null ? 'No records available' : 'Verified service hours completed.'}
               />
-              <KPICard
-                icon={Sparkles} label="Program Activities" accent={WARNING}
-                value={fmtNum(totals.totalActivities)}
-                note={totals.totalActivities === null ? 'No activity data available' : 'Activities participated this period.'}
-              />
             </div>
 
             {/* Impact Overview */}
             <p style={{ ...body, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', color: MUTED, textTransform: 'uppercase', margin: '4px 2px 10px' }}>
               Impact Overview
             </p>
-            <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3 mb-6">
+            <div className="grid gap-4 lg:grid-cols-2 mb-6">
               <Panel icon={Users} title="Scholar Distribution by Year Level" subtitle="Number of active scholars per year level.">
                 {hasRows ? (
                   <HBarList
@@ -1055,18 +1023,7 @@ const AdminDonorPage = () => {
                 ) : <NoData />}
               </Panel>
 
-              <Panel icon={GraduationCap} title="Average GPA by Year Level" subtitle="Academic performance by year level.">
-                {hasGpaData ? (
-                  <HBarList
-                    items={panelStats.map((s) => ({ label: s.level, value: s.gpa }))}
-                    max={4}
-                    color={PRIMARY}
-                    format={(v) => v.toFixed(2)}
-                  />
-                ) : <NoData text="No GPA data available" />}
-              </Panel>
-
-              <Panel icon={HeartHandshake} title="Community Impact" subtitle="Service hours and participation by year level." className="lg:col-span-2 xl:col-span-1">
+              <Panel icon={HeartHandshake} title="Community Impact" subtitle="Service hours and participation by year level.">
                 <div role="group" aria-label="Community impact view" style={{ display: 'inline-flex', padding: 3, borderRadius: 11, background: '#F2E9DC', marginBottom: 14 }}>
                   {[['hours', 'Service Hours'], ['activities', 'Program Activities']].map(([key, label]) => (
                     <button
@@ -1091,16 +1048,6 @@ const AdminDonorPage = () => {
                     format={(v) => (impactView === 'hours' ? v.toFixed(1) : String(v))}
                   />
                 ) : <NoData text={impactView === 'hours' ? 'No service hour records available' : 'No activity data available'} />}
-                <div className="grid grid-cols-2 gap-3" style={{ marginTop: 16 }}>
-                  <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '10px 12px', background: '#fff' }}>
-                    <div style={{ ...display, fontSize: '1.15rem', color: totals.totalDutyHours === null ? MUTED : INK }}>{fmtNum(totals.totalDutyHours, 1)}</div>
-                    <div style={{ ...body, fontSize: '0.7rem', color: MUTED, marginTop: 2 }}>Total Service Hours</div>
-                  </div>
-                  <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '10px 12px', background: '#fff' }}>
-                    <div style={{ ...display, fontSize: '1.15rem', color: totals.totalActivities === null ? MUTED : INK }}>{fmtNum(totals.totalActivities)}</div>
-                    <div style={{ ...body, fontSize: '0.7rem', color: MUTED, marginTop: 2 }}>Total Activities</div>
-                  </div>
-                </div>
               </Panel>
             </div>
 
@@ -1128,16 +1075,6 @@ const AdminDonorPage = () => {
                         style={{ ...fieldStyle, paddingLeft: 34 }}
                       />
                     </div>
-                    <select
-                      value={tableLevel}
-                      onChange={(e) => setTableLevel(e.target.value)}
-                      aria-label="Filter table by year level"
-                      className="dr-field"
-                      style={{ ...fieldStyle, width: 'auto', minWidth: 150 }}
-                    >
-                      <option value="">All levels</option>
-                      {levelStats.map((s) => <option key={s.level} value={s.level}>{s.level}</option>)}
-                    </select>
                     <button
                       type="button"
                       onClick={handleExportTable}
@@ -1165,14 +1102,13 @@ const AdminDonorPage = () => {
                     <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse' }}>
                       <thead>
                         <tr>
-                          {['#', 'Scholar', 'Student ID', 'Year Level', 'GPA', 'Reports Submitted', 'Service Hours', 'Activities', 'Status', 'Actions'].map((h) => (
+                          {['#', 'Scholar', 'Student ID', 'Year Level', 'GPA', 'Reports Submitted', 'Service Hours', 'Activities', 'Actions'].map((h) => (
                             <th key={h} scope="col" style={thStyle}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {paginatedScholarRows.map((row, i) => {
-                          const status = row.status || row.scholar_status || '';
                           return (
                             <tr key={row.scholar_id || row.scholar} className="dr-row" style={{ borderTop: `1px solid ${BORDER}` }}>
                               <td style={{ ...tdStyle, color: MUTED }}>{pageStart + i + 1}</td>
@@ -1190,7 +1126,6 @@ const AdminDonorPage = () => {
                               <td style={tdStyle}>{fmtNum(reportsOf(row))}</td>
                               <td style={tdStyle}>{fmtNum(hoursOf(row), 1)}</td>
                               <td style={tdStyle}>{fmtNum(activitiesOf(row))}</td>
-                              <td style={tdStyle}><StatusPill status={status} /></td>
                               <td style={tdStyle}>
                                 <button
                                   type="button"

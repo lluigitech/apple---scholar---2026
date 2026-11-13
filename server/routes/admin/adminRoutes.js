@@ -19,6 +19,7 @@ router.get('/privacy/logs', privacy.getAccessLogs);
 
 // Users
 router.get   ('/users',              requireRole(['admin'], { action: 'VIEW_SCHOLAR', resourceType: 'user_directory' }), admin.getAllUsers);
+router.get   ('/archive/scholars',   requireRole(['admin'], { action: 'VIEW_SCHOLAR', resourceType: 'scholar_archive' }), admin.getArchivedScholars);
 router.get   ('/officer-assignments', admin.getOfficerAssignments);
 router.put   ('/officer-assignments/:id', admin.updateOfficerAssignments);
 router.get   ('/staff-assignments', admin.getStaffAssignments);
@@ -35,6 +36,7 @@ router.post  ('/users',              admin.createUser);
 router.put   ('/users/:id',          admin.updateUser);
 router.post  ('/users/:id/role',     admin.assignUserRole);
 router.patch ('/users/:id/archive',  admin.archiveScholar);
+router.put   ('/users/:id/restore',  admin.restoreScholar);
 router.delete('/users/:id',          admin.deleteUser);
 router.get   ('/privacy-requests',   admin.getPrivacyRequests);
 router.patch ('/privacy-requests/:id', admin.updatePrivacyRequest);

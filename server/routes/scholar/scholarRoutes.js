@@ -1,11 +1,14 @@
 const express  = require('express');
 const router   = express.Router();
 const scholar  = require('../../controllers/scholarController');
+const scholarSettings = require('../../controllers/scholarSettingsController');
 const { verifyToken, requireRole } = require('../../middleware/authMiddleware');
 
+router.post('/settings/verify-password', verifyToken, requireRole(['scholar']), scholarSettings.verifyPassword);
+router.patch('/settings/profile/:id', verifyToken, requireRole(['scholar']), scholarSettings.updateProfile);
 router.get('/profile/:id',    verifyToken, requireRole(['scholar']), scholar.getProfile);
 router.patch('/profile/:id',  verifyToken, requireRole(['scholar']), scholar.updateProfile);
-router.get('/announcements',  scholar.getAnnouncements);
+router.get('/announcements', verifyToken, requireRole(['scholar']), scholar.getAnnouncements);
 router.get('/compliance-status', verifyToken, requireRole(['scholar']), scholar.getComplianceStatus);
 router.get('/data-consent', verifyToken, requireRole(['scholar']), scholar.getDataConsent);
 router.patch('/data-consent', verifyToken, requireRole(['scholar']), scholar.updateDataConsent);

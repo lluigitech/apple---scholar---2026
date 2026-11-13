@@ -69,6 +69,7 @@ test('archived documents listing includes archived submission records and preser
   assert.equal(response.body[1].record_id, 12);
   assert.equal(statements.length, 2);
   assert.ok(statements[1].sql.includes("s.archived_at IS NOT NULL OR s.archive_at IS NOT NULL"));
+  assert.match(statements[1].sql, /INTERVAL 3 YEAR/);
   assert.ok(statements[1].sql.includes('s.submission_type LIKE ?'));
   assert.ok(statements[1].sql.includes('YEAR(s.submitted_at) = ?'));
   assert.deepEqual(statements[1].values, ['%Jovel%', '%Jovel%', '%Jovel%', '%Jovel%', '%letter%', 2026]);

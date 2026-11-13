@@ -63,11 +63,17 @@ router.post('/reset-password', async (req, res) => {
 
 // ─── LOGIN ───────────────────────────────────────────────────
 router.post('/login', (req, res) => {
-    const { email, password } = req.body;
-    console.log('[LOGIN INVOKED]', { email, passwordProvided: !!password });
-    const sql = "SELECT * FROM users WHERE email = ?";
+    const loginId = String(req.body?.loginId || '').trim();
+    const email = String(req.body?.email || '').trim();
+    const password = req.body?.password;
+    if (!loginId || !email || typeof password !== 'string' || !password) {
+        return res.status(400).json({ message: 'Login ID, email, and password are required.' });
+    }
 
-    db.query(sql, [email], async (err, data) => {
+    console.log('[LOGIN INVOKED]', { loginId, passwordProvided: true });
+    const sql = 'SELECT * FROM users WHERE UPPER(scholar_id) = UPPER(?) AND LOWER(email) = LOWER(?) LIMIT 1';
+
+    db.query(sql, [loginId, email], async (err, data) => {
         try {
             if (err) {
                 console.error('[LOGIN ERROR] db query failed:', err);
@@ -75,8 +81,7 @@ router.post('/login', (req, res) => {
             }
 
             if (!Array.isArray(data) || data.length === 0) {
-                console.log('[LOGIN] no user found for email', email);
-                return res.status(401).json({ message: "Invalid email or password" });
+                return res.status(401).json({ message: 'Invalid Login ID, email, or password' });
             }
 
             const user = data[0];
@@ -98,10 +103,10 @@ router.post('/login', (req, res) => {
                     role: normalizedRole,
                     action: 'login',
                     module: 'Authentication',
-                    details: `Failed login attempt for ${user.email}`,
+                    details: `Failed login attempt for account ${user.scholar_id || user.email || user.id}`,
                     result: 'failed',
                 }).catch(() => {});
-                return res.status(401).json({ message: "Invalid email or password" });
+                return res.status(401).json({ message: 'Invalid Login ID, email, or password' });
             }
 
             if (typeof user.password === 'string' && (user.password.startsWith('$2a$') || user.password.startsWith('$2b$') || user.password.startsWith('$2y$'))) {
@@ -118,10 +123,10 @@ router.post('/login', (req, res) => {
                     role: normalizedRole,
                     action: 'login',
                     module: 'Authentication',
-                    details: `Failed login attempt for ${user.email}`,
+                    details: `Failed login attempt for account ${user.scholar_id || user.email || user.id}`,
                     result: 'failed',
                 }).catch(() => {});
-                return res.status(401).json({ message: "Invalid email or password" });
+                return res.status(401).json({ message: 'Invalid Login ID, email, or password' });
             }
 
             // Debug: ensure JWT secret is available (helps identify signing errors)

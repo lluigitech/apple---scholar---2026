@@ -132,15 +132,54 @@ const OfficerAnalytics = () => {
     return ['all', ...levels];
   }, [complianceSummary]);
 
-  const visibleSummary = selectedYearLevel === 'all'
-    ? complianceSummary
-    : complianceSummary.filter(item => item.year_level === selectedYearLevel);
+  const visibleSummary = useMemo(() => (
+    selectedYearLevel === 'all'
+      ? complianceSummary
+      : complianceSummary.filter(item => item.year_level === selectedYearLevel)
+  ), [complianceSummary, selectedYearLevel]);
   const totalScholars = visibleSummary.length;
   const avgCompliance = totalScholars > 0
     ? Math.round(visibleSummary.reduce((sum, item) => sum + (item.completionRate || 0), 0) / totalScholars)
     : 0;
   const lettersReviewed = monthlySubs.filter(sub => sub.staffAction === 'approved').length;
   const atRiskScholars = visibleSummary.filter(item => item.completionRate < 50).length;
+
+  const complianceDistribution = useMemo(() => {
+    const compliant = visibleSummary.filter(item => Number(item.completionRate || 0) >= 75).length;
+    const pending = visibleSummary.filter((item) => {
+      const rate = Number(item.completionRate || 0);
+      return rate >= 50 && rate < 75;
+    }).length;
+    const nonCompliant = Math.max(0, visibleSummary.length - compliant - pending);
+    const total = visibleSummary.length;
+
+    return [
+      { name: 'Compliant', value: total ? Math.round((compliant / total) * 100) : 0, color: SAGE },
+      { name: 'Pending', value: total ? Math.round((pending / total) * 100) : 0, color: AMBER },
+      { name: 'Non-compliant', value: total ? Math.round((nonCompliant / total) * 100) : 0, color: CLAY },
+    ];
+  }, [visibleSummary]);
+
+  const submissionStatusTrend = useMemo(() => {
+    const groups = {};
+    monthlySubs.forEach((sub) => {
+      const date = new Date(sub.submittedAt || sub.date);
+      if (Number.isNaN(date.getTime())) return;
+      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      if (!groups[key]) groups[key] = { month: key, approved: 0, pending: 0, rejected: 0 };
+      const status = String(sub.review_status || 'pending').toLowerCase();
+      if (status === 'approved') groups[key].approved += 1;
+      else if (status === 'rejected') groups[key].rejected += 1;
+      else groups[key].pending += 1;
+    });
+
+    return Object.values(groups)
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map((item) => ({
+        ...item,
+        month: new Date(`${item.month}-01T00:00:00`).toLocaleString('en-US', { month: 'short', year: '2-digit' }),
+      }));
+  }, [monthlySubs]);
 
   const yearLevelCompliance = useMemo(() => {
     const grouped = {};
@@ -353,7 +392,7 @@ const OfficerAnalytics = () => {
         {loading && (
           <>
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2"><Skeleton height={300} /><Skeleton height={300} /></div>
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2"><Skeleton height={230} /><Skeleton height={230} /></div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3"><Skeleton height={230} /><Skeleton height={230} /><Skeleton height={230} /></div>
             <Skeleton height={300} />
           </>
         )}
@@ -362,19 +401,19 @@ const OfficerAnalytics = () => {
           <>
             {/* ── Row 1: trend + sentiment ── */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-              <ChartCard icon={TrendingUp} title="Monthly Submissions Trend" description="Compliance and sentiment percentages per month.">
-                {displayTrend.length === 0 ? <EmptyNote>No submissions in this period.</EmptyNote> : (
+              <ChartCard icon={TrendingUp} title="Monthly Submission Trends" description="Approved, pending, and rejected letters by month.">
+                {submissionStatusTrend.length === 0 ? <EmptyNote>No submissions in this period.</EmptyNote> : (
                   <div style={{ width: '100%', height: 240, minWidth: 0 }}>
                     <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 600, height: 240 }}>
-                      <LineChart data={displayTrend}>
+                      <LineChart data={submissionStatusTrend}>
                         <CartesianGrid strokeDasharray="3 3" stroke={RULE} />
                         <XAxis dataKey="month" stroke="#a89890" style={chartStyle} />
-                        <YAxis stroke="#a89890" style={chartStyle} />
+                        <YAxis stroke="#a89890" style={chartStyle} allowDecimals={false} />
                         <Tooltip contentStyle={tooltipStyle} />
                         <Legend wrapperStyle={{ ...sans, fontSize: '0.75rem' }} />
-                        <Line type="monotone" dataKey="compliance" stroke={MAROON} strokeWidth={2} name="Compliance %" dot={{ r: 3 }} />
-                        <Line type="monotone" dataKey="sentimentPos" stroke={SAGE} strokeWidth={2} name="Positive %" dot={{ r: 3 }} />
-                        <Line type="monotone" dataKey="sentimentNeg" stroke={CLAY} strokeWidth={2} name="Negative %" dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="approved" stroke={SAGE} strokeWidth={2} name="Approved" dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="pending" stroke={AMBER} strokeWidth={2} name="Pending" dot={{ r: 3 }} />
+                        <Line type="monotone" dataKey="rejected" stroke={CLAY} strokeWidth={2} name="Rejected" dot={{ r: 3 }} />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -414,7 +453,33 @@ const OfficerAnalytics = () => {
             </div>
 
             {/* ── Row 2: completeness + issues ── */}
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
+              <ChartCard icon={PieChartIcon} title="Compliance Distribution" description="Share of scholars in each compliance bracket.">
+                {visibleSummary.length === 0 ? <EmptyNote>No compliance data in this period.</EmptyNote> : (
+                  <div className="flex flex-col items-center gap-4 sm:flex-row">
+                    <div className="w-full sm:w-3/5" style={{ height: 220, minWidth: 0 }}>
+                      <ResponsiveContainer width="100%" height="100%" minWidth={0} initialDimension={{ width: 300, height: 220 }}>
+                        <PieChart>
+                          <Pie data={complianceDistribution} cx="50%" cy="50%" innerRadius={52} outerRadius={84} dataKey="value">
+                            {complianceDistribution.map((item) => <Cell key={item.name} fill={item.color} />)}
+                          </Pie>
+                          <Tooltip contentStyle={tooltipStyle} formatter={(value, name) => [`${value}%`, name]} />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="w-full flex-1">
+                      {complianceDistribution.map((item, index) => (
+                        <div key={item.name} className="flex items-center gap-2.5 py-2.5" style={{ borderTop: index > 0 ? `1px solid ${RULE}` : 'none' }}>
+                          <span className="flex-shrink-0 rounded-full" style={{ width: 11, height: 11, background: item.color }} />
+                          <span className="flex-1" style={{ ...sans, fontSize: '0.8rem', color: INK }}>{item.name}</span>
+                          <span style={{ ...mono, fontSize: '0.76rem', fontWeight: 700, color: item.color }}>{item.value}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </ChartCard>
+
               <ChartCard icon={FileText} title="Letter Completeness by Metric" description="Share of letters that meet each completeness check.">
                 <div className="space-y-4">
                   {completenessData.map((item) => {

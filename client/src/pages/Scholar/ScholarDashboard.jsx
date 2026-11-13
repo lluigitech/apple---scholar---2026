@@ -693,7 +693,6 @@ const ScholarDashboard = () => {
                 <section
                     className="relative"
                     style={{
-                        zIndex: 30,
                         background: `linear-gradient(120deg, ${PRIMARY_DARK} 0%, ${PRIMARY} 60%, ${PRIMARY_ACCENT} 100%)`,
                         borderRadius: 22,
                         padding: 'clamp(14px, 2vw, 20px) clamp(16px, 2.4vw, 26px)',

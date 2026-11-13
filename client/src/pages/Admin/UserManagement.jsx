@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import {
     Users, ShieldCheck, UserCog, Trash2, Edit3, Archive,
     Search, UserPlus, X, Eye, EyeOff,
-    ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, Download, Briefcase, QrCode,
+    ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, Briefcase, CheckCircle2,
     Layers, RotateCcw, RefreshCw,
 } from 'lucide-react';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
@@ -205,8 +205,10 @@ const CreateModal = ({ onClose, onSuccess }) => {
             });
             onSuccess({
                 full_name:  form.full_name,
-                scholar_id: res.data.scholarId || res.data.officerId || res.data.staffId || res.data.adminId,
+                email:      form.email,
+                account_id: res.data.generatedId || res.data.scholarId || res.data.officerId || res.data.staffId || res.data.adminId,
                 role:       form.role,
+                year_level: form.year_level,
             });
         } catch (err) {
             setError(err.response?.data?.error || 'Error creating user.');
@@ -437,60 +439,46 @@ const EditModal = ({ user, onClose, onSuccess }) => {
     );
 };
 
-// ── QR Modal ───────────────────────────────────────────────────
-const QR_BADGE = {
-    scholar: null,
-    staff:   { color: WARNING,      label: 'Staff QR'   },
-    officer: { color: SUCCESS,      label: 'Officer QR' },
-    admin:   { color: PRIMARY_DEEP, label: 'Admin QR'   },
-};
-
-const QRModal = ({ qrData, onClose }) => {
-    const badge = QR_BADGE[qrData.role];
-
+// ── Account created modal ───────────────────────────────────────
+const AccountCreatedModal = ({ account, onClose }) => {
+    const roleLabel = {
+        scholar: 'Scholar',
+        staff: 'Staff',
+        officer: 'Officer',
+        admin: 'Administrator',
+    }[account.role] || 'User';
     return (
         <ModalShell
-            icon={<QrCode size={17} />}
-            title="Event QR code"
-            subtitle="For events and activity participation only — not duty attendance"
+            icon={<CheckCircle2 size={17} />}
+            title="Account created"
+            subtitle={`${roleLabel} account added to the user registry.`}
             onClose={onClose}
+            accent={SUCCESS}
         >
-            <div className="px-6 py-6 flex flex-col items-center gap-5">
+            <div className="px-6 py-6 space-y-4">
                 <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: PRIMARY_TINT, color: PRIMARY, ...sans, fontSize: '0.9rem', fontWeight: 700 }}>
-                        {qrData.full_name?.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="text-left">
-                        <p style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: INK, lineHeight: 1.2 }}>{qrData.full_name}</p>
-                        <p style={{ ...mono, fontSize: '0.74rem', color: MUTED, marginTop: 2 }}>
-                            {ID_LABEL[qrData.role] || 'ID'}: {qrData.scholar_id || '—'}
-                        </p>
+                    <CheckCircle2 size={30} style={{ color: SUCCESS, flexShrink: 0 }} />
+                    <div className="min-w-0">
+                        <p style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK }}>{account.full_name}</p>
+                        <p style={{ ...sans, fontSize: '0.78rem', color: MUTED, marginTop: 2 }}>{account.email}</p>
                     </div>
                 </div>
-
-                {badge && (
-                    <span className="inline-block rounded-full" style={{ ...sans, fontSize: '0.64rem', fontWeight: 700, padding: '4px 12px', background: `${badge.color}14`, color: badge.color, border: `1px solid ${badge.color}35` }}>
-                        {badge.label}
-                    </span>
-                )}
-
-                <div className="p-3" style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
-                    {qrData.qr_code || qrData.qrCode
-                        ? <img src={qrData.qr_code || qrData.qrCode} alt="QR Code" className="w-48 h-48 rounded-lg" />
-                        : <div className="w-48 h-48 flex items-center justify-center rounded-lg" style={{ color: '#B8AA9B', ...sans, fontSize: '0.8rem', background: BG }}>
-                            No QR available
-                          </div>
-                    }
+                <div className="rounded-xl p-4 space-y-2" style={{ background: BG, border: `1px solid ${BORDER}` }}>
+                    <p style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        {ID_LABEL[account.role] || 'Account ID'}
+                    </p>
+                    <p style={{ ...mono, fontSize: '1rem', fontWeight: 600, color: PRIMARY, wordBreak: 'break-word' }}>
+                        {account.account_id || '—'}
+                    </p>
+                    {account.role === 'scholar' && account.year_level && (
+                        <p style={{ ...sans, fontSize: '0.76rem', color: MUTED }}>{formatYearLevelLabel(account.year_level)}</p>
+                    )}
                 </div>
-
-                <div className="flex gap-2.5 w-full">
-                    <GhostBtn onClick={onClose} full>Close</GhostBtn>
-                    <a href={qrData.qr_code || qrData.qrCode}
-                        download={`${qrData.scholar_id || 'user'}_event_qr.png`}
-                        className="flex-1 py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors hover:bg-[#4A1730]"
-                        style={{ ...sans, fontSize: '0.85rem', fontWeight: 600, color: '#fff', background: PRIMARY }}>
-                        <Download size={14} /> Download
-                    </a>
+                <p style={{ ...sans, fontSize: '0.76rem', lineHeight: 1.5, color: MUTED }}>
+                    The account is ready and has been added to the registry.
+                </p>
+                <div className="pt-1">
+                    <PrimaryBtn onClick={onClose} full>Done</PrimaryBtn>
                 </div>
             </div>
         </ModalShell>
@@ -636,7 +624,7 @@ const UserManagement = () => {
     const [archiving, setArchiving] = useState(false);
     const [modal, setModal]           = useState(null);
     const [selectedUser, setSelectedUser] = useState(null);
-    const [qrData, setQrData]         = useState(null);
+    const [createdAccount, setCreatedAccount] = useState(null);
 
     const fetchUsers = async () => {
         try {
@@ -1037,7 +1025,7 @@ const UserManagement = () => {
             {modal === 'create' && (
                 <CreateModal
                     onClose={closeModal}
-                    onSuccess={(data) => { setQrData(data); fetchUsers(); closeModal(); setModal('qr'); }}
+                    onSuccess={(data) => { setCreatedAccount(data); fetchUsers(); closeModal(); setModal('created'); }}
                 />
             )}
             {modal === 'edit' && selectedUser && (
@@ -1047,8 +1035,8 @@ const UserManagement = () => {
                     onSuccess={() => { closeModal(); fetchUsers(); }}
                 />
             )}
-            {modal === 'qr' && qrData && (
-                <QRModal qrData={qrData} onClose={closeModal} />
+            {modal === 'created' && createdAccount && (
+                <AccountCreatedModal account={createdAccount} onClose={closeModal} />
             )}
             {modal === 'archive' && selectedUser?.role === 'scholar' && (
                 <ArchiveModal user={selectedUser} onClose={closeModal} onConfirm={handleArchiveScholar} loading={archiving} error={archiveError} />

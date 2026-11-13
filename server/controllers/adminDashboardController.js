@@ -116,11 +116,36 @@ exports.getSummary = async (req, res) => {
       COALESCE(SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END), 0) AS approved,
       COALESCE(SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END), 0) AS pending,
       COALESCE(SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END), 0) AS rejected,
+      COUNT(quality_score) AS scored_records,
+      COALESCE(SUM(CASE WHEN quality_score >= 90 THEN 1 ELSE 0 END), 0) AS excellent_scores,
+      COALESCE(SUM(CASE WHEN quality_score >= 75 AND quality_score < 90 THEN 1 ELSE 0 END), 0) AS good_scores,
+      COALESCE(SUM(CASE WHEN quality_score >= 50 AND quality_score < 75 THEN 1 ELSE 0 END), 0) AS needs_improvement_scores,
+      COALESCE(SUM(CASE WHEN quality_score < 50 THEN 1 ELSE 0 END), 0) AS non_compliant_scores,
+      AVG(quality_score) AS average_quality_score,
       COALESCE(SUM(CASE WHEN sentiment_score > 0 THEN 1 ELSE 0 END), 0) AS positive_sentiment,
       COALESCE(SUM(CASE WHEN sentiment_score = 0 THEN 1 ELSE 0 END), 0) AS neutral_sentiment,
       COALESCE(SUM(CASE WHEN sentiment_score < 0 THEN 1 ELSE 0 END), 0) AS negative_sentiment,
       COALESCE(SUM(CASE WHEN sentiment_score IS NULL THEN 1 ELSE 0 END), 0) AS unscored_sentiment
     FROM submissions
+  `;
+
+  const qualityScoreByMonthLevelSql = `
+    SELECT
+      DATE_FORMAT(s.submitted_at, '%Y-%m') AS month,
+      COALESCE(NULLIF(TRIM(u.year_level), ''), 'Unspecified') AS year_level,
+      COUNT(*) AS scored_records,
+      COALESCE(SUM(CASE WHEN s.quality_score >= 90 THEN 1 ELSE 0 END), 0) AS excellent_scores,
+      COALESCE(SUM(CASE WHEN s.quality_score >= 75 AND s.quality_score < 90 THEN 1 ELSE 0 END), 0) AS good_scores,
+      COALESCE(SUM(CASE WHEN s.quality_score >= 50 AND s.quality_score < 75 THEN 1 ELSE 0 END), 0) AS needs_improvement_scores,
+      COALESCE(SUM(CASE WHEN s.quality_score < 50 THEN 1 ELSE 0 END), 0) AS non_compliant_scores,
+      AVG(s.quality_score) AS average_quality_score
+    FROM submissions s
+    LEFT JOIN users u ON u.scholar_id = s.scholar_id AND u.role = 'scholar'
+    WHERE s.submission_type = 'letter'
+      AND s.quality_score IS NOT NULL
+      AND s.submitted_at IS NOT NULL
+    GROUP BY DATE_FORMAT(s.submitted_at, '%Y-%m'), COALESCE(NULLIF(TRIM(u.year_level), ''), 'Unspecified')
+    ORDER BY month ASC, year_level ASC
   `;
 
   const activitySql = `
@@ -133,7 +158,7 @@ exports.getSummary = async (req, res) => {
   `;
 
   try {
-    const [userSummaryRows, recentUsers, scholarGrowth, announcementRows, taskRows, dutyRows, submissionRows, activityRows] = await Promise.all([
+    const [userSummaryRows, recentUsers, scholarGrowth, announcementRows, taskRows, dutyRows, submissionRows, qualityScoreByMonthLevelRows, activityRows] = await Promise.all([
       queryRows(userSummarySql),
       queryRows(recentUsersSql, [5]),
       queryRows(scholarGrowthSql),
@@ -141,6 +166,7 @@ exports.getSummary = async (req, res) => {
       queryRows(taskSql),
       queryRows(dutySql),
       queryRows(submissionSql),
+      queryRows(qualityScoreByMonthLevelSql),
       queryRows(activitySql, [10]),
     ]);
     const users = aggregateRow(userSummaryRows);
@@ -183,6 +209,28 @@ exports.getSummary = async (req, res) => {
         approved: toCount(submissions.approved),
         pending: toCount(submissions.pending),
         rejected: toCount(submissions.rejected),
+        qualityScore: {
+          scoredRecords: toCount(submissions.scored_records),
+          excellent: toCount(submissions.excellent_scores),
+          good: toCount(submissions.good_scores),
+          needsImprovement: toCount(submissions.needs_improvement_scores),
+          nonCompliant: toCount(submissions.non_compliant_scores),
+          average: submissions.average_quality_score === null
+            ? 0
+            : Math.round(Number(submissions.average_quality_score)),
+        },
+        qualityScoreByMonthLevel: qualityScoreByMonthLevelRows.map((row) => ({
+          month: row.month,
+          yearLevel: row.year_level,
+          scoredRecords: toCount(row.scored_records),
+          excellent: toCount(row.excellent_scores),
+          good: toCount(row.good_scores),
+          needsImprovement: toCount(row.needs_improvement_scores),
+          nonCompliant: toCount(row.non_compliant_scores),
+          average: row.average_quality_score === null
+            ? 0
+            : Number(row.average_quality_score),
+        })),
         sentiment: {
           positive: toCount(submissions.positive_sentiment),
           neutral: toCount(submissions.neutral_sentiment),

@@ -26,19 +26,25 @@ const taskController = require('../controllers/taskController');
 delete require.cache[dbPath];
 delete require.cache[assignmentsPath];
 
-const fetchTasks = (scholarYearLevel) => new Promise((resolve, reject) => {
+const fetchTasks = (scholarYearLevel, taskCreatedAt = '2026-03-01 09:00:00') => new Promise((resolve, reject) => {
   const task = {
     id: 12,
     title: 'Submit monthly report',
     type: 'Monthly Report',
     target_year_levels: JSON.stringify(['Grade 7']),
     is_active: 1,
+    created_at: taskCreatedAt,
   };
   fakeDb.query = (sql, values, callback) => {
     if (typeof values === 'function') callback = values;
     if (sql.includes('SELECT t.id')) return callback(null, [task]);
     if (sql.includes('officer_year_level_assignments')) return callback(null, []);
-    if (sql.includes('SELECT year_level FROM users')) return callback(null, [{ year_level: scholarYearLevel }]);
+    if (sql.includes('SELECT year_level, created_at FROM users')) {
+      return callback(null, [{
+        year_level: scholarYearLevel,
+        created_at: '2026-02-01 09:00:00',
+      }]);
+    }
     reject(new Error(`Unexpected query: ${sql}`));
   };
 
@@ -69,6 +75,20 @@ test('scholar task visibility matches equivalent year-level formats', async () =
 
 test('scholar task visibility still excludes tasks for a different year level', async () => {
   const response = await fetchTasks('Grade 8');
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, []);
+});
+
+test('scholar task visibility excludes tasks created before the account', async () => {
+  const response = await fetchTasks('Grade 7', '2026-01-31 09:00:00');
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(response.body, []);
+});
+
+test('scholar task visibility excludes tasks created at the account creation time', async () => {
+  const response = await fetchTasks('Grade 7', '2026-02-01 09:00:00');
 
   assert.equal(response.status, 200);
   assert.deepEqual(response.body, []);
