@@ -79,7 +79,7 @@ const Login = () => {
             }
         } catch (err) {
             if (err.response?.status === 401) {
-                setError('Login ID, email, or password is incorrect.');
+                setError('User ID, email, or password is incorrect.');
             } else if (err.response?.status === 404) {
                 setError('Account not found.');
             } else {
@@ -145,7 +145,7 @@ const Login = () => {
 
                         <form onSubmit={handleSubmit}>
                             <div className="field-group">
-                                <label className="field-label" htmlFor="login-id">Login ID</label>
+                                <label className="field-label" htmlFor="login-id">User ID</label>
                                 <div className="input-wrap">
                                     <UserRound size={18} color={PRIMARY} className="input-icon" />
                                     <input
@@ -263,8 +263,9 @@ const GlobalStyle = () => (
             min-height: 100vh; min-height: 100dvh;
             overflow-x: clip;
             background: linear-gradient(115deg, #FFFDF9 0%, #F6E9E1 30%, #B25A78 66%, #6D2140 84%, ${PRIMARY_DEEP} 100%);
+            background-attachment: fixed;
         }
-        .login-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+        .login-bg { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
         .bg-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
         .login-inner {
@@ -385,9 +386,22 @@ const GlobalStyle = () => (
         @media (max-height: 760px) { .secure-note-meta { display: none; } .auth-sub { display: none; } }
         @media (max-height: 620px) { .auth-eyebrow, .secure-note { display: none; } }
         @media (max-height: 540px) { .logo-img { width: 64px; } }
-        /* On short phones/tablets the page just scrolls; on mobile the year note sits on the cream/maroon blend */
+        /* Keep the mobile auth page fixed to the viewport; only the card scrolls if content cannot fit. */
         @media (max-width: 639px) {
-            .login-root { background: linear-gradient(170deg, #FFFDF9 0%, #F6E9E1 28%, #B25A78 62%, ${PRIMARY} 85%, ${PRIMARY_DEEP} 100%); }
+            .login-root {
+                height: 100vh; height: 100dvh; min-height: 0; overflow: hidden;
+                background: linear-gradient(170deg, #FFFDF9 0%, #F6E9E1 28%, #B25A78 62%, ${PRIMARY} 85%, ${PRIMARY_DEEP} 100%);
+                background-attachment: fixed;
+            }
+            .login-inner {
+                height: 100%; min-height: 0;
+                padding: max(8px, env(safe-area-inset-top)) 12px max(8px, env(safe-area-inset-bottom));
+            }
+            .login-main { min-height: 0; }
+            .auth-card { max-height: calc(100% - 34px); overflow-y: auto; scrollbar-width: none; }
+            .auth-card::-webkit-scrollbar { display: none; }
+            .login-root { --logo-w: clamp(56px, 11vh, 84px); --pad-y: clamp(10px, 2vh, 18px); --gap: clamp(6px, 1.2vh, 10px); }
+            .year-note { font-size: 0.68rem; }
         }
 
         @media (prefers-reduced-motion: reduce) {

@@ -122,7 +122,7 @@ const AccountSetup = () => {
 
                         {profile.login_id && (
                             <div className="as-chips">
-                                <span className="as-chip">Login ID: {profile.login_id}</span>
+                                <span className="as-chip">User ID: {profile.login_id}</span>
                             </div>
                         )}
 

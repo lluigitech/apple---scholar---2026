@@ -301,8 +301,9 @@ const GlobalStyle = () => (
             min-height: 100vh; min-height: 100dvh;
             overflow-x: clip;
             background: linear-gradient(115deg, #FFFDF9 0%, #F6E9E1 30%, #B25A78 66%, #6D2140 84%, ${BURGUNDY_DEEP} 100%);
+            background-attachment: fixed;
         }
-        .fp-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+        .fp-bg { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
         .bg-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
         .fp-inner {
@@ -462,9 +463,22 @@ const GlobalStyle = () => (
         @media (max-height: 580px) { .secure-note { display: none; } }
         @media (max-height: 540px) { .logo-img { width: 56px; } }
 
-        /* Mobile: page scrolls if needed; gradient shifts so the year note stays readable */
+        /* Keep the mobile recovery page fixed to the viewport; only the card scrolls if content cannot fit. */
         @media (max-width: 639px) {
-            .fp-root { background: linear-gradient(170deg, #FFFDF9 0%, #F6E9E1 28%, #B25A78 62%, ${BURGUNDY} 85%, ${BURGUNDY_DEEP} 100%); }
+            .fp-root {
+                height: 100vh; height: 100dvh; min-height: 0; overflow: hidden;
+                background: linear-gradient(170deg, #FFFDF9 0%, #F6E9E1 28%, #B25A78 62%, ${BURGUNDY} 85%, ${BURGUNDY_DEEP} 100%);
+                background-attachment: fixed;
+            }
+            .fp-inner {
+                height: 100%; min-height: 0;
+                padding: max(8px, env(safe-area-inset-top)) 12px max(8px, env(safe-area-inset-bottom));
+            }
+            .fp-main { min-height: 0; }
+            .auth-card { max-height: calc(100% - 34px); overflow-y: auto; scrollbar-width: none; }
+            .auth-card::-webkit-scrollbar { display: none; }
+            .fp-root { --logo-w: clamp(54px, 10vh, 78px); --pad-y: clamp(10px, 1.8vh, 18px); --gap: clamp(6px, 1.1vh, 10px); }
+            .year-note { font-size: 0.66rem; }
         }
 
         @media (prefers-reduced-motion: reduce) {
