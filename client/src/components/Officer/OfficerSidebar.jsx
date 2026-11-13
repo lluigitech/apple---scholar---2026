@@ -169,7 +169,13 @@ const OfficerSidebar = ({ isOpen, onClose, collapsed = false }) => {
                     ${isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
                     ${rail ? 'as-rail' : ''}
                 `}
-                style={{ background: SURFACE, borderRight: `1px solid ${BORDER}`, zIndex: isOpen ? 9999 : undefined }}
+                style={{
+                    background: SURFACE,
+                    borderRight: `1px solid ${BORDER}`,
+                    zIndex: isOpen ? 9999 : undefined,
+                    height: '100dvh',
+                    paddingBottom: 'env(safe-area-inset-bottom)',
+                }}
             >
                 {/* Branding */}
                 <div
