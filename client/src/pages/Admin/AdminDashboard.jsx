@@ -90,11 +90,11 @@ const ChartCard = ({ icon, title, subtitle, headerAction, children, className = 
     <div className={`min-w-0 ${className}`} style={{ ...cardStyle, padding: 22 }}>
         <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex min-w-0 items-center gap-3">
-            <IconBubble icon={icon} color={PRIMARY} size={40} iconSize={18} />
-            <div className="min-w-0">
-                <h3 style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY }}>{title}</h3>
-                {subtitle && <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1 }}>{subtitle}</p>}
-            </div>
+                <IconBubble icon={icon} color={PRIMARY} size={40} iconSize={18} />
+                <div className="min-w-0">
+                    <h3 style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY }}>{title}</h3>
+                    {subtitle && <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1 }}>{subtitle}</p>}
+                </div>
             </div>
             {headerAction}
         </div>

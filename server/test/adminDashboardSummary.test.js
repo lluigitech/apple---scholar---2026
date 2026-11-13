@@ -185,6 +185,7 @@ test('dashboard summary returns an error when an aggregate query fails', async (
     'FROM announcements': [{ total: 0, active: 0, withdrawn: 0 }],
     'FROM tasks': [{ total: 0, active: 0, overdue: 0 }],
     'FROM duties': [{ total: 0, cancelled: 0, upcoming: 0, today: 0, past: 0, assigned_groups: 0, assigned_scholar_assignments: 0 }],
+    'FROM submissions s': [],
     'FROM submissions': [{
       total_records: 0, approved: 0, pending: 0, rejected: 0,
       scored_records: 0, excellent_scores: 0, good_scores: 0,

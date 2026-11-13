@@ -764,7 +764,7 @@ exports.submitCompliance = async (req, res) => {
                             filePath,
                             description,
                             new Date(),
-                            new Date(Date.now() + 5 * 365 * 24 * 60 * 60 * 1000),
+                            new Date(Date.now() + 3 * 365 * 24 * 60 * 60 * 1000),
                         ]);
                         db.query(mediaSql, [mediaRows], (mediaErr) => {
                             if (mediaErr) console.error('Media save error:', mediaErr);
@@ -778,7 +778,7 @@ exports.submitCompliance = async (req, res) => {
                             console.log(`Generated PDF for submission ${submissionId}: ${publicPath}`);
                             db.query(
                                 `INSERT INTO documents (scholar_id, category, file_name, file_path, mime_type, status, retention_until, source_submission_id)
-                                 VALUES (?, 'monthly_letter', ?, ?, 'application/pdf', 'Pending', DATE_ADD(NOW(), INTERVAL 5 YEAR), ?)`,
+                                 VALUES (?, 'monthly_letter', ?, ?, 'application/pdf', 'Pending', DATE_ADD(NOW(), INTERVAL 3 YEAR), ?)`,
                                 [scholar_id, `monthly-letter-${submissionId}.pdf`, publicPath, submissionId],
                                 (documentErr) => { if (documentErr) console.error('Letter retention registry error:', documentErr.message); }
                             );
@@ -2560,7 +2560,7 @@ const registerRetentionDocuments = async (scholarId, submissionId, files, catego
         await new Promise((resolve) => {
             db.query(
                 `INSERT INTO documents (scholar_id, category, file_name, file_path, file_size, mime_type, status, retention_until, source_submission_id)
-                 VALUES (?, ?, ?, ?, ?, ?, 'Pending', DATE_ADD(NOW(), INTERVAL 5 YEAR), ?)`,
+                 VALUES (?, ?, ?, ?, ?, ?, 'Pending', DATE_ADD(NOW(), INTERVAL 3 YEAR), ?)`,
                 [scholarId, category, file.originalname || `${category}-${submissionId}`, file.path, file.size || null, file.mimetype || null, submissionId],
                 (err) => {
                     if (err) console.error('Retention document registry error:', err.message);

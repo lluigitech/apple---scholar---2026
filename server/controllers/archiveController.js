@@ -76,7 +76,7 @@ exports.listDocuments = async (req, res) => {
                 NULL AS mime_type,
                 'Archived' AS status,
                 s.submitted_at AS uploaded_at,
-                DATE_ADD(COALESCE(s.archived_at, s.archive_at), INTERVAL 5 YEAR) AS retention_until,
+                DATE_ADD(COALESCE(s.archived_at, s.archive_at), INTERVAL 3 YEAR) AS retention_until,
                 1 AS is_archived,
                 COALESCE(s.archived_at, s.archive_at) AS archived_at
             FROM submissions s

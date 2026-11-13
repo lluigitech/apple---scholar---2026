@@ -18,7 +18,7 @@ const sql = `
            CASE WHEN s.generated_pdf_path IS NOT NULL THEN 'application/pdf' ELSE NULL END,
            CASE s.status WHEN 'approved' THEN 'Approved' WHEN 'rejected' THEN 'Rejected' ELSE 'Pending' END,
            s.submitted_at,
-           DATE_ADD(s.submitted_at, INTERVAL 5 YEAR),
+           DATE_ADD(s.submitted_at, INTERVAL 3 YEAR),
            s.id
     FROM submissions s
     WHERE COALESCE(s.generated_pdf_path, s.cor_path, s.report_card_path) IS NOT NULL

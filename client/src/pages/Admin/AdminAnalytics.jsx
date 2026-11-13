@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area, LabelList } from "recharts";
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, AreaChart, Area, LabelList } from "recharts";
 import { Download, Users, TrendingUp, AlertTriangle, GraduationCap, ArrowUpRight, ArrowDownRight, FileBarChart2, MessageSquareText } from "lucide-react";
 import { formatAdminMonth } from '../../utils/adminPreferences';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
@@ -14,7 +14,6 @@ const BG           = '#F7F4EE';
 const SURFACE      = '#FFFDF9';
 const BORDER       = '#E7D8C7';
 const PRIMARY      = '#6D2140';
-const PRIMARY_DEEP = '#4A1730';
 const INK          = '#241512';
 const MUTED        = '#8A7A68';
 const BRONZE       = '#A9784E';
@@ -24,21 +23,13 @@ const DANGER       = '#A24A4A';
 const RADIUS       = 16;
 const SHADOW       = '0 1px 2px rgba(74, 23, 48, 0.04), 0 6px 18px rgba(74, 23, 48, 0.04)';
 
-// Aliases so every downstream data/color reference in the original
-// analytics logic (SAGE / AMBER / CLAY / MAROON / GOLD / IVORY / RULE / PAPER)
-// keeps working untouched — only the hex values move to the new tokens.
-const MAROON      = PRIMARY;
-const MAROON_DEEP = PRIMARY_DEEP;
-const GOLD        = BRONZE;
-const IVORY       = BG;
-const PAPER       = SURFACE;
-const RULE        = BORDER;
 const SAGE        = SUCCESS;
 const CLAY        = DANGER;
 const AMBER       = WARNING;
 
 const serif = { fontFamily: "'Playfair Display', serif" };
 const sans  = { fontFamily: "'Inter', sans-serif" };
+const mono  = { fontFamily: "ui-monospace, 'SFMono-Regular', Menlo, monospace" };
 
 const gridProps = { strokeDasharray: '3 3', stroke: BORDER, vertical: false };
 const axisStyle = { fontFamily: "'Inter', sans-serif", fontSize: '0.72rem', fill: MUTED };
@@ -47,6 +38,12 @@ const legendStyle = { fontFamily: "'Inter', sans-serif", fontSize: '0.78rem', co
 
 const CHART_HEIGHT = 240;
 const CHART_MARGIN = { top: 8, right: 8, left: -12, bottom: 0 };
+const QUALITY_SCORE_BANDS = [
+  { key: 'excellent', name: 'Excellent (90–100)', color: SUCCESS },
+  { key: 'good', name: 'Good (75–89)', color: '#4B91A8' },
+  { key: 'needsImprovement', name: 'Needs Improvement (50–74)', color: WARNING },
+  { key: 'nonCompliant', name: 'Non-Compliant (0–49)', color: DANGER },
+];
 
 const yearLevelOrder = [
   "Grade 7", "Grade 8", "Grade 9", "Grade 10", "Grade 11", "Grade 12",
@@ -106,6 +103,19 @@ const getSentimentBucket = (value) => {
 
 const getAuthHeaders = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("token")}` } });
 
+const getDateOnlyUtc = (value) => {
+  const datePart = String(value || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(datePart)) return null;
+  const timestamp = Date.parse(`${datePart}T00:00:00.000Z`);
+  return Number.isNaN(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== datePart ? null : timestamp;
+};
+
+const getTimestamp = (value) => {
+  if (!value) return null;
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? null : timestamp;
+};
+
 const initialAnalytics = {
   totalScholars: 0,
   avgCompliance: 0,
@@ -122,6 +132,11 @@ const initialAnalytics = {
   sentimentByYearLevel: [],
   averageGradeData: [],
   summary: [],
+  users: [],
+  archivedScholars: [],
+  officerAssignments: [],
+  qualityScoreByMonthLevel: [],
+  fetchedAt: null,
 };
 
 // ── KPI card ─────────────────────────────────────────────────────
@@ -200,6 +215,7 @@ const SectionHeading = ({ title, subtitle }) => (
 const AdminAnalytics = () => {
   const navigate = useNavigate();
   const [selectedYearLevel, setSelectedYearLevel] = useState("all");
+  const [selectedScoringMonth, setSelectedScoringMonth] = useState("");
   const [analytics, setAnalytics] = useState(initialAnalytics);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -210,17 +226,25 @@ const AdminAnalytics = () => {
         setLoading(true);
         setError("");
 
-        const [summaryRes, submissionsRes, usersRes, gradesRes] = await Promise.all([
+        const [summaryRes, submissionsRes, usersRes, gradesRes, archiveRes, officerAssignmentsRes, dashboardSummaryRes] = await Promise.all([
           axios.get(`${API}/admin/reports/compliance-summary`, getAuthHeaders()),
           axios.get(`${API}/submission/all`, getAuthHeaders()),
           axios.get(`${API}/admin/users`, getAuthHeaders()),
           axios.get(`${API}/submission/grades/all`, getAuthHeaders()),
+          axios.get(`${API}/admin/archive/scholars`, getAuthHeaders()),
+          axios.get(`${API}/admin/officer-assignments`, getAuthHeaders()),
+          axios.get(`${API}/admin/dashboard-summary`, getAuthHeaders()),
         ]);
 
         const summary = Array.isArray(summaryRes?.data) ? summaryRes.data : [];
         const submissions = Array.isArray(submissionsRes?.data) ? submissionsRes.data : [];
         const users = Array.isArray(usersRes?.data) ? usersRes.data : [];
         const grades = Array.isArray(gradesRes?.data) ? gradesRes.data : [];
+        const archivedScholars = Array.isArray(archiveRes?.data) ? archiveRes.data : [];
+        const officerAssignments = Array.isArray(officerAssignmentsRes?.data) ? officerAssignmentsRes.data : [];
+        const qualityScoreByMonthLevel = Array.isArray(dashboardSummaryRes?.data?.submissions?.qualityScoreByMonthLevel)
+          ? dashboardSummaryRes.data.submissions.qualityScoreByMonthLevel
+          : [];
 
         const scholarYearMap = users.reduce((acc, user) => {
           if (user?.role === "scholar" && user?.scholar_id) {
@@ -387,7 +411,14 @@ const AdminAnalytics = () => {
           sentimentByYearLevel,
           averageGradeData,
           summary,
+          users,
+          archivedScholars,
+          officerAssignments,
+          qualityScoreByMonthLevel,
+          fetchedAt: Date.now(),
         });
+        const scoringMonths = [...new Set(qualityScoreByMonthLevel.map((item) => item.month))].sort().reverse();
+        setSelectedScoringMonth((current) => scoringMonths.includes(current) ? current : scoringMonths[0] || "");
       } catch (err) {
         console.error("Error loading analytics", err);
         setError("Unable to load live analytics. Please refresh or try again.");
@@ -422,6 +453,66 @@ const AdminAnalytics = () => {
       .sort((a, b) => rank(a.level) - rank(b.level));
   }, [filteredData]);
 
+  const scholarGrowth = useMemo(() => {
+    const registrationsByMonth = new Map();
+    const now = new Date();
+    analytics.users.forEach((user) => {
+      if (user.role !== "scholar") return;
+      if (selectedYearLevel !== "all" && normalizeYearLevel(user.year_level || "Unknown") !== selectedYearLevel) return;
+      const createdAt = new Date(user.created_at);
+      if (Number.isNaN(createdAt.getTime())) return;
+      const key = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, "0")}`;
+      registrationsByMonth.set(key, (registrationsByMonth.get(key) || 0) + 1);
+    });
+
+    return Array.from({ length: 6 }, (_, index) => {
+      const monthDate = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      const key = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, "0")}`;
+      return {
+        month: formatAdminMonth(monthDate, { month: "short" }),
+        total: registrationsByMonth.get(key) || 0,
+      };
+    });
+  }, [analytics.users, selectedYearLevel]);
+
+  const scoringMonths = useMemo(() => (
+    [...new Set(analytics.qualityScoreByMonthLevel.map((item) => item.month))].sort().reverse()
+  ), [analytics.qualityScoreByMonthLevel]);
+  const activeScoringMonth = scoringMonths.includes(selectedScoringMonth) ? selectedScoringMonth : scoringMonths[0] || "";
+  const monthlyScoreByLevel = useMemo(() => {
+    const groups = new Map();
+    analytics.qualityScoreByMonthLevel
+      .filter((item) => item.month === activeScoringMonth)
+      .forEach((item) => {
+        const level = normalizeYearLevel(item.yearLevel || "Unspecified");
+        if (selectedYearLevel !== "all" && level !== selectedYearLevel) return;
+        const current = groups.get(level) || {
+          yearLevel: level,
+          scoredRecords: 0,
+          totalScore: 0,
+          excellent: 0,
+          good: 0,
+          needsImprovement: 0,
+          nonCompliant: 0,
+        };
+        const scoredRecords = Number(item.scoredRecords) || 0;
+        current.scoredRecords += scoredRecords;
+        current.totalScore += (Number(item.average) || 0) * scoredRecords;
+        QUALITY_SCORE_BANDS.forEach(({ key }) => { current[key] += Number(item[key]) || 0; });
+        groups.set(level, current);
+      });
+    return [...groups.values()]
+      .map(({ totalScore, ...item }) => ({
+        ...item,
+        average: item.scoredRecords ? Math.round(totalScore / item.scoredRecords) : 0,
+      }))
+      .sort((left, right) => left.yearLevel.localeCompare(right.yearLevel, undefined, { numeric: true }));
+  }, [activeScoringMonth, analytics.qualityScoreByMonthLevel, selectedYearLevel]);
+  const selectedMonthScoredTotal = monthlyScoreByLevel.reduce((sum, item) => sum + item.scoredRecords, 0);
+  const selectedMonthAverageScore = selectedMonthScoredTotal
+    ? Math.round(monthlyScoreByLevel.reduce((sum, item) => sum + item.average * item.scoredRecords, 0) / selectedMonthScoredTotal)
+    : 0;
+
   const selectedSummaryTotals = useMemo(() => {
     const total = filteredSummary.length;
     const avg = total > 0
@@ -429,62 +520,8 @@ const AdminAnalytics = () => {
       : 0;
     const atRisk = filteredSummary.filter((item) => Number(item.riskScore || 0) >= 40 || item.riskStatus === "high" || item.riskStatus === "medium").length;
 
-    const compliantCount = filteredSummary.filter((item) => Number(item.completionRate || 0) >= 75).length;
-    const pendingCount = filteredSummary.filter((item) => {
-      const rate = Number(item.completionRate || 0);
-      return rate >= 50 && rate < 75;
-    }).length;
-    const nonCompliantCount = Math.max(0, total - compliantCount - pendingCount);
-
-    return {
-      total,
-      avg,
-      atRisk,
-      overallCompliance: [
-        { id: "compliant", name: "Compliant", value: total ? Math.round((compliantCount / total) * 100) : 0, color: SAGE },
-        { id: "pending", name: "Pending", value: total ? Math.round((pendingCount / total) * 100) : 0, color: AMBER },
-        { id: "noncompliant", name: "Non-compliant", value: total ? Math.round((nonCompliantCount / total) * 100) : 0, color: CLAY },
-      ],
-    };
+    return { total, avg, atRisk };
   }, [filteredSummary]);
-
-  const selectedSubmissionTrends = useMemo(() => {
-    if (!analytics.submissions?.length) return [];
-
-    const scholarYearMap = Object.fromEntries(
-      (analytics.summary || []).map((item) => [
-        item.studentId || item.scholar_id || item.scholarId,
-        normalizeYearLevel(item.year_level || "Unknown"),
-      ])
-    );
-
-    const monthlyGroups = {};
-    analytics.submissions.forEach((sub) => {
-      const submittedAt = sub.submitted_at || sub.created_at || sub.date;
-      const date = new Date(submittedAt);
-      if (Number.isNaN(date.getTime())) return;
-      const level = normalizeYearLevel(scholarYearMap[sub.scholar_id] || sub.year_level || "Unknown");
-      if (selectedYearLevel !== "all" && level !== selectedYearLevel) return;
-
-      const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
-      if (!monthlyGroups[key]) {
-        monthlyGroups[key] = { month: key, approved: 0, pending: 0, rejected: 0 };
-      }
-
-      const status = String(sub.status || "pending").toLowerCase();
-      if (status === "approved") monthlyGroups[key].approved += 1;
-      else if (status === "rejected") monthlyGroups[key].rejected += 1;
-      else monthlyGroups[key].pending += 1;
-    });
-
-    return Object.values(monthlyGroups)
-      .sort((a, b) => a.month.localeCompare(b.month))
-      .map((item) => {
-        const [year, month] = item.month.split("-");
-        const label = formatAdminMonth(new Date(`${year}-${month}-01`), { month: 'short' });
-        return { month: label, approved: item.approved, pending: item.pending, rejected: item.rejected };
-      });
-  }, [analytics.submissions, analytics.summary, selectedYearLevel]);
 
   const yearLevelOptions = useMemo(() => [
     { value: "all", label: "All Year Levels" },
@@ -506,6 +543,90 @@ const AdminAnalytics = () => {
     const totalRecords = filteredGradeData.reduce((sum, item) => sum + item.records, 0);
     return { best, worst, totalRecords };
   }, [filteredGradeData]);
+
+  const archiveRetention = useMemo(() => {
+    const today = getDateOnlyUtc(new Date().toISOString());
+    const scholars = analytics.archivedScholars.map((scholar) => {
+      const archivedAt = getDateOnlyUtc(scholar.archived_at);
+      let expiration = getDateOnlyUtc(scholar.retention_until);
+      if (expiration === null && archivedAt !== null) {
+        const expiryDate = new Date(archivedAt);
+        expiryDate.setUTCFullYear(expiryDate.getUTCFullYear() + 3);
+        expiration = expiryDate.getTime();
+      }
+      if (expiration === null || today === null) return { ...scholar, daysRemaining: null };
+      return { ...scholar, daysRemaining: Math.ceil((expiration - today) / 86400000) };
+    });
+    const datedScholars = scholars.filter((scholar) => scholar.daysRemaining !== null);
+    return {
+      total: scholars.length,
+      dueSoon: datedScholars.filter((scholar) => scholar.daysRemaining >= 0 && scholar.daysRemaining <= 90).length,
+      expired: datedScholars.filter((scholar) => scholar.daysRemaining < 0).length,
+      upcoming: datedScholars
+        .filter((scholar) => scholar.daysRemaining <= 90)
+        .sort((a, b) => a.daysRemaining - b.daysRemaining)
+        .slice(0, 5),
+    };
+  }, [analytics.archivedScholars]);
+
+  const officerWorkload = useMemo(() => {
+    const activeScholars = analytics.users.filter(
+      (user) => user.role === "scholar" && String(user.status || "active").toLowerCase() === "active"
+    );
+    const activeScholarIds = new Set(activeScholars.map((scholar) => scholar.scholar_id));
+    const scholarLevelById = new Map(
+      activeScholars.map((scholar) => [scholar.scholar_id, normalizeYearLevel(scholar.year_level || "Unknown")])
+    );
+    const scholarsByLevel = {};
+    activeScholars.forEach((scholar) => {
+      const level = scholarLevelById.get(scholar.scholar_id);
+      scholarsByLevel[level] = [...(scholarsByLevel[level] || []), scholar.scholar_id];
+    });
+
+    const pendingByLevel = {};
+    const reviewDurationsByLevel = {};
+    const cutoff = (analytics.fetchedAt || 0) - 90 * 86400000;
+    analytics.submissions.forEach((submission) => {
+      if (submission.submission_type !== "letter" || !activeScholarIds.has(submission.scholar_id)) return;
+      if (submission.archived_at || submission.archive_at) return;
+      const level = scholarLevelById.get(submission.scholar_id);
+      const status = String(submission.status || "").toLowerCase();
+      if (status === "pending") pendingByLevel[level] = (pendingByLevel[level] || 0) + 1;
+
+      const submittedAt = getTimestamp(submission.submitted_at);
+      const reviewedAt = getTimestamp(submission.reviewed_at);
+      if (["approved", "rejected"].includes(status) && submittedAt >= cutoff && reviewedAt >= submittedAt) {
+        reviewDurationsByLevel[level] = [...(reviewDurationsByLevel[level] || []), (reviewedAt - submittedAt) / 3600000];
+      }
+    });
+
+    return analytics.officerAssignments
+      .filter((officer) => String(officer.status || "active").toLowerCase() === "active")
+      .map((officer) => {
+        const levels = Array.isArray(officer.assigned_year_levels) ? officer.assigned_year_levels : [];
+        const assignedScholarIds = new Set();
+        let pendingReviews = 0;
+        const reviewDurations = [];
+        levels.forEach((level) => {
+          const normalizedLevel = normalizeYearLevel(level);
+          (scholarsByLevel[normalizedLevel] || []).forEach((scholarId) => assignedScholarIds.add(scholarId));
+          pendingReviews += pendingByLevel[normalizedLevel] || 0;
+          reviewDurations.push(...(reviewDurationsByLevel[normalizedLevel] || []));
+        });
+        const averageReviewHours = reviewDurations.length
+          ? reviewDurations.reduce((sum, hours) => sum + hours, 0) / reviewDurations.length
+          : null;
+        return {
+          id: officer.id,
+          name: officer.full_name || "Unnamed officer",
+          levels,
+          activeScholars: assignedScholarIds.size,
+          pendingReviews,
+          averageReviewHours,
+        };
+      })
+      .sort((a, b) => b.pendingReviews - a.pendingReviews || b.activeScholars - a.activeScholars || a.name.localeCompare(b.name));
+  }, [analytics.fetchedAt, analytics.officerAssignments, analytics.submissions, analytics.users]);
 
   const sentimentSummary = useMemo(() => {
     const trend = analytics.sentimentTrend;
@@ -621,40 +742,6 @@ const AdminAnalytics = () => {
 
         {/* ── Main analytics: row 1 ── */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
-          <ChartCard title="Compliance Distribution" subtitle="Share of scholars in each compliance bracket.">
-            <ResponsiveContainer width="100%" height={CHART_HEIGHT - 60}>
-              <PieChart>
-                <Pie
-                  data={selectedSummaryTotals.overallCompliance}
-                  cx="50%" cy="50%" labelLine={false}
-                  innerRadius={52} outerRadius={82} paddingAngle={2} stroke={SURFACE}
-                  dataKey="value" nameKey="name"
-                >
-                  {selectedSummaryTotals.overallCompliance.map((entry) => (
-                    <Cell key={`pie-cell-${entry.id}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => [`${v}%`, n]} />
-              </PieChart>
-            </ResponsiveContainer>
-            <DonutLegend items={selectedSummaryTotals.overallCompliance.map((c) => ({ label: c.name, value: c.value, color: c.color }))} />
-          </ChartCard>
-
-          <ChartCard title="Monthly Submission Trends" subtitle="Approved, pending, and rejected submissions.">
-            <ResponsiveContainer width="100%" height={CHART_HEIGHT + 40}>
-              <LineChart data={selectedSubmissionTrends} margin={CHART_MARGIN}>
-                <CartesianGrid {...gridProps} />
-                <XAxis dataKey="month" tick={axisStyle} stroke={BORDER} />
-                <YAxis tick={axisStyle} stroke={BORDER} allowDecimals={false} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Legend wrapperStyle={legendStyle} />
-                <Line type="monotone" dataKey="approved" stroke={SUCCESS} strokeWidth={2.5} dot={{ fill: SUCCESS, r: 3 }} name="Approved" />
-                <Line type="monotone" dataKey="pending" stroke={WARNING} strokeWidth={2.5} dot={{ fill: WARNING, r: 3 }} name="Pending" />
-                <Line type="monotone" dataKey="rejected" stroke={DANGER} strokeWidth={2.5} dot={{ fill: DANGER, r: 3 }} name="Rejected" />
-              </LineChart>
-            </ResponsiveContainer>
-          </ChartCard>
-
           <div className="md:col-span-2 xl:col-span-1 min-w-0">
             <ChartCard title="Sentiment Analysis" subtitle="Average share across the last 6 months of correspondence.">
               <ResponsiveContainer width="100%" height={CHART_HEIGHT - 60}>
@@ -684,7 +771,7 @@ const AdminAnalytics = () => {
         </div>
 
         {/* ── Main analytics: row 2 ── */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 gap-5">
           <ChartCard title="Scholars per Year Level" subtitle="Total scholars in each batch with records.">
             {scholarsPerLevelData.length === 0 ? (
               <div className="flex items-center justify-center text-center" style={{ height: CHART_HEIGHT, ...sans, fontSize: '0.8rem', color: MUTED }}>
@@ -708,36 +795,84 @@ const AdminAnalytics = () => {
               </div>
             )}
           </ChartCard>
+        </div>
 
-          <ChartCard title="Average Grades by Year Level" subtitle="Based on available verified grade records.">
-            <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-              <BarChart data={filteredGradeData} margin={CHART_MARGIN}>
-                <CartesianGrid {...gridProps} />
-                <XAxis dataKey="level" tick={axisStyle} stroke={BORDER} tickFormatter={shortLevel} interval={0} />
-                <YAxis tick={axisStyle} stroke={BORDER} />
-                <Tooltip contentStyle={tooltipStyle} />
-                <Bar dataKey="average" fill={BRONZE} name="Average GWA / grade" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartCard>
+        <ChartCard
+          title="Scholar Growth"
+          subtitle={`Monthly scholar registrations over the last six months${selectedYearLevel === "all" ? "." : ` for ${selectedYearLevel}.`}`}
+        >
+          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+            <AreaChart data={scholarGrowth} margin={CHART_MARGIN}>
+              <defs>
+                <linearGradient id="analyticsGrowthFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={PRIMARY} stopOpacity={0.22} />
+                  <stop offset="100%" stopColor={PRIMARY} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid {...gridProps} />
+              <XAxis dataKey="month" tick={axisStyle} stroke={BORDER} />
+              <YAxis tick={axisStyle} stroke={BORDER} allowDecimals={false} />
+              <Tooltip contentStyle={tooltipStyle} />
+              <Area type="monotone" dataKey="total" name="Registrations" stroke={PRIMARY} strokeWidth={2.5}
+                fill="url(#analyticsGrowthFill)" dot={{ fill: PRIMARY, r: 3 }} activeDot={{ r: 5 }} />
+            </AreaChart>
+          </ResponsiveContainer>
+        </ChartCard>
 
-          <div className="md:col-span-2 xl:col-span-1 min-w-0">
-            <ChartCard title="Compliance Rate by Year Level" subtitle="Compliant, pending, and non-compliant share per batch.">
-              <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
-                <BarChart data={filteredData} margin={CHART_MARGIN} stackOffset="expand">
-                  <CartesianGrid {...gridProps} />
-                  <XAxis dataKey="level" tick={axisStyle} stroke={BORDER} tickFormatter={shortLevel} interval={0} />
-                  <YAxis tick={axisStyle} stroke={BORDER} tickFormatter={(v) => `${Math.round(v * 100)}%`} />
+        <ChartCard
+          title="Scoring Status"
+          subtitle="Monthly letter score bands by scholar year level."
+          action={scoringMonths.length > 0 && (
+            <select
+              aria-label="Filter scoring by month"
+              value={activeScoringMonth}
+              onChange={(event) => setSelectedScoringMonth(event.target.value)}
+              className="min-w-0 max-w-[150px] rounded-lg px-2 py-2"
+              style={{ ...sans, border: `1px solid ${BORDER}`, background: SURFACE, color: INK, fontSize: '0.72rem' }}
+            >
+              {scoringMonths.map((month) => (
+                <option key={month} value={month}>
+                  {formatAdminMonth(new Date(`${month}-01T12:00:00`), { month: 'short', year: 'numeric' })}
+                </option>
+              ))}
+            </select>
+          )}
+        >
+          {!analytics.qualityScoreByMonthLevel.length ? (
+            <div className="flex items-center justify-center text-center" style={{ height: CHART_HEIGHT, ...sans, fontSize: '0.8rem', color: MUTED }}>
+              Scoring data is unavailable. Ensure the backend is updated, then reload.
+            </div>
+          ) : monthlyScoreByLevel.length === 0 ? (
+            <div className="flex items-center justify-center text-center" style={{ height: CHART_HEIGHT, ...sans, fontSize: '0.8rem', color: MUTED }}>
+              No scored submissions for this month and year level.
+            </div>
+          ) : (
+            <div>
+              <p style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginBottom: 8 }}>
+                {selectedMonthScoredTotal} scored submissions · average {selectedMonthAverageScore}%
+              </p>
+              <ResponsiveContainer width="100%" height={Math.max(230, monthlyScoreByLevel.length * 52)}>
+                <BarChart data={monthlyScoreByLevel} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
+                  <CartesianGrid {...gridProps} horizontal={false} />
+                  <XAxis type="number" tick={axisStyle} stroke={BORDER} allowDecimals={false} />
+                  <YAxis type="category" dataKey="yearLevel" tick={axisStyle} stroke={BORDER} width={110} />
                   <Tooltip contentStyle={tooltipStyle} />
                   <Legend wrapperStyle={legendStyle} />
-                  <Bar dataKey="compliant" stackId="a" fill={SUCCESS} name="Compliant" />
-                  <Bar dataKey="pending" stackId="a" fill={WARNING} name="Pending" />
-                  <Bar dataKey="nonCompliant" stackId="a" fill={DANGER} name="Non-compliant" radius={[4, 4, 0, 0]} />
+                  {QUALITY_SCORE_BANDS.map((band) => (
+                    <Bar
+                      key={band.key}
+                      dataKey={band.key}
+                      name={band.name}
+                      stackId="quality-score"
+                      fill={band.color}
+                      radius={band.key === 'nonCompliant' ? [0, 5, 5, 0] : undefined}
+                    />
+                  ))}
                 </BarChart>
               </ResponsiveContainer>
-            </ChartCard>
-          </div>
-        </div>
+            </div>
+          )}
+        </ChartCard>
 
         {/* ── Academic insights + executive recommendations ── */}
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
@@ -779,6 +914,103 @@ const AdminAnalytics = () => {
               </div>
             </ChartCard>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          <ChartCard
+            title="Archive Retention Watch"
+            subtitle="Archived scholars approaching or past the three-year retention date."
+            action={
+              <button type="button" onClick={() => navigate('/admin/archive')}
+                className="rounded-full transition-opacity hover:opacity-80"
+                style={{ ...sans, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY, background: `${PRIMARY}0F`, border: 'none', padding: '7px 12px', cursor: 'pointer' }}>
+                Open Archive
+              </button>
+            }
+          >
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { label: 'Archived', value: archiveRetention.total, color: PRIMARY },
+                { label: 'Due in 90 days', value: archiveRetention.dueSoon, color: WARNING },
+                { label: 'Past retention', value: archiveRetention.expired, color: DANGER },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl px-3 py-3" style={{ background: `${item.color}0C` }}>
+                  <p style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>{item.label}</p>
+                  <p style={{ ...serif, fontSize: '1.35rem', fontWeight: 600, color: item.color, marginTop: 3 }}>{item.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="mt-4">
+              <p style={{ ...sans, fontSize: '0.72rem', fontWeight: 700, color: MUTED, marginBottom: 4 }}>RETENTION FOLLOW-UP</p>
+              {archiveRetention.upcoming.length ? archiveRetention.upcoming.map((scholar) => (
+                <div key={scholar.id} className="flex items-center justify-between gap-3 py-2.5"
+                  style={{ borderTop: `1px solid ${BORDER}` }}>
+                  <div className="min-w-0">
+                    <p className="truncate" style={{ ...sans, fontSize: '0.8rem', fontWeight: 600, color: INK }}>{scholar.full_name}</p>
+                    <p style={{ ...sans, fontSize: '0.7rem', color: MUTED }}>{normalizeYearLevel(scholar.year_level || '—')}</p>
+                  </div>
+                  <span className="flex-shrink-0 rounded-full px-2.5 py-1"
+                    style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, color: scholar.daysRemaining < 0 ? DANGER : WARNING, background: `${scholar.daysRemaining < 0 ? DANGER : WARNING}12` }}>
+                    {scholar.daysRemaining < 0 ? `Past by ${Math.abs(scholar.daysRemaining)}d` : `In ${scholar.daysRemaining}d`}
+                  </span>
+                </div>
+              )) : (
+                <p className="py-4 text-center" style={{ ...sans, fontSize: '0.78rem', color: MUTED, borderTop: `1px solid ${BORDER}` }}>
+                  No archived scholars are due within 90 days.
+                </p>
+              )}
+            </div>
+            <p className="mt-3" style={{ ...sans, fontSize: '0.7rem', color: MUTED }}>
+              Retention dates are a review reminder; this panel does not automatically delete records.
+            </p>
+          </ChartCard>
+
+          <ChartCard
+            title="Officer Workload"
+            subtitle="Active scholars, pending letter reviews, and recent review turnaround by assignment."
+            action={
+              <button type="button" onClick={() => navigate('/admin/team-assignments')}
+                className="rounded-full transition-opacity hover:opacity-80"
+                style={{ ...sans, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY, background: `${PRIMARY}0F`, border: 'none', padding: '7px 12px', cursor: 'pointer' }}>
+                Manage Assignments
+              </button>
+            }
+          >
+            {officerWorkload.length ? (
+              <div className="max-h-[390px] overflow-y-auto">
+                <div className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto_auto] gap-3 border-b pb-2"
+                  style={{ ...sans, fontSize: '0.66rem', fontWeight: 700, color: MUTED, borderColor: BORDER }}>
+                  <span>OFFICER / YEAR LEVELS</span>
+                  <span className="text-right">SCHOLARS</span>
+                  <span className="text-right">PENDING</span>
+                  <span className="text-right">AVG. HOURS*</span>
+                </div>
+                {officerWorkload.map((officer) => (
+                  <div key={officer.id} className="grid grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)_auto_auto] items-center gap-3 py-3"
+                    style={{ borderBottom: `1px solid ${BORDER}` }}>
+                    <div className="min-w-0">
+                      <p className="truncate" style={{ ...sans, fontSize: '0.78rem', fontWeight: 700, color: INK }}>{officer.name}</p>
+                      <p className="truncate" style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>
+                        {officer.levels.length ? officer.levels.map(normalizeYearLevel).join(', ') : 'No year levels assigned'}
+                      </p>
+                    </div>
+                    <span className="text-right" style={{ ...mono, fontSize: '0.78rem', color: INK }}>{officer.activeScholars}</span>
+                    <span className="text-right" style={{ ...mono, fontSize: '0.78rem', fontWeight: 700, color: officer.pendingReviews ? WARNING : MUTED }}>{officer.pendingReviews}</span>
+                    <span className="text-right" style={{ ...mono, fontSize: '0.76rem', color: INK }}>
+                      {officer.averageReviewHours === null ? '—' : officer.averageReviewHours.toFixed(1)}
+                    </span>
+                  </div>
+                ))}
+                <p className="mt-3" style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>
+                  * Average hours for approved or rejected letters reviewed in the last 90 days. Assignment overlaps may include the same pending letter for multiple officers.
+                </p>
+              </div>
+            ) : (
+              <p className="py-8 text-center" style={{ ...sans, fontSize: '0.78rem', color: MUTED }}>
+                No active officer assignments are available.
+              </p>
+            )}
+          </ChartCard>
         </div>
 
         {/* ── Natural Language Intelligence — one card, subtle separators ── */}

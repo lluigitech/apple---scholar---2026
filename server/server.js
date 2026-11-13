@@ -273,6 +273,18 @@ const initializeDatabase = () => {
     let submissionsSchemaReady = Promise.resolve();
     let officerAssignmentsReady = Promise.resolve(false);
 
+    ensureColumns(db, 'users', {
+        archived_at: 'DATETIME DEFAULT NULL',
+    }).then(() => runQuery(db, `
+        UPDATE users
+        SET archived_at = COALESCE(updated_at, created_at, NOW())
+        WHERE role = 'scholar' AND status = 'archived' AND archived_at IS NULL
+    `)).then(() => {
+        console.log('✅ Scholar archive timestamps ensured');
+    }).catch((migrationError) => {
+        console.error('Failed to ensure scholar archive timestamps:', migrationError.message);
+    });
+
     db.query('SELECT 1', (err) => {
         if (err) console.error('❌ MySQL connection failed:', err.message);
         else console.log('✅ Connected to MySQL Database!');
@@ -640,8 +652,12 @@ const initializeDatabase = () => {
         UPDATE submission_media
         SET photo_path = COALESCE(photo_path, file_path),
             uploaded_at = COALESCE(uploaded_at, created_at),
-            retention_until = COALESCE(retention_until, DATE_ADD(COALESCE(uploaded_at, created_at), INTERVAL 5 YEAR))
+            retention_until = LEAST(
+                COALESCE(retention_until, DATE_ADD(COALESCE(uploaded_at, created_at), INTERVAL 3 YEAR)),
+                DATE_ADD(COALESCE(uploaded_at, created_at), INTERVAL 3 YEAR)
+            )
         WHERE photo_path IS NULL OR uploaded_at IS NULL OR retention_until IS NULL
+           OR retention_until > DATE_ADD(COALESCE(uploaded_at, created_at), INTERVAL 3 YEAR)
     `)).then(() => {
         console.log('✅ submission_media retention and donor approval fields ensured');
     }).catch((migrationError) => {
@@ -676,6 +692,10 @@ const initializeDatabase = () => {
                     return;
                 }
                 return runQuery(db, `
+                              UPDATE documents
+                              SET retention_until = LEAST(retention_until, DATE_ADD(uploaded_at, INTERVAL 3 YEAR))
+                              WHERE retention_until > DATE_ADD(uploaded_at, INTERVAL 3 YEAR)
+                `).then(() => runQuery(db, `
                               INSERT INTO documents (scholar_id, category, file_name, file_path, mime_type, status, uploaded_at, retention_until, source_submission_id)
                               SELECT s.scholar_id,
                                   CASE WHEN s.generated_pdf_path IS NOT NULL THEN 'monthly_letter'
@@ -689,11 +709,11 @@ const initializeDatabase = () => {
                                   COALESCE(s.generated_pdf_path, s.cor_path, s.report_card_path),
                                   CASE WHEN s.generated_pdf_path IS NOT NULL THEN 'application/pdf' ELSE NULL END,
                                   CASE s.status WHEN 'approved' THEN 'Approved' WHEN 'rejected' THEN 'Rejected' ELSE 'Pending' END,
-                                  s.submitted_at, DATE_ADD(s.submitted_at, INTERVAL 5 YEAR), s.id
+                                  s.submitted_at, DATE_ADD(s.submitted_at, INTERVAL 3 YEAR), s.id
                               FROM submissions s
                               WHERE COALESCE(s.generated_pdf_path, s.cor_path, s.report_card_path) IS NOT NULL
                                 AND NOT EXISTS (SELECT 1 FROM documents d WHERE d.source_submission_id = s.id)
-                `);
+                `));
             }).catch((backfillError) => {
                 console.error('Failed to backfill retention documents:', backfillError.message);
             });

@@ -373,6 +373,23 @@ exports.getAllUsers = (req, res) => {
     });
 };
 
+exports.getArchivedScholars = (req, res) => {
+    db.query(
+        `SELECT id, scholar_id, full_name, email, role, year_level, status, created_at,
+                archived_at, DATE_ADD(archived_at, INTERVAL 3 YEAR) AS retention_until
+         FROM users
+         WHERE role = 'scholar' AND status = 'archived'
+         ORDER BY archived_at DESC, created_at DESC`,
+        (err, data) => {
+            if (err) {
+                console.error('Failed to load archived scholars:', err);
+                return res.status(500).json({ error: 'Unable to load archived scholars.' });
+            }
+            res.json(data);
+        }
+    );
+};
+
 exports.archiveScholar = (req, res) => {
     const userId = String(req.params.id || '');
     if (!/^[1-9]\d*$/.test(userId) || !Number.isSafeInteger(Number(userId))) {
@@ -380,7 +397,7 @@ exports.archiveScholar = (req, res) => {
     }
 
     db.query(
-        'SELECT id, scholar_id, full_name, role, status FROM users WHERE id = ? LIMIT 1',
+        'SELECT id, scholar_id, full_name, role, status, archived_at FROM users WHERE id = ? LIMIT 1',
         [userId],
         (lookupError, rows) => {
             if (lookupError) {
@@ -402,11 +419,22 @@ exports.archiveScholar = (req, res) => {
             };
 
             if (String(scholar.status || '').toLowerCase() === 'archived') {
-                return respondArchived();
+                if (scholar.archived_at) return respondArchived();
+                return db.query(
+                    "UPDATE users SET archived_at = NOW() WHERE id = ? AND role = 'scholar' AND status = 'archived' AND archived_at IS NULL",
+                    [userId],
+                    (timestampError) => {
+                        if (timestampError) {
+                            console.error('Failed to set legacy scholar archive date:', timestampError);
+                            return res.status(500).json({ error: 'Unable to set scholar archive date.' });
+                        }
+                        respondArchived();
+                    }
+                );
             }
 
             db.query(
-                "UPDATE users SET status = 'archived' WHERE id = ? AND role = 'scholar'",
+                "UPDATE users SET status = 'archived', archived_at = NOW() WHERE id = ? AND role = 'scholar'",
                 [userId],
                 async (updateError, result) => {
                     if (updateError) {
@@ -445,6 +473,36 @@ exports.archiveScholar = (req, res) => {
                     respondArchived();
                 }
             );
+        }
+    );
+};
+
+exports.restoreScholar = (req, res) => {
+    const userId = String(req.params.id || '');
+    if (!/^[1-9]\d*$/.test(userId) || !Number.isSafeInteger(Number(userId))) {
+        return res.status(400).json({ error: 'A valid scholar user ID is required.' });
+    }
+
+    db.query(
+        `UPDATE users
+         SET status = 'active', archived_at = NULL
+         WHERE id = ? AND role = 'scholar' AND status = 'archived'`,
+        [userId],
+        async (err, result) => {
+            if (err) {
+                console.error('Failed to restore scholar:', err);
+                return res.status(500).json({ error: 'Unable to restore scholar.' });
+            }
+            if (!result.affectedRows) return res.status(404).json({ error: 'Archived scholar not found.' });
+
+            await logAuditEvent({
+                req,
+                action: 'restore',
+                module: 'User Management',
+                details: `Restored scholar account ${userId}`,
+                result: 'success',
+            });
+            res.json({ message: 'Scholar restored successfully.', userId: Number(userId) });
         }
     );
 };
