@@ -11,22 +11,12 @@ import AdminPageHeader from '../../../components/Admin/AdminPageHeader';
 const API = `${API_ORIGIN}/api`;
 
 /* ════════════════════════════════════════════════════════════════
-   SCHOLAR ARCHIVE — BACKEND CONTRACT (EDIT THIS BLOCK ONLY)
-   I could not see the backend, so nothing here is invented as fact.
-   Point these at the endpoints User Management already uses for
-   "Archive Scholar". Anything left null shows a clear message
-   instead of calling a made-up URL.
+   SCHOLAR ARCHIVE API
    ════════════════════════════════════════════════════════════════ */
 const SCHOLAR_API = {
-    // Existing user list endpoint (named in the spec). Archived scholars are
-    // picked out client-side by isArchivedScholar() below.
-    list: `${API}/admin/users`,
-    // VERIFY: the restore call User Management uses, e.g. (id) => ({ method: 'put', url: `${API}/admin/users/${id}/...` })
-    restore: null,
-    // VERIFY: scholar profile / history endpoint, e.g. (id) => `${API}/...`
+    list: `${API}/admin/archive/scholars`,
+    restore: (id) => ({ url: `${API}/admin/users/${id}/restore` }),
     detail: null,
-    // Existing endpoint already used by the Analytics Dashboard: one row per scholar with `completionRate`.
-    // Used ONLY to attach a compliance status to archived scholars (see complianceFor() below).
     complianceSummary: `${API}/admin/reports/compliance-summary`,
 };
 
@@ -42,7 +32,7 @@ const isArchivedScholar = (u) => {
 };
 const normalizeScholar = (u) => {
     const archivedAt = pick(u, ['archived_at', 'archivedAt', 'date_archived']);
-    const retention = pick(u, ['retention_until', 'retentionUntil']) || (archivedAt ? addYears(archivedAt, 5) : null);
+    const retention = pick(u, ['retention_until', 'retentionUntil']) || (archivedAt ? addYears(archivedAt, 3) : null);
     return {
         id: u.id,
         name: pick(u, ['full_name', 'name', 'scholar_name']) || [u.first_name, u.last_name].filter(Boolean).join(' ') || null,
@@ -487,11 +477,6 @@ export default function ArchiveManagement() {
     };
 
     const confirmRestore = async () => {
-        if (!SCHOLAR_API.restore) {
-            setRestoring(null);
-            setError('Scholar restore is not connected yet. Set SCHOLAR_API.restore to the endpoint User Management uses.');
-            return;
-        }
         setRestoreBusy(true); setError(''); setMessage('');
         try {
             const { method = 'put', url, data = {} } = SCHOLAR_API.restore(restoring.id);
