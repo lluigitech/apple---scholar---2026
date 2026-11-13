@@ -61,10 +61,10 @@ const roleStyles = {
 };
 
 const ROLE_OPTIONS = [
-  { value: 'all',     label: 'Everyone' },
+  { value: 'all',     label: 'Admin, Staff & Officer' },
+  { value: 'admin',   label: 'Admin'    },
   { value: 'staff',   label: 'Staff'    },
   { value: 'officer', label: 'Officer'  },
-  { value: 'admin',   label: 'Admin'    },
 ];
 
 const ACTIVITY_TYPES = [
@@ -217,7 +217,7 @@ const SecurityAuditLogs = ({ embedded = false }) => {
       try {
         const res = await axios.get(`${API}/export/preview`, {
           ...getAuthHeaders(),
-          params: { type: 'audit' },
+          params: { type: 'audit', roles: 'admin,staff,officer' },
         });
 
         if (res.data?.success && Array.isArray(res.data.data)) {
@@ -254,7 +254,7 @@ const SecurityAuditLogs = ({ embedded = false }) => {
     if (privacyLogsPage > 1) setPrivacyLoadingMore(true);
     axios.get(`${API}/admin/privacy/logs`, {
       ...getAuthHeaders(),
-      params: { page: privacyLogsPage, pageSize: PRIVACY_PAGE_SIZE },
+      params: { page: privacyLogsPage, pageSize: PRIVACY_PAGE_SIZE, roles: 'admin,staff,officer' },
     }).then(({ data }) => {
       if (!mounted) return;
       const rows = data.data || [];
@@ -319,7 +319,8 @@ const SecurityAuditLogs = ({ embedded = false }) => {
     return unified.filter((entry) => {
       const searchMatch = !term || [entry.userName, entry.userId, entry.resource, entry.resourceId, entry.details].some((f) => (f || '').toLowerCase().includes(term));
       const typeMatch = activityType === 'all' || entry.activityType === activityType;
-      const roleMatch = roleFilter === 'all' || entry.role === roleFilter;
+      const inScope = entry.role === 'admin' || entry.role === 'staff' || entry.role === 'officer';
+      const roleMatch = inScope && (roleFilter === 'all' || entry.role === roleFilter);
       const actionMatch = actionFilter === 'all' || entry.action === actionFilter;
       const resultMatch = resultFilter === 'all' || entry.result === resultFilter;
       return searchMatch && typeMatch && roleMatch && actionMatch && resultMatch;

@@ -11,7 +11,6 @@ import AdminReports from './pages/Admin/AdminReports';
 import AdminAnnouncement from './pages/Admin/AdminAnnouncement';
 import ComplianceManager from './pages/Admin/SettingsComponent/ComplianceManager';
 import BackupRecovery from './pages/Admin/SettingsComponent/BackupRecovery';
-import NotificationManager from './pages/Admin/AdminNotification';
 import SecurityAuditLogs from './pages/Admin/SettingsComponent/SecurityAuditLogs';
 import ArchiveManagement from './pages/Admin/SettingsComponent/ArchiveManagement';
 import UserManagement from './pages/Admin/UserManagement';
@@ -141,7 +140,7 @@ function App() {
           } />
           <Route path="/admin/notifications" element={
             <ProtectedRoute allowedRoles="admin">
-              <AdminLayout><NotificationManager /></AdminLayout>
+              <Navigate to="/admin/settings?tab=notifications" replace />
             </ProtectedRoute>
           } />
           <Route path="/admin/reports" element={

@@ -29,6 +29,7 @@ const getFilters = (query) => ({
   date_to:    query.date_to    || null,
   month:      query.month      || null,
   year_level: query.year_level || null,
+  roles: query.roles ? String(query.roles).split(',').map((role) => role.trim().toLowerCase()) : null,
 });
 
 const getReportData = async (type, filters) => {

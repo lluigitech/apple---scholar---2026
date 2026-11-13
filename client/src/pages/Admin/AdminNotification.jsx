@@ -64,7 +64,7 @@ const StatusRow = ({ icon: Icon, label, value, color, isLast }) => (
     </div>
 );
 
-const AdminNotification = () => {
+const AdminNotification = ({ embedded = false }) => {
     const [gmailStatus, setGmailStatus] = useState('Loading...');
     const [loadingGmail, setLoadingGmail] = useState(false);
     const [testEmail, setTestEmail] = useState('');
@@ -126,8 +126,8 @@ const AdminNotification = () => {
 
     if (isCheckingStatus) {
         return (
-            <div className="min-h-screen" style={{ background: BG, ...sans }}>
-                <div className="w-full px-4 sm:px-6 lg:px-8">
+            <div className={embedded ? '' : 'min-h-screen'} style={{ background: embedded ? 'transparent' : BG, ...sans }}>
+                <div className={embedded ? 'w-full' : 'w-full px-4 sm:px-6 lg:px-8'}>
                     <div className="animate-pulse h-3 w-28 rounded-full mb-4" style={{ background: `${BRONZE}30` }} />
                     <div className="animate-pulse h-8 w-72 rounded-lg mb-8" style={{ background: `${PRIMARY}14` }} />
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
@@ -141,13 +141,21 @@ const AdminNotification = () => {
     }
 
     return (
-        <div className="min-h-screen" style={{ background: BG, ...sans }}>
-            <div className="w-full px-4 sm:px-6 lg:px-8" style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div className={embedded ? '' : 'min-h-screen'} style={{ background: embedded ? 'transparent' : BG, ...sans }}>
+            <div className={embedded ? 'w-full' : 'w-full px-4 sm:px-6 lg:px-8'} style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
 
-                <AdminPageHeader
-                    title="Notification Center"
-                    description="Monitor the institutional Gmail transporter and dispatch official email notifications securely."
-                    actions={
+                {embedded ? (
+                    <div>
+                        <h2 style={{ ...serif, fontSize: '1.2rem', fontWeight: 700, color: INK }}>Email Delivery</h2>
+                        <p style={{ ...sans, fontSize: '0.82rem', color: MUTED, marginTop: 4 }}>
+                            Check the Gmail connection and send a test email to verify delivery.
+                        </p>
+                    </div>
+                ) : (
+                    <AdminPageHeader
+                        title="Email Delivery"
+                        description="Check the Gmail connection and send a test email to verify delivery."
+                        actions={
                     <div className="flex flex-wrap gap-3 flex-shrink-0">
                         <div className="px-4 py-3 rounded-2xl" style={{ background: SURFACE, border: `1px solid ${BORDER}`, minWidth: 150 }}>
                             <p style={{ ...sans, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED }}>Gmail Status</p>
@@ -160,6 +168,7 @@ const AdminNotification = () => {
                     </div>
                         }
                     />
+                )}
 
                 {/* ── System health KPI row ── */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

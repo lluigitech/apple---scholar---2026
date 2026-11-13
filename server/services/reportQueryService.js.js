@@ -316,6 +316,11 @@ const getDonorScholarReport = async ({ scholar_id, month }) => {
 const getAuditReport = async (filters) => {
   const conditions = [];
   const values = [];
+  const roles = Array.isArray(filters.roles)
+    ? [...new Set(filters.roles.filter((role) => ['admin', 'staff', 'officer'].includes(role)))]
+    : null;
+
+  if (roles && roles.length === 0) return [];
 
   if (filters.scholar_id) {
     conditions.push('al.user_id = ?');
@@ -328,6 +333,10 @@ const getAuditReport = async (filters) => {
   if (filters.date_to) {
     conditions.push('DATE(al.created_at) <= ?');
     values.push(filters.date_to);
+  }
+  if (roles) {
+    conditions.push(`u.role IN (${roles.map(() => '?').join(', ')})`);
+    values.push(...roles);
   }
 
   const [rows] = await promiseDb.query(

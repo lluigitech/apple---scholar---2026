@@ -83,27 +83,31 @@ exports.updateSettings = async (req, res) => {
 exports.getAccessLogs = async (req, res) => {
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     const pageSize = Math.min(100, Math.max(1, Number.parseInt(req.query.pageSize, 10) || 25));
-    const conditions = [];
-    const values = [];
+    const conditions = ['logs.user_role IN (?, ?, ?)'];
+    const values = ['admin', 'staff', 'officer'];
 
     for (const key of ['status', 'action', 'role']) {
         const value = req.query[key];
         if (!value || value === 'all') continue;
-        conditions.push(key === 'role' ? 'user_role = ?' : `${key} = ?`);
+        conditions.push(key === 'role' ? 'logs.user_role = ?' : `logs.${key} = ?`);
         values.push(String(value).slice(0, 64));
     }
     if (req.query.search) {
         const search = `%${String(req.query.search).slice(0, 100)}%`;
-        conditions.push('(action LIKE ? OR resource_type LIKE ? OR resource_id LIKE ?)');
+        conditions.push('(logs.action LIKE ? OR logs.resource_type LIKE ? OR logs.resource_id LIKE ?)');
         values.push(search, search, search);
     }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     try {
-        const countRows = await query(`SELECT COUNT(*) AS total FROM privacy_access_logs ${where}`, values);
+        const countRows = await query(`SELECT COUNT(*) AS total FROM privacy_access_logs AS logs ${where}`, values);
         const rows = await query(
-            `SELECT id, user_id, user_role, action, resource_type, resource_id, status, ip_address, created_at
-             FROM privacy_access_logs ${where}
-             ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`,
+            `SELECT logs.id, logs.user_id, users.full_name AS user_name, logs.user_role,
+                    logs.action, logs.resource_type, logs.resource_id, logs.status,
+                    logs.ip_address, logs.created_at
+             FROM privacy_access_logs AS logs
+             LEFT JOIN users ON users.id = logs.user_id
+             ${where}
+             ORDER BY logs.created_at DESC, logs.id DESC LIMIT ? OFFSET ?`,
             [...values, pageSize, (page - 1) * pageSize]
         );
         res.json({ data: rows, page, pageSize, total: Number(countRows[0]?.total || 0) });

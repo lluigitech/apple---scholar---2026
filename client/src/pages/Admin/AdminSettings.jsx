@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   Bell, CalendarCheck, Check, ChevronRight, ClipboardCheck, Database, Eye, FileText, Globe, GraduationCap, Info, Lock, Mail, MessageSquare, Monitor, RefreshCw,
@@ -7,6 +8,7 @@ import {
 import ComplianceManager from './SettingsComponent/ComplianceManager';
 import BackupRecovery from './SettingsComponent/BackupRecovery';
 import SecurityAuditLogs from './SettingsComponent/SecurityAuditLogs';
+import AdminNotification from './AdminNotification';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
 const STORAGE_KEY = 'admin-system-settings';
@@ -41,6 +43,7 @@ const display = { fontFamily: "'Playfair Display', Georgia, serif" };
 
 const TABS = [
   ['general', 'General', Settings],
+  ['notifications', 'Notifications', Bell],
   ['compliance', 'Compliance', ShieldCheck],
   ['backup', 'Backup & Recovery', Database],
   ['security', 'Security Audit', FileText],
@@ -305,7 +308,10 @@ const ChangePasswordDialog = ({ onClose, onChanged }) => {
 };
 
 const AdminSettings = () => {
-  const [activeTab, setActiveTab] = useState('general');
+  const [searchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState(() => (
+    searchParams.get('tab') === 'notifications' ? 'notifications' : 'general'
+  ));
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
   const [initialState] = useState(() => {
@@ -817,6 +823,7 @@ const AdminSettings = () => {
         )}
 
         {activeTab === 'compliance' && <ComplianceManager embedded />}
+        {activeTab === 'notifications' && <AdminNotification embedded />}
         {activeTab === 'backup' && <BackupRecovery embedded />}
         {activeTab === 'security' && <SecurityAuditLogs embedded />}
       </div>

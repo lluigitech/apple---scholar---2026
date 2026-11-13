@@ -4,7 +4,7 @@ import axios from 'axios';
 import {
     LayoutDashboard, Users, Megaphone, ClipboardList,
     FilePieChart, LogOut, X,
-    Bell, BarChart3,
+    BarChart3,
     Archive, Settings, AlertTriangle, Network, CalendarDays,
 } from 'lucide-react';
 import appleLogo from '../../assets/logo/applelogo.png';
@@ -64,7 +64,6 @@ const AdminSidebar = ({ isOpen, onClose, collapsed = false }) => {
             group: 'Communications',
             items: [
                 { name: 'Announcements', path: '/admin/announcements', icon: Megaphone },
-                { name: 'Notifications', path: '/admin/notifications', icon: Bell },
             ],
         },
         {
