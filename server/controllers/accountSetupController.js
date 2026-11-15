@@ -1,6 +1,7 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 const { logAuditEvent } = require('../utils/auditLogger');
+const { isValidPassword, PASSWORD_REQUIREMENTS_ERROR } = require('../utils/passwordPolicy');
 
 const ALLOWED_ROLES = new Set(['admin', 'staff', 'officer']);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -62,8 +63,11 @@ exports.completeSetup = async (req, res) => {
     if (!phone || phone.length > 64) {
         return res.status(400).json({ error: 'Phone number is required and must not exceed 64 characters.' });
     }
-    if (!body.current_password || body.new_password.length < 8) {
-        return res.status(400).json({ error: 'Enter your current password and a new password of at least 8 characters.' });
+    if (!body.current_password) {
+        return res.status(400).json({ error: 'Enter your current password.' });
+    }
+    if (!isValidPassword(body.new_password)) {
+        return res.status(400).json({ error: PASSWORD_REQUIREMENTS_ERROR });
     }
     if (body.current_password === body.new_password) {
         return res.status(400).json({ error: 'Your new password must be different from your temporary password.' });

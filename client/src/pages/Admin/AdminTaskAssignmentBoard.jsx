@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, Calendar, ClipboardList, Clock3,
-  Plus, RefreshCw, Users, UserX, X, Search, MoreHorizontal, ChevronLeft,
+  Plus, Users, UserX, X, Search, MoreHorizontal, Pencil, ChevronLeft,
   ChevronRight, ChevronDown, FilterX,
 } from 'lucide-react';
 import { formatAdminDate } from '../../utils/adminPreferences';
@@ -16,6 +16,16 @@ const LEVELS = [
   'Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12',
   'College 1', 'College 2', 'College 3', 'College 4', 'College 5',
 ];
+const parseTargetYearLevels = (value) => {
+  if (Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
 const GRADE_LEVELS = LEVELS.slice(0, 6);
 const COLLEGE_LEVELS = LEVELS.slice(6);
 const TYPES = ['Monthly Report', 'Report Card', 'COR Upload', 'Other Documents'];
@@ -291,10 +301,9 @@ const AdminTaskAssignmentBoard = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
   const [menu, setMenu] = useState(null); // { task, top, right } for the row-actions dropdown
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [now, setNow] = useState(Date.now());
-  const [form, setForm] = useState({ title: '', type: TYPES[0], dueDate: '', recurring: 'None', instructions: '', targetYearLevels: [] });
+  const [form, setForm] = useState({ title: '', type: TYPES[0], dueDate: '', instructions: '', targetYearLevels: [] });
 
   // UI-only: client-side filters + pagination over the already-loaded
   // `tasks` array. None of this touches the API or task data shape.
@@ -309,8 +318,8 @@ const AdminTaskAssignmentBoard = () => {
   const completedTasks = tasks.filter((task) => getTaskStatus(task) === 'completed');
   const upcomingTasks = tasks.filter((task) => isUpcoming(task.due_date));
 
-  const loadTasks = async () => {
-    setLoading(true);
+  const loadTasks = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       const [response, progressResponse] = await Promise.all([
@@ -328,27 +337,32 @@ const AdminTaskAssignmentBoard = () => {
         progress_total: progressByTaskId.get(String(task.id))?.total ?? 0,
         progress_submitted: progressByTaskId.get(String(task.id))?.submitted ?? 0,
       })));
-      setLastUpdated(new Date());
-      setNow(Date.now());
     } catch (loadError) {
       setError(loadError.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
-
-  useEffect(() => { loadTasks(); }, []);
-
-  // Keeps the "Last updated" label fresh.
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(timer);
   }, []);
+
+  // Keep the task list and accepted progress current without a manual refresh.
+  useEffect(() => {
+    loadTasks();
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === 'visible') loadTasks(true);
+    }, 30000);
+    return () => window.clearInterval(timer);
+  }, [loadTasks]);
 
   // Close the modal with the Escape key, and lock background scroll while open.
   useEffect(() => {
     if (!showCreate) return undefined;
-    const onKeyDown = (e) => { if (e.key === 'Escape') setShowCreate(false); };
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        setShowCreate(false);
+        setEditingTask(null);
+        setError('');
+      }
+    };
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKeyDown);
@@ -379,7 +393,46 @@ const AdminTaskAssignmentBoard = () => {
     }));
   };
 
-  const createTask = async (event) => {
+  const toggleAllLevels = () => {
+    setForm((current) => ({
+      ...current,
+      targetYearLevels: LEVELS.every((level) => current.targetYearLevels.includes(level))
+        ? []
+        : [...LEVELS],
+    }));
+  };
+
+  const openCreateTask = () => {
+    setEditingTask(null);
+    setForm({ title: '', type: TYPES[0], dueDate: '', instructions: '', targetYearLevels: [] });
+    setError('');
+    setShowCreate(true);
+  };
+
+  const openEditTask = (task) => {
+    const dueDate = task.due_date
+      ? String(task.due_date).slice(0, 10)
+      : '';
+    setEditingTask(task);
+    setForm({
+      title: task.title || '',
+      type: task.type || TYPES[0],
+      dueDate,
+      instructions: task.instructions || '',
+      targetYearLevels: parseTargetYearLevels(task.target_year_levels),
+    });
+    setError('');
+    setMenu(null);
+    setShowCreate(true);
+  };
+
+  const closeTaskDialog = () => {
+    setShowCreate(false);
+    setEditingTask(null);
+    setError('');
+  };
+
+  const submitTask = async (event) => {
     event.preventDefault();
     if (!form.title.trim() || !form.targetYearLevels.length) {
       setError('Enter a task title and select at least one year level.');
@@ -388,15 +441,24 @@ const AdminTaskAssignmentBoard = () => {
     setSaving(true);
     setError('');
     try {
-      const response = await fetch(`${API_BASE}/tasks`, {
-        method: 'POST',
+      const taskPayload = {
+        ...form,
+        title: form.title.trim(),
+        recurring: editingTask?.recurring || null,
+      };
+      const response = await fetch(
+        editingTask ? `${API_BASE}/tasks/${editingTask.id}` : `${API_BASE}/tasks`,
+        {
+        method: editingTask ? 'PUT' : 'POST',
         headers: headers(),
-        body: JSON.stringify({ ...form, title: form.title.trim() }),
-      });
+        body: JSON.stringify(taskPayload),
+        }
+      );
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Unable to create task');
-      setForm({ title: '', type: TYPES[0], dueDate: '', recurring: 'None', instructions: '', targetYearLevels: [] });
+      if (!response.ok) throw new Error(result.error || `Unable to ${editingTask ? 'update' : 'create'} task`);
+      setForm({ title: '', type: TYPES[0], dueDate: '', instructions: '', targetYearLevels: [] });
       setShowCreate(false);
+      setEditingTask(null);
       await loadTasks();
     } catch (saveError) {
       setError(saveError.message);
@@ -423,7 +485,7 @@ const AdminTaskAssignmentBoard = () => {
         || officers.some((name) => (name || '').toLowerCase().includes(q));
       const matchesType = typeFilter === 'all' || task.type === typeFilter;
       const matchesStatus = statusFilter === 'all' || getTaskStatus(task) === statusFilter;
-      const levels = Array.isArray(task.target_year_levels) ? task.target_year_levels : [];
+      const levels = parseTargetYearLevels(task.target_year_levels);
       const matchesLevel = levelFilter === 'all' || levels.includes(levelFilter);
       return matchesSearch && matchesType && matchesStatus && matchesLevel;
     });
@@ -440,14 +502,6 @@ const AdminTaskAssignmentBoard = () => {
     setSearch(''); setTypeFilter('all'); setStatusFilter('all'); setLevelFilter('all');
   };
 
-  const updatedLabel = (() => {
-    if (!lastUpdated) return 'Updating…';
-    const minutes = Math.floor((now - lastUpdated.getTime()) / 60000);
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes} min ago`;
-    return lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  })();
-
   const columns = ['#', 'Task', 'Requirement', 'Due Date', 'Assigned Year Levels', 'Assigned Officers', 'Progress', 'Status', 'Actions'];
 
   return (
@@ -459,16 +513,8 @@ const AdminTaskAssignmentBoard = () => {
           description="Create tasks, distribute requirements by year level, and monitor officer assignments."
           actions={
             <div className="flex items-center gap-4 flex-wrap">
-            <div style={{ textAlign: 'right', paddingRight: 16, borderRight: `1px solid ${colors.border}` }}>
-              <p style={{ ...body, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: colors.muted }}>Last updated</p>
-              <p style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: colors.ink, marginTop: 2 }}>{updatedLabel}</p>
-            </div>
             <div className="flex items-center gap-2.5">
-              <button type="button" onClick={loadTasks} title="Refresh tasks" className="at-ghost flex items-center gap-2"
-                style={{ border: `1px solid ${colors.border}`, background: colors.surface, color: colors.ink, borderRadius: 10, padding: '9px 14px', ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(36,21,18,0.06)' }}>
-                <RefreshCw size={14} /> Refresh
-              </button>
-              <button type="button" onClick={() => setShowCreate(true)} className="at-primary flex items-center gap-2"
+              <button type="button" onClick={openCreateTask} className="at-primary flex items-center gap-2"
                 style={{ border: 0, background: colors.primary, color: '#fff', borderRadius: 10, padding: '10px 18px', ...body, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
                 <Plus size={15} /> Create Task
               </button>
@@ -572,10 +618,6 @@ const AdminTaskAssignmentBoard = () => {
                   <FilterX size={13} /> Clear Filters
                 </button>
               )}
-              <button type="button" onClick={loadTasks} className="at-ghost flex items-center gap-1.5"
-                style={{ border: `1px solid ${colors.border}`, background: colors.surface, color: colors.ink, borderRadius: 9, padding: '7px 12px', ...body, fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer' }}>
-                <RefreshCw size={13} /> Refresh
-              </button>
             </div>
           </div>
         </div>
@@ -597,7 +639,7 @@ const AdminTaskAssignmentBoard = () => {
 
           {!loading && filteredTasks.length === 0 ? (
             tasks.length === 0
-              ? <EmptyState onCreate={() => setShowCreate(true)} />
+              ? <EmptyState onCreate={openCreateTask} />
               : (
                 <div className="flex flex-col items-center justify-center text-center" style={{ padding: '48px 20px' }}>
                   <p style={{ ...body, fontSize: '0.86rem', fontWeight: 600, color: colors.ink }}>No tasks match your filters</p>
@@ -621,7 +663,7 @@ const AdminTaskAssignmentBoard = () => {
                     const status = getTaskStatus(task);
                     const rowNumber = (currentPage - 1) * PAGE_SIZE + idx + 1;
                     const officers = Array.isArray(task.assigned_officer_names) ? task.assigned_officer_names : [];
-                    const levels = Array.isArray(task.target_year_levels) ? task.target_year_levels : [];
+                    const levels = parseTargetYearLevels(task.target_year_levels);
                     const createdBy = getCreatedBy(task);
                     const cell = { padding: '16px', verticalAlign: 'middle', background: colors.surface, borderTop: idx === 0 ? 'none' : `1px solid ${colors.border}`, transition: 'background .15s ease' };
                     return (
@@ -706,6 +748,15 @@ const AdminTaskAssignmentBoard = () => {
             <button
               type="button"
               role="menuitem"
+              onClick={() => openEditTask(menu.task)}
+              className="at-ghost flex w-full items-center gap-2 text-left"
+              style={{ padding: '10px 14px', border: 'none', background: 'none', color: colors.ink, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+            >
+              <Pencil size={14} /> Edit Task
+            </button>
+            <button
+              type="button"
+              role="menuitem"
               onClick={() => { const target = menu.task; setMenu(null); deleteTask(target); }}
               className="at-ghost w-full text-left"
               style={{ padding: '10px 14px', border: 'none', background: 'none', color: colors.danger, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
@@ -721,10 +772,10 @@ const AdminTaskAssignmentBoard = () => {
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4"
           style={{ background: 'rgba(36,21,18,0.45)' }}
-          onClick={() => setShowCreate(false)}
+          onClick={closeTaskDialog}
         >
           <form
-            onSubmit={createTask}
+            onSubmit={submitTask}
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -748,10 +799,10 @@ const AdminTaskAssignmentBoard = () => {
 
             <div className="flex items-start justify-between gap-4" style={{ position: 'relative', padding: '24px 26px 18px', borderBottom: `1px solid ${colors.border}` }}>
               <div>
-                <h2 id="create-task-title" style={{ ...display, fontSize: '1.4rem', fontWeight: 700, color: colors.ink }}>Create Task Assignment</h2>
-                <p style={{ ...body, fontSize: '0.8rem', color: colors.muted, marginTop: 4 }}>Set up a new task and distribute it to specific year levels.</p>
+                <h2 id="create-task-title" style={{ ...display, fontSize: '1.4rem', fontWeight: 700, color: colors.ink }}>{editingTask ? 'Edit Task Assignment' : 'Create Task Assignment'}</h2>
+                <p style={{ ...body, fontSize: '0.8rem', color: colors.muted, marginTop: 4 }}>{editingTask ? 'Update task details and assigned year levels.' : 'Set up a new task and distribute it to specific year levels.'}</p>
               </div>
-              <button type="button" onClick={() => setShowCreate(false)} aria-label="Close" className="at-action" style={{ border: `1px solid ${colors.border}`, background: colors.surface, color: colors.muted, borderRadius: 9, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+              <button type="button" onClick={closeTaskDialog} aria-label="Close" className="at-action" style={{ border: `1px solid ${colors.border}`, background: colors.surface, color: colors.muted, borderRadius: 9, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                 <X size={16} />
               </button>
             </div>
@@ -785,13 +836,6 @@ const AdminTaskAssignmentBoard = () => {
                   </div>
                 </div>
 
-                <div>
-                  <label htmlFor="task-recurring" style={fieldLabel}>RECURRING</label>
-                  <select id="task-recurring" className="at-field" value={form.recurring} onChange={(event) => setForm({ ...form, recurring: event.target.value })} style={{ ...input, cursor: 'pointer' }}>
-                    <option>None</option><option>Monthly</option><option>Quarterly</option><option>Semestral</option><option>Annual</option>
-                  </select>
-                  <p style={{ color: colors.muted, fontSize: '0.7rem', marginTop: 5, ...body }}>Set if this task should automatically repeat.</p>
-                </div>
               </div>
 
               <div style={{ height: 1, background: colors.border, margin: '22px 0' }} />
@@ -799,6 +843,15 @@ const AdminTaskAssignmentBoard = () => {
               {/* ASSIGNMENT */}
               <SectionLabel>Assignment</SectionLabel>
               <label style={fieldLabel}>DISTRIBUTE TO YEAR LEVELS *</label>
+              <label className="flex items-center gap-2" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: colors.primary, border: `1px solid ${colors.primary}`, background: `${colors.primary}0f`, borderRadius: 9, padding: '9px 10px', marginBottom: 8, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={LEVELS.every((level) => form.targetYearLevels.includes(level))}
+                  onChange={toggleAllLevels}
+                  style={{ accentColor: colors.primary }}
+                />
+                All Year Levels
+              </label>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2" style={{ marginBottom: 8 }}>
                 {GRADE_LEVELS.map((level) => (
                   <LevelOption key={level} level={level} checked={form.targetYearLevels.includes(level)} onToggle={toggleLevel} />
@@ -810,7 +863,7 @@ const AdminTaskAssignmentBoard = () => {
                 ))}
               </div>
               <div className="flex items-center justify-between gap-3 flex-wrap" style={{ marginTop: 12 }}>
-                <p style={{ color: colors.muted, fontSize: '0.7rem', maxWidth: 340, ...body }}>Each selected level is automatically routed to the officers configured in Team Assignments.</p>
+                <p style={{ color: colors.muted, fontSize: '0.7rem', maxWidth: 340, ...body }}>Selected levels route to configured officers. Levels without an assigned officer are skipped.</p>
                 <span style={{ ...body, fontSize: '0.74rem', fontWeight: 600, color: form.targetYearLevels.length > 0 ? colors.primary : colors.muted, background: form.targetYearLevels.length > 0 ? `${colors.primary}0f` : colors.bg, border: `1px solid ${form.targetYearLevels.length > 0 ? `${colors.primary}2b` : colors.border}`, borderRadius: 8, padding: '4px 10px', whiteSpace: 'nowrap' }}>
                   Selected: {pluralize(form.targetYearLevels.length, 'year level')}
                 </span>
@@ -828,9 +881,9 @@ const AdminTaskAssignmentBoard = () => {
             </div>
 
             <div className="flex justify-end gap-2" style={{ position: 'sticky', bottom: 0, padding: '16px 26px', borderTop: `1px solid ${colors.border}`, background: colors.bg, borderRadius: '0 0 18px 18px' }}>
-              <button type="button" onClick={() => setShowCreate(false)} className="at-ghost" style={{ padding: '10px 16px', border: `1px solid ${colors.border}`, borderRadius: 10, background: colors.surface, color: colors.primary, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button type="button" onClick={closeTaskDialog} className="at-ghost" style={{ padding: '10px 16px', border: `1px solid ${colors.border}`, borderRadius: 10, background: colors.surface, color: colors.primary, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
               <button type="submit" disabled={saving} className="at-primary" style={{ padding: '10px 20px', border: 0, borderRadius: 10, background: colors.primary, color: '#fff', ...body, fontSize: '0.8rem', fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.75 : 1, boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
-                {saving ? 'Creating assignment…' : 'Create and Assign'}
+                {saving ? (editingTask ? 'Saving changes…' : 'Creating assignment…') : (editingTask ? 'Save Changes' : 'Create and Assign')}
               </button>
             </div>
           </form>

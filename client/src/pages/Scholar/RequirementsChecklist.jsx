@@ -284,7 +284,7 @@ const RequirementsChecklist = () => {
             {/* ── Compliance overview: KPI cards ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" style={{ marginBottom: 20 }}>
               <KpiCard icon={ClipboardList} label="Assigned Tasks" value={mappedPortalTasks.length} description="from Officer/Admin" accent={PRIMARY} />
-              <KpiCard icon={CheckCircle2} label="Completed" value={completedTasks.length} description="duties + tasks accepted" accent={SUCCESS} />
+              <KpiCard icon={CheckCircle2} label="Completed" value={completedTasks.length} description="duties + on-time submissions" accent={SUCCESS} />
               <KpiCard icon={Clock3} label="Pending" value={pendingTasks.length} description={`${pendingDutyCount} duties awaiting`} accent={WARNING} />
               <KpiCard icon={XCircle} label="Missed" value={missedTasks.length} description={`${missedDutyCount} duties missed`} accent={DANGER} />
             </div>
@@ -338,6 +338,11 @@ const RequirementsChecklist = () => {
                 {activeList.map((task) => {
                   const badge = badgeForStatus(task.status);
                   const { Icon: StatusIcon, color: statusColor } = getStatusIcon(task.status);
+                  const reviewBadge = task.reviewStatus === 'pending_review'
+                    ? { text: 'Pending Review', color: WARNING }
+                    : task.reviewStatus === 'returned'
+                      ? { text: 'Returned for Revision', color: DANGER }
+                      : null;
                   const showOpen = task.route && !task.done && task.status !== 'completed' && (
                     (!['closed', 'missed', 'missing'].includes(task.status)) || task.type === 'Duty Participation'
                   );
@@ -388,10 +393,20 @@ const RequirementsChecklist = () => {
                           <span style={{ ...body, fontSize: '0.74rem', fontWeight: 600, color: badge.color, background: `${badge.color}14`, border: `1px solid ${badge.color}30`, borderRadius: 999, padding: '4px 12px', whiteSpace: 'nowrap' }}>
                             {badge.text}
                           </span>
+                          {['closed', 'completed'].includes(task.status) && reviewBadge && (
+                            <span style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: reviewBadge.color, background: `${reviewBadge.color}14`, border: `1px solid ${reviewBadge.color}30`, borderRadius: 999, padding: '4px 10px', whiteSpace: 'nowrap' }}>
+                              {reviewBadge.text}
+                            </span>
+                          )}
                           {task.dueDate && (
                             <p className="flex items-center gap-1.5" style={{ ...body, fontSize: '0.74rem', color: MUTED }}>
                               <CalendarDays size={12} style={{ flexShrink: 0 }} />
                               Due {formatDate(task.dueDate)}
+                            </p>
+                          )}
+                          {task.status === 'closed' && (
+                            <p style={{ ...body, fontSize: '0.68rem', color: DANGER, textAlign: 'right' }}>
+                              Late submissions are not accepted.
                             </p>
                           )}
                           {showOpen && (

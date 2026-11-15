@@ -45,6 +45,7 @@ const STATUS_CONFIG = {
     approved: { label: 'Approved',              color: SUCCESS, Icon: CheckCircle },
     rejected: { label: 'Returned for Revision',  color: DANGER,  Icon: XCircle },
     returned: { label: 'Returned for Revision',  color: DANGER,  Icon: XCircle },
+    under_review: { label: 'Officer Review',      color: WARNING, Icon: Clock },
     pending:  { label: 'Pending Review',         color: WARNING, Icon: Clock },
 };
 
@@ -205,7 +206,7 @@ const HistoryCard = ({ item, onResubmit }) => {
                     )}
 
                     {/* ── Resubmission ─────────────────────────────── */}
-                    {status === 'rejected' && onResubmit && (
+                    {['rejected', 'returned', 'needs_revision', 'needs-revision'].includes(status) && onResubmit && (
                         <button onClick={() => onResubmit(item)}
                             className="mt-3 inline-flex items-center gap-2 transition-opacity hover:opacity-85"
                             style={{ padding: '9px 16px', borderRadius: 999, ...body, fontSize: '0.82rem', fontWeight: 700, background: `${DANGER}14`, color: DANGER, border: `1px solid ${DANGER}44`, cursor: 'pointer' }}>
@@ -231,7 +232,7 @@ const SubmissionHistory = ({ history = [], loading = false, error = '', onResubm
     const counts = {
         total: history.length,
         approved: history.filter(i => i.status === 'approved').length,
-        pending: history.filter(i => !i.status || i.status === 'pending').length,
+        pending: history.filter(i => !i.status || ['pending', 'under_review'].includes(String(i.status).toLowerCase())).length,
     };
 
     const filteredHistory = selectedYear === 'all'

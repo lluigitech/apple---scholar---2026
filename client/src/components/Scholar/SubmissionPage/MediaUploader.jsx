@@ -109,14 +109,14 @@ const MediaUploader = ({ media, onChange, onContinue = null }) => {
                                     placeholder={`Write a caption for photo ${i + 1}…`}
                                     value={item.description}
                                     onChange={e => updateDesc(item.id, e.target.value)}
-                                    maxLength={140}
+                                    maxLength={300}
                                     className="w-full px-3 py-2.5 outline-none transition-colors"
                                     style={{ borderRadius: 10, border: `1px solid ${BORDER}`, ...body, fontSize: '0.83rem', color: INK, background: BG }}
                                     onFocus={e => (e.target.style.borderColor = PRIMARY)}
                                     onBlur={e => (e.target.style.borderColor = BORDER)}
                                 />
                                 <p style={{ ...body, fontSize: '0.66rem', color: MUTED, marginTop: 5, textAlign: 'right' }}>
-                                    {item.description.length}/140
+                                    {item.description.length}/300
                                 </p>
                             </div>
                         </div>

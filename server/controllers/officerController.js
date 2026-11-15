@@ -557,7 +557,6 @@ exports.getSubmissionRecords = async (req, res) => {
         const submissionConditions = [
             's.scholar_id IN (?)',
             'COALESCE(s.archived_at, s.archive_at) IS NULL',
-            "(LOWER(COALESCE(s.status, '')) <> 'approved' OR s.finalized_at IS NOT NULL)",
         ];
         const submissionValues = [scholarIds];
         if (document_type === 'letter') submissionConditions.push("s.submission_type = 'letter'");

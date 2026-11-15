@@ -10,6 +10,7 @@ import BackupRecovery from './SettingsComponent/BackupRecovery';
 import SecurityAuditLogs from './SettingsComponent/SecurityAuditLogs';
 import AdminNotification from './AdminNotification';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
+import { getPasswordRequirementError, isValidPassword } from '../../utils/passwordPolicy.js';
 
 const STORAGE_KEY = 'admin-system-settings';
 const API_BASE = (import.meta.env?.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
@@ -251,15 +252,14 @@ const ChangePasswordDialog = ({ onClose, onChanged }) => {
 
   const submit = async (e) => {
     e.preventDefault();
-    if (form.next.length < 8) return setError('New password must be at least 8 characters.');
+    if (!isValidPassword(form.next)) return setError(getPasswordRequirementError(form.next));
     if (form.next === form.current) return setError('New password must be different from your current password.');
     if (form.next !== form.confirm) return setError('New password and confirmation do not match.');
     setBusy(true);
     setError('');
     try {
       const token = localStorage.getItem('token');
-      // Assumed endpoint: adjust to match your backend route.
-      await axios.put(`${API}/admin/settings/password`, { currentPassword: form.current, newPassword: form.next }, {
+      await axios.post(`${API}/change-password`, { current_password: form.current, new_password: form.next }, {
         headers: { Authorization: `Bearer ${token}` },
       });
       onChanged();
@@ -283,7 +283,7 @@ const ChangePasswordDialog = ({ onClose, onChanged }) => {
             <IconBadge icon={KeyRound} />
             <div className="min-w-0">
               <h2 id="cp-title" style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color: c.ink }}>Change Password</h2>
-              <p style={{ ...body, fontSize: '0.78rem', color: c.muted, marginTop: 2 }}>Use at least 8 characters. You will stay logged in.</p>
+              <p style={{ ...body, fontSize: '0.78rem', color: c.muted, marginTop: 2 }}>Use at least 8 characters and include a special character, such as ! or @. You will stay logged in.</p>
             </div>
           </div>
           <button type="button" onClick={onClose} disabled={busy} aria-label="Close" style={{ border: 0, background: 'transparent', color: c.muted, cursor: 'pointer' }}><X size={18} /></button>

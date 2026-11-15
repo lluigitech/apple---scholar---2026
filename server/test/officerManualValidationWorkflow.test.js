@@ -104,11 +104,13 @@ test('Officer grade approval is limited to pending records and assigned year lev
 
   assert.equal(response.statusCode, 200);
   assert.match(update.sql, /verification_status = 'pending'/);
-  assert.match(update.sql, /finalized_at IS NULL/);
+  assert.match(update.sql, /finalized_at = CASE WHEN \? = 'approved' THEN NOW\(\) ELSE NULL END/);
+  assert.match(update.sql, /export_available_at = CASE WHEN \? = 'approved' THEN NOW\(\) ELSE NULL END/);
   assert.match(update.sql, /officer_year_level_assignments/);
   assert.equal(update.values[0], 'approved');
-  assert.equal(update.values[4], 'S12');
-  assert.equal(update.values[7], 8);
+  assert.equal(update.values[7], 'S12');
+  assert.equal(update.values[10], 8);
+  assert.match(update.values[6], /^[0-9a-f-]{36}$/i);
 });
 
 test('Admin cannot make a compliance review decision', async () => {

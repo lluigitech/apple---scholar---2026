@@ -13,6 +13,7 @@ import {
   readOfficerWorkPreferences,
   writeOfficerWorkPreferences,
 } from '../../utils/officerWorkPreferences';
+import { getPasswordRequirementError, isValidPassword } from '../../utils/passwordPolicy';
 
 /* ───────── CONTRACT — i-match sa backend (hindi ko ma-inspect ang project mo) ─────────
  * Relative sa API_BASE, gamit ang authHeaders() (Bearer token). Identity ay galing sa token sa server.
@@ -255,10 +256,10 @@ const OfficerSettings = () => {
   const [pwFeedback, setPwFeedback] = useState(null);
   const [pwDone, setPwDone] = useState(false);
   const pwErrors = {
-    next: pw.next && pw.next.length < 8 ? 'Use at least 8 characters.' : pw.next && pw.next === pw.current ? 'New password must differ from the current one.' : '',
+    next: pw.next ? getPasswordRequirementError(pw.next) || (pw.next === pw.current ? 'New password must differ from the current one.' : '') : '',
     confirm: pw.confirm && pw.confirm !== pw.next ? 'Passwords do not match.' : '',
   };
-  const pwReady = pw.current && pw.next.length >= 8 && pw.next === pw.confirm && pw.next !== pw.current;
+  const pwReady = pw.current && isValidPassword(pw.next) && pw.next === pw.confirm && pw.next !== pw.current;
 
   const closePw = useCallback(() => {
     if (pwSaving) return;
@@ -581,6 +582,9 @@ const OfficerSettings = () => {
             <div className="flex flex-col gap-3.5 overflow-y-auto" style={{ padding: 20 }}>
               {pwInput('current', 'os-pw-current', 'Current Password', 'current-password')}
               {pwInput('next', 'os-pw-new', 'New Password', 'new-password', pwErrors.next)}
+              <p style={{ margin: '-8px 0 0', fontSize: 12, color: '#8A7A68' }}>
+                Use at least 8 characters and include a special character, such as ! or @.
+              </p>
               {pwInput('confirm', 'os-pw-confirm', 'Confirm New Password', 'new-password', pwErrors.confirm)}
               {pwFeedback && <Banner tone={pwFeedback.tone}>{pwFeedback.text}</Banner>}
             </div>

@@ -134,44 +134,72 @@ exports.getTaskProgressSummary = async (req, res) => {
       ),
       db.promise().query(
         `SELECT scholar_id, submission_type, status, submitted_at
-         FROM submissions
-         WHERE finalized_at IS NULL`
+         FROM submissions`
       ),
     ]);
 
     const [tasks] = tasksResult;
     const [scholars] = scholarsResult;
     const [submissions] = submissionsResult;
-    const latestSubmissionByScholar = new Map();
-    submissions.forEach((submission) => {
-      const submittedAt = new Date(submission.submitted_at || 0).getTime();
-      const latestByType = latestSubmissionByScholar.get(submission.scholar_id) || new Map();
-      const currentLatest = latestByType.get(submission.submission_type);
-      if (!currentLatest || submittedAt >= new Date(currentLatest.submitted_at || 0).getTime()) {
-        latestByType.set(submission.submission_type, submission);
-      }
-      latestSubmissionByScholar.set(submission.scholar_id, latestByType);
-    });
     const submissionTypeByTask = {
       'Monthly Report': 'letter',
       'Report Card': 'report_card',
       'COR Upload': 'cor',
       'Other Documents': 'other',
     };
+    const tasksBySubmissionType = new Map();
+    tasks.forEach((task) => {
+      const submissionType = submissionTypeByTask[task.type];
+      if (!submissionType) return;
+      const matchingTasks = tasksBySubmissionType.get(submissionType) || [];
+      matchingTasks.push({
+        task,
+        createdAt: new Date(task.created_at || 0).getTime(),
+        targetLevels: parseTargetLevels(task.target_year_levels) || [],
+      });
+      tasksBySubmissionType.set(submissionType, matchingTasks);
+    });
+    tasksBySubmissionType.forEach((matchingTasks) => {
+      matchingTasks.sort((a, b) => {
+        const aCreatedAt = Number.isFinite(a.createdAt) ? a.createdAt : Number.NEGATIVE_INFINITY;
+        const bCreatedAt = Number.isFinite(b.createdAt) ? b.createdAt : Number.NEGATIVE_INFINITY;
+        return bCreatedAt - aCreatedAt || Number(b.task.id) - Number(a.task.id);
+      });
+    });
+
+    const scholarById = new Map(scholars.map((scholar) => [scholar.scholar_id, scholar]));
+    const latestSubmissionByTask = new Map();
+    submissions.forEach((submission) => {
+      const scholar = scholarById.get(submission.scholar_id);
+      if (!scholar) return;
+
+      const submittedAt = new Date(submission.submitted_at || 0).getTime();
+      const assignedTask = (tasksBySubmissionType.get(submission.submission_type) || []).find(({ createdAt, targetLevels }) => (
+        (!Number.isFinite(createdAt) || submittedAt >= createdAt)
+        && (
+          targetLevels.length === 0
+          || targetLevels.some((level) => normalizeYearLevel(level) === normalizeYearLevel(scholar.year_level))
+        )
+      ));
+      if (!assignedTask) return;
+
+      const latestByScholar = latestSubmissionByTask.get(assignedTask.task.id) || new Map();
+      const currentLatest = latestByScholar.get(scholar.scholar_id);
+      if (!currentLatest || submittedAt >= new Date(currentLatest.submitted_at || 0).getTime()) {
+        latestByScholar.set(scholar.scholar_id, submission);
+      }
+      latestSubmissionByTask.set(assignedTask.task.id, latestByScholar);
+    });
+
     const progress = tasks.map((task) => {
       const targetLevels = parseTargetLevels(task.target_year_levels) || [];
       const eligibleScholars = scholars.filter((scholar) => (
         targetLevels.length === 0
         || targetLevels.some((level) => normalizeYearLevel(level) === normalizeYearLevel(scholar.year_level))
       ));
-      const taskType = submissionTypeByTask[task.type];
-      const taskCreatedAt = new Date(task.created_at || 0).getTime();
+      const latestByScholar = latestSubmissionByTask.get(task.id) || new Map();
       const submitted = eligibleScholars.filter((scholar) => {
-        const latestSubmission = latestSubmissionByScholar.get(scholar.scholar_id)?.get(taskType);
-        const submittedAt = new Date(latestSubmission?.submitted_at || 0).getTime();
-        return latestSubmission
-          && (!task.created_at || Number.isNaN(taskCreatedAt) || submittedAt >= taskCreatedAt)
-          && latestSubmission.status === 'approved';
+        return latestByScholar.get(scholar.scholar_id)?.status === 'approved';
       }).length;
 
       return { task_id: task.id, total: eligibleScholars.length, submitted };

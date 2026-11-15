@@ -14,6 +14,7 @@ import {
   readStaffWorkPreferences,
   writeStaffWorkPreferences,
 } from '../../utils/staffWorkPreferences';
+import { getPasswordRequirementError, hasRequiredPasswordSymbol, isValidPassword, MIN_PASSWORD_LENGTH } from '../../utils/passwordPolicy';
 
 /* ───────── CONTRACT (assumed — hindi ko ma-inspect ang project mo; i-verify sa backend) ─────────
  * Relative sa API_BASE, gamit ang authHeaders() (Bearer token). Identity galing sa token sa server.
@@ -31,7 +32,7 @@ const NOTIF_PATH = '/staff/settings/notifications';
 const VERIFY_PASSWORD_PATH = '/staff/settings/verify-password';
 const NOTIF_LOCAL_KEY = 'staff_notification_preferences';
 const PROFILE_EDITABLE = true;
-const MIN_PASSWORD_LENGTH = 8; // i-match sa actual backend policy
+
 
 // ── Staff tokens ──
 const BG = '#F7F4EE', SURFACE = '#FFFDF9', BORDER = '#E7D8C7', PRIMARY = '#6D2140', DEEP = '#4A1730';
@@ -187,16 +188,16 @@ const StaffSettings = () => {
     { label: `At least ${MIN_PASSWORD_LENGTH} characters`, ok: pw.next.length >= MIN_PASSWORD_LENGTH, required: true },
     { label: 'Upper and lowercase letters', ok: /[a-z]/.test(pw.next) && /[A-Z]/.test(pw.next) },
     { label: 'At least one number', ok: /\d/.test(pw.next) },
-    { label: 'At least one symbol', ok: /[^A-Za-z0-9]/.test(pw.next) },
+    { label: 'At least one symbol', ok: hasRequiredPasswordSymbol(pw.next), required: true },
   ]), [pw.next]);
   const strength = pw.next ? Math.max(1, checks.filter(c => c.ok).length) : 0;
   const strengthLabel = ['', 'Weak', 'Fair', 'Good', 'Strong'][strength];
 
   const pwErrors = {
-    next: pw.next && pw.next.length < MIN_PASSWORD_LENGTH ? `Use at least ${MIN_PASSWORD_LENGTH} characters.` : pw.next && pw.next === pw.current ? 'New password must differ from the current one.' : '',
+    next: pw.next ? getPasswordRequirementError(pw.next) || (pw.next === pw.current ? 'New password must differ from the current one.' : '') : '',
     confirm: pw.confirm && pw.confirm !== pw.next ? 'Passwords do not match.' : '',
   };
-  const pwReady = !!pw.current && pw.next.length >= MIN_PASSWORD_LENGTH && pw.next === pw.confirm && pw.next !== pw.current;
+  const pwReady = !!pw.current && isValidPassword(pw.next) && pw.next === pw.confirm && pw.next !== pw.current;
 
   const savePassword = async () => {
     if (!pwReady || pwSaving) return;

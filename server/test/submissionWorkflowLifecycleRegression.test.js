@@ -50,9 +50,9 @@ const notificationHelpersContent = fs.readFileSync(
 assert.ok(
   controllerContent.includes('under_review') &&
     controllerContent.includes('returned') &&
-    controllerContent.includes('s.finalized_at = NULL') &&
-    controllerContent.includes("s.export_available_at = CASE WHEN ? = 'approved' THEN DATE_ADD(NOW(), INTERVAL 3 DAY) ELSE NULL END"),
-  'approved submissions should remain in Manual Validation for three days before Reports'
+    controllerContent.includes("s.finalized_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END") &&
+    controllerContent.includes("s.export_available_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END"),
+  'approved submissions should be finalized immediately after Officer review'
 );
 
 assert.ok(
@@ -81,13 +81,13 @@ assert.ok(
 );
 
 assert.ok(
-  controllerContent.includes("s.export_available_at = CASE WHEN ? = 'approved' THEN DATE_ADD(NOW(), INTERVAL 3 DAY) ELSE NULL END") &&
-    controllerContent.includes("export_available_at = CASE WHEN ? = 'approved' THEN DATE_ADD(NOW(), INTERVAL 3 DAY) ELSE NULL END") &&
+  controllerContent.includes("s.export_available_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END") &&
+    controllerContent.includes("export_available_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END") &&
     controllerContent.includes('SET finalized_at = NOW(), export_available_at = NOW(), finalization_batch_id = ?') &&
     controllerContent.includes('WHERE s.finalized_at IS NOT NULL') &&
     controllerContent.includes('WHERE g.finalized_at IS NOT NULL') &&
-    controllerContent.includes("INTERVAL 3 DAY"),
-  'approved submissions and grades should become report/export records after three days'
+    !controllerContent.includes('INTERVAL 3 DAY'),
+  'approved submissions and grades should become report/export records immediately'
 );
 
 assert.ok(
@@ -139,7 +139,7 @@ assert.ok(
 
 assert.ok(
   scholarSubmissionContent.includes('This task is closed. Late submissions are not accepted.') &&
-    scholarSubmissionContent.includes('disabled={deadlineBlocked}') &&
+    scholarSubmissionContent.includes('disabled={deadlineBlocked || evalResult.flagged}') &&
       !controllerContent.includes('Number(effectiveScore) < 75'),
     'a low-scoring monthly letter should remain submittable for Officer review'
 );
@@ -154,7 +154,8 @@ assert.ok(
   scholarChecklistContent.includes('const duePassed = isPastDue(dueDate)') &&
     scholarChecklistContent.includes("? 'closed'") &&
     scholarTaskListContent.includes("{ key: 'closed', label: 'Closed'") &&
-    scholarDashboardContent.includes("{ label: 'Closed', detail: 'Late submissions are not accepted'"),
+    scholarDashboardContent.includes("'Late submissions are not accepted'") &&
+    scholarDashboardContent.includes("'Submitted on time · awaiting Officer review'"),
   'overdue uncompleted portal tasks should display under Closed in Scholar task lists'
 );
 

@@ -44,7 +44,7 @@ const fakeDb = {
           && String(task.due_date || '').slice(0, 10) <= end), []];
       }
       if (sql.includes('FROM submissions')) {
-        return [submissions.filter(row => row.status !== 'approved' || row.finalized_at), []];
+        return [submissions, []];
       }
       if (sql.includes('FROM grades')) {
         return [grades.filter(row => row.verification_status !== 'approved' || row.finalized_at), []];
@@ -402,7 +402,7 @@ test('keeps submitted records but does not invent missing requirements when no t
   assert.equal(response.body.records.some(record => record.isMissing), false);
 });
 
-test('keeps approved submissions out of Reports until finalized', async () => {
+test('shows approved submissions in Reports even without a finalization timestamp', async () => {
   scholars = [{ scholar_id: 'S-1', full_name: 'Scholar', year_level: 'college_1' }];
   assignedLevels = [];
   tasks = [];
@@ -423,7 +423,9 @@ test('keeps approved submissions out of Reports until finalized', async () => {
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.body.records.length, 0);
+  assert.equal(response.body.records.length, 1);
+  assert.equal(response.body.records[0].status, 'approved');
+  assert.equal(response.body.records[0].isMissing, undefined);
 });
 
 test('does not show task records before the task due date', async () => {

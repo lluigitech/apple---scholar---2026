@@ -75,7 +75,11 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
                     <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', color: BRONZE }}>AI QUALITY EVALUATION</p>
                     <h3 style={{ ...display, fontSize: '1.3rem', fontWeight: 600, color: INK, marginTop: 4 }}>Review Before Submission</h3>
                     <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 4 }}>
-                        {ev.accepted ? 'Your report meets the quality standard — take a last look before it goes out.' : 'A few things need attention before this can be submitted.'}
+                        {ev.flagged
+                            ? 'This letter was flagged as invalid and cannot be submitted.'
+                            : ev.accepted
+                                ? 'Your report is ready for admin/office review.'
+                                : 'The AI score is advisory. You can still submit this letter for officer review.'}
                     </p>
                 </div>
 
@@ -92,7 +96,11 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
                                 {ev.riskLabel}
                             </span>
                             <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 8 }}>
-                                {ev.accepted ? 'Ready for admin/office review.' : 'Not yet ready — see the checklist below.'}
+                                {ev.flagged
+                                    ? 'Please revise the letter before submitting.'
+                                    : ev.accepted
+                                        ? 'Ready for admin/office review.'
+                                        : 'Your officer may review it and request revisions.'}
                             </p>
                         </div>
                         <div className="text-right flex-shrink-0" style={{ minWidth: 110 }}>
@@ -135,7 +143,9 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
                                             <XCircle size={15} style={{ color: DANGER, flexShrink: 0, marginTop: 1 }} />
                                             <div className="min-w-0">
                                                 <p style={{ ...body, fontSize: '0.8rem', fontWeight: 600, color: INK }}>{c.item.label}</p>
-                                                <p style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 1 }}>Address this before resubmitting.</p>
+                                                <p style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 1 }}>
+                                                    {ev.flagged ? 'Address this before resubmitting.' : 'Your officer may ask you to address this.'}
+                                                </p>
                                             </div>
                                         </div>
                                     ))}
@@ -158,7 +168,7 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
                     <button onClick={onCancel} disabled={submitting} className="flex-1 transition-opacity hover:opacity-80 disabled:opacity-50" style={outlineBtn}>
                         Back &amp; Edit
                     </button>
-                    {ev.accepted && (
+                    {!ev.flagged && (
                         <button onClick={onConfirm} disabled={submitting} className="flex-1 transition-opacity hover:opacity-85 disabled:opacity-60"
                             style={{ ...filledBtn, cursor: submitting ? 'not-allowed' : 'pointer' }}>
                             {submitting ? <><Loader2 size={16} className="animate-spin" /> Submitting…</> : <><Send size={16} /> Submit Report</>}

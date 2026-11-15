@@ -150,7 +150,7 @@ const Login = () => {
                                     <UserRound size={18} color={PRIMARY} className="input-icon" />
                                     <input
                                         id="login-id"
-                                        type="text" required placeholder="SCH-2026-0162"
+                                        type="text" required placeholder="Enter your User ID"
                                         value={loginId} onChange={(e) => setLoginId(e.target.value)}
                                         autoComplete="username"
                                         className="portal-input"

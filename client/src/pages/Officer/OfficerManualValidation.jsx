@@ -296,26 +296,30 @@ const Avatar = ({ name, id, selected }) => (
   </span>
 );
 
-const ActionButtons = ({ category, item, d, onPreview, onGeneratePdf, pdfBusy }) => (
+const ActionButtons = ({ category, item, d, onPreview, onViewLetter, pdfBusy }) => (
   <div className="flex items-center gap-1.5 flex-wrap" onClick={e => e.stopPropagation()}>
     {d.url ? (
       <>
-        <button onClick={() => onPreview(d.previewPath, d.docLabel)} aria-label={`Open ${d.docLabel}`}
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-opacity hover:opacity-80"
+        <button onClick={() => onPreview(d.previewPath, d.docLabel)} aria-label={`${category === 'letters' ? 'View' : 'Open'} ${d.docLabel}`}
+          disabled={pdfBusy}
+          className="flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-opacity hover:opacity-80 disabled:opacity-50"
           style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, color: MAROON, background: SURFACE, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>
-          <Eye size={12} /> Open
+          <Eye size={12} /> {pdfBusy ? 'Loading…' : category === 'letters' ? 'View' : 'Open'}
         </button>
-        <a href={d.url} download aria-label={`Download ${d.docLabel}`}
-          className="flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-opacity hover:opacity-85"
-          style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, color: '#fff', backgroundColor: MAROON, textDecoration: 'none' }}>
-          <Download size={12} /> Download
-        </a>
+        {category !== 'letters' && (
+          <a href={d.url} download aria-label={`Download ${d.docLabel}`}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-full transition-opacity hover:opacity-85"
+            style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, color: '#fff', backgroundColor: MAROON, textDecoration: 'none' }}>
+            <Download size={12} /> Download
+          </a>
+        )}
       </>
     ) : category === 'letters' ? (
-      <button onClick={() => onGeneratePdf(item.id)} disabled={pdfBusy}
-        className="px-3 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
+      <button onClick={() => onViewLetter(item.id, d.docLabel)} disabled={pdfBusy}
+        aria-label={`${pdfBusy ? 'Preparing' : 'View'} ${d.docLabel}`}
+        className="flex items-center gap-1 px-3 py-1.5 rounded-full transition-opacity hover:opacity-85 disabled:opacity-50"
         style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, backgroundColor: GOLD, color: '#fff', border: 'none', cursor: pdfBusy ? 'default' : 'pointer' }}>
-        {pdfBusy ? 'Generating…' : 'Generate PDF'}
+        <Eye size={12} /> {pdfBusy ? 'Preparing…' : 'View'}
       </button>
     ) : (
       <span style={{ ...sans, fontSize: '0.7rem', color: '#B8A999' }}>No file</span>
@@ -362,6 +366,7 @@ const OfficerManualValidation = () => {
 
   const [filePreview, setFilePreview] = useState(null);
   const [generatingPdfId, setGeneratingPdfId] = useState(null);
+  const [letterViewError, setLetterViewError] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -600,13 +605,19 @@ const OfficerManualValidation = () => {
     }
   };
 
-  const handleGeneratePdf = async (submissionId) => {
+  const handleViewLetter = async (submissionId, label) => {
     setGeneratingPdfId(submissionId);
+    setLetterViewError('');
     try {
-      await axios.get(`${API}/submission/generate-pdf/${submissionId}`, { headers: authHeader() });
-      await fetchData();
+      const response = await axios.get(`${API}/submission/generate-pdf/${submissionId}`, { headers: authHeader() });
+      const path = response.data?.path;
+      if (typeof path !== 'string' || !path.trim()) {
+        throw new Error('The server did not return a monthly letter file.');
+      }
+      handlePreview(path, label);
     } catch (e) {
-      console.error('Error generating PDF:', e);
+      console.error('Error opening monthly letter:', e);
+      setLetterViewError(e.response?.data?.error || e.message || 'Unable to open the monthly letter.');
     } finally {
       setGeneratingPdfId(null);
     }
@@ -694,6 +705,11 @@ const OfficerManualValidation = () => {
           </div>
         ) : (
           <>
+            {letterViewError && (
+              <div role="alert" className="rounded-xl px-4 py-3" style={{ background: '#FEF2F2', border: '1px solid #FECACA', color: DANGER, ...sans, fontSize: '0.8rem', fontWeight: 600 }}>
+                Unable to open monthly letter: {letterViewError}
+              </div>
+            )}
             {/* ── Summary cards (assigned scholars vs. submitted records) ── */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <SummaryCard icon={Users} label="Assigned Scholars" value={summary.scholars} color={MAROON}
@@ -827,7 +843,7 @@ const OfficerManualValidation = () => {
                               <td style={{ ...tdStyle, ...sans, fontSize: '0.8rem', color: MUTED, whiteSpace: 'nowrap' }}>{d.dateText}</td>
                               <td style={tdStyle}><StatusPill status={d.status} /></td>
                               <td style={tdStyle}>
-                                <ActionButtons category={activeCategory} item={item} d={d} onPreview={handlePreview} onGeneratePdf={handleGeneratePdf} pdfBusy={pdfBusy} />
+                                <ActionButtons category={activeCategory} item={item} d={d} onPreview={handlePreview} onViewLetter={handleViewLetter} pdfBusy={pdfBusy} />
                               </td>
                             </tr>
                           );
@@ -863,7 +879,7 @@ const OfficerManualValidation = () => {
                               </div>
                             )}
                             <div className="mt-3">
-                              <ActionButtons category={activeCategory} item={item} d={d} onPreview={handlePreview} onGeneratePdf={handleGeneratePdf} pdfBusy={pdfBusy} />
+                              <ActionButtons category={activeCategory} item={item} d={d} onPreview={handlePreview} onViewLetter={handleViewLetter} pdfBusy={pdfBusy} />
                             </div>
                           </div>
                         </div>

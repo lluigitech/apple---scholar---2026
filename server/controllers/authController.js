@@ -1,18 +1,20 @@
 const bcrypt = require('bcryptjs');
 const db = require('../config/db');
 const { logAuditEvent } = require('../utils/auditLogger');
+const { isValidPassword, PASSWORD_REQUIREMENTS_ERROR } = require('../utils/passwordPolicy');
 
 exports.changePassword = async (req, res, { successMessage } = {}) => {
     const { current_password, new_password } = req.body || {};
     if (
         typeof current_password !== 'string' ||
-        typeof new_password !== 'string' ||
-        !current_password ||
-        new_password.length < 8
+        !current_password
     ) {
         return res.status(400).json({
-            error: 'Current password and a new password of at least 8 characters are required.',
+            error: 'Current password is required.',
         });
+    }
+    if (!isValidPassword(new_password)) {
+        return res.status(400).json({ error: PASSWORD_REQUIREMENTS_ERROR });
     }
 
     try {

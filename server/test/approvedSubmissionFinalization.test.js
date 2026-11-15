@@ -35,15 +35,19 @@ const { getDonorReport } = require('../services/reportQueryService.js.js');
 
 delete require.cache[dbPath];
 
-test('approved submissions and grades are finalized only after three days', async () => {
+test('approved submissions and grades are finalized without a waiting period', async () => {
   queries.length = 0;
   const result = await finalizeApprovedSubmissions();
 
   assert.deepEqual(result, { submissions_finalized: 2, grades_finalized: 1 });
   assert.equal(queries.length, 2);
-  assert.match(queries[0].sql, /COALESCE\(approved_at, reviewed_at, submitted_at\) <= DATE_SUB\(NOW\(\), INTERVAL 3 DAY\)/);
+  assert.match(queries[0].sql, /WHERE status = 'approved'\s+AND finalized_at IS NULL/);
+  assert.match(queries[0].sql, /finalized_at = NOW\(\)/);
+  assert.doesNotMatch(queries[0].sql, /DATE_SUB/);
   assert.match(queries[0].sql, /finalized_at IS NULL/);
-  assert.match(queries[1].sql, /COALESCE\(approved_at, created_at\) <= DATE_SUB\(NOW\(\), INTERVAL 3 DAY\)/);
+  assert.match(queries[1].sql, /WHERE verification_status = 'approved'\s+AND finalized_at IS NULL/);
+  assert.match(queries[1].sql, /finalized_at = NOW\(\)/);
+  assert.doesNotMatch(queries[1].sql, /DATE_SUB/);
   assert.match(queries[1].sql, /finalized_at IS NULL/);
 });
 

@@ -616,7 +616,6 @@ const initializeDatabase = () => {
                 finalization_batch_id = CONCAT('legacy-approved-', scholar_id, '-', id)
             WHERE LOWER(status) = 'approved'
               AND finalized_at IS NULL
-              AND COALESCE(approved_at, reviewed_at, submitted_at, NOW()) <= DATE_SUB(NOW(), INTERVAL 3 DAY)
         `);
         console.log('✅ previously approved submissions moved into Reports');
         await ensureIndexes(db, 'submissions', {
@@ -858,7 +857,6 @@ const initializeDatabase = () => {
             finalization_batch_id = CONCAT('legacy-grade-', scholar_id, '-', semester, '-', academic_year)
         WHERE verification_status = 'approved'
           AND finalized_at IS NULL
-          AND COALESCE(approved_at, created_at) <= DATE_SUB(NOW(), INTERVAL 3 DAY)
     `)).then(() => {
         console.log('✅ grades finalization fields ensured; approved grades moved into Reports');
     }).catch((migrationError) => {

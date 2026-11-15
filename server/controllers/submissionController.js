@@ -82,10 +82,41 @@ exports.getScholarTaskDeadlines = async (req, res) => {
         const taskTypes = ['letter', 'report_card', 'cor', 'other'];
         const deadlines = await Promise.all(taskTypes.map(async (type) => {
             const task = await findLatestAssignedTask(scholarId, type);
+            if (!task) {
+                return [type, {
+                    assigned: false,
+                    closed: false,
+                    due_date: null,
+                    has_submission: false,
+                    submission_status: null,
+                    can_resubmit: false,
+                }];
+            }
+
+            const submissionSql = type === 'report_card'
+                ? `SELECT verification_status AS status
+                   FROM grades
+                   WHERE scholar_id = ? AND created_at >= ?
+                   ORDER BY created_at DESC
+                   LIMIT 1`
+                : `SELECT status
+                   FROM submissions
+                   WHERE scholar_id = ? AND submission_type = ? AND submitted_at >= ?
+                   ORDER BY submitted_at DESC
+                   LIMIT 1`;
+            const submissionValues = type === 'report_card'
+                ? [scholarId, task.created_at]
+                : [scholarId, type, task.created_at];
+            const [submissionRows] = await db.promise().query(submissionSql, submissionValues);
+            const submissionStatus = String(submissionRows[0]?.status || '').trim().toLowerCase() || null;
+
             return [type, {
-                assigned: Boolean(task),
-                closed: Boolean(task && Number(task.deadline_passed) === 1),
-                due_date: task?.due_date || null,
+                assigned: true,
+                closed: Number(task.deadline_passed) === 1,
+                due_date: task.due_date || null,
+                has_submission: Boolean(submissionStatus),
+                submission_status: submissionStatus,
+                can_resubmit: isDuplicateRequirementSubmissionAllowed(submissionStatus),
             }];
         }));
         return res.json(Object.fromEntries(deadlines));
@@ -256,7 +287,6 @@ exports.finalizeScholarDossier = async (req, res) => {
         const [[submissionCounts]] = await connection.query(
                 `SELECT COUNT(*) AS total,
                     SUM(CASE WHEN COALESCE(status, 'pending') NOT IN ('approved', 'archived') THEN 1 ELSE 0 END) AS pending,
-                    MAX(CASE WHEN status = 'approved' THEN COALESCE(approved_at, reviewed_at, submitted_at) END) AS latest_approved_at,
                     SUM(CASE WHEN status = 'approved' AND COALESCE(approved_at, reviewed_at, submitted_at) IS NULL THEN 1 ELSE 0 END) AS approvals_without_timestamp
              FROM submissions WHERE scholar_id = ? AND finalized_at IS NULL`,
             [scholarId]
@@ -264,7 +294,6 @@ exports.finalizeScholarDossier = async (req, res) => {
         const [[gradeCounts]] = await connection.query(
                 `SELECT COUNT(*) AS total,
                         SUM(CASE WHEN COALESCE(verification_status, 'pending') <> 'approved' THEN 1 ELSE 0 END) AS pending,
-                        MAX(CASE WHEN verification_status = 'approved' THEN COALESCE(approved_at, created_at) END) AS latest_approved_at,
                         SUM(CASE WHEN verification_status = 'approved' AND COALESCE(approved_at, created_at) IS NULL THEN 1 ELSE 0 END) AS approvals_without_timestamp
                  FROM grades WHERE scholar_id = ? AND finalized_at IS NULL`,
                 [scholarId]
@@ -284,17 +313,6 @@ exports.finalizeScholarDossier = async (req, res) => {
         if (approvalsWithoutTimestamp) {
             await connection.rollback();
             return res.status(409).json({ error: 'Approved submissions are missing an approval timestamp and cannot be moved to Reports yet.' });
-        }
-
-        const latestApprovalDates = [
-            submissionCounts.latest_approved_at,
-            gradeCounts.latest_approved_at,
-        ].filter(Boolean).map(value => new Date(value).getTime());
-        const latestApproval = latestApprovalDates.length ? Math.max(...latestApprovalDates) : null;
-        const threeDaysMs = 3 * 24 * 60 * 60 * 1000;
-        if (latestApproval !== null && Date.now() - latestApproval < threeDaysMs) {
-            await connection.rollback();
-            return res.status(409).json({ error: 'Approved submissions remain in Manual Validation for 3 days before moving to Reports.' });
         }
 
         const batchId = randomUUID();
@@ -1119,6 +1137,34 @@ exports.getHistory = (req, res) => {
     });
 };
 
+exports.getScholarSubmissionStatus = (req, res) => {
+    const submissionId = Number(req.params.id);
+    const scholarId = req.user?.scholar_id;
+
+    if (!Number.isSafeInteger(submissionId) || submissionId <= 0 || !scholarId) {
+        return res.status(400).json({ error: 'Invalid submission identifier.' });
+    }
+
+    db.query(
+        `SELECT id, submission_type, status, submitted_at, reviewed_at, approved_at,
+                returned_at, finalized_at, updated_at, officer_comment
+         FROM submissions
+         WHERE id = ? AND scholar_id = ?
+         LIMIT 1`,
+        [submissionId, scholarId],
+        (err, rows) => {
+            if (err) {
+                console.error('Error fetching scholar submission status:', err);
+                return res.status(500).json({ error: 'Unable to load submission status.' });
+            }
+            if (!rows.length) {
+                return res.status(404).json({ error: 'Submission not found.' });
+            }
+            return res.json(rows[0]);
+        }
+    );
+};
+
 // GET ALL SUBMISSIONS (Admin/Staff) - flat list, kept for backward compatibility
 exports.getAllSubmissions = (req, res) => {
     const conditions = [];
@@ -1440,9 +1486,9 @@ exports.reviewSubmission = (req, res) => {
             s.officer_comment = ?,
             s.reviewed_at = NOW(),
             s.approved_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END,
-            s.finalized_at = NULL,
-            s.export_available_at = CASE WHEN ? = 'approved' THEN DATE_ADD(NOW(), INTERVAL 3 DAY) ELSE NULL END,
-            s.finalization_batch_id = NULL,
+            s.finalized_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END,
+            s.export_available_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END,
+            s.finalization_batch_id = CASE WHEN ? = 'approved' THEN CONCAT('approved-submission-', s.id) ELSE NULL END,
             s.archive_at = NULL,
             s.returned_at = CASE WHEN ? IN ('returned', 'rejected') THEN NOW() ELSE NULL END
         WHERE s.id = ?
@@ -1452,7 +1498,7 @@ exports.reviewSubmission = (req, res) => {
                             WHERE oya.officer_id = ?
                                 AND ${yearLevelSqlExpression('oya.year_level')} = ${yearLevelSqlExpression('u.year_level')}
           ))`;
-        db.query(sql, [resolvedStatus, comment || null, resolvedStatus, resolvedStatus, resolvedStatus, id, req.user.role, req.user.role, req.user.id], (err, result) => {
+        db.query(sql, [resolvedStatus, comment || null, resolvedStatus, resolvedStatus, resolvedStatus, resolvedStatus, resolvedStatus, id, req.user.role, req.user.role, req.user.id], (err, result) => {
         if (err) return res.status(500).json({ error: 'Error updating submission' });
         logPrivacyAccess(req, {
             action: result.affectedRows
@@ -1962,14 +2008,15 @@ exports.reviewGrades = (req, res) => {
         return res.status(400).json({ error: 'A reason is required when rejecting grades.' });
     }
 
+    const gradeBatchId = randomUUID();
     const sql = `
         UPDATE grades
         SET verification_status = ?,
             officer_comment = ?,
             approved_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END,
-            finalized_at = NULL,
-            export_available_at = CASE WHEN ? = 'approved' THEN DATE_ADD(NOW(), INTERVAL 3 DAY) ELSE NULL END,
-            finalization_batch_id = NULL
+            finalized_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END,
+            export_available_at = CASE WHEN ? = 'approved' THEN NOW() ELSE NULL END,
+            finalization_batch_id = CASE WHEN ? = 'approved' THEN ? ELSE NULL END
         WHERE scholar_id = ? AND semester = ? AND academic_year = ?
           AND verification_status = 'pending'
           AND finalized_at IS NULL
@@ -1983,7 +2030,7 @@ exports.reviewGrades = (req, res) => {
                 )
           )
     `;
-    db.query(sql, [normalizedStatus, comment || null, normalizedStatus, normalizedStatus, scholar_id, semester, academic_year, req.user.id], (err, result) => {
+    db.query(sql, [normalizedStatus, comment || null, normalizedStatus, normalizedStatus, normalizedStatus, normalizedStatus, gradeBatchId, scholar_id, semester, academic_year, req.user.id], (err, result) => {
         if (err) {
             console.error('Error reviewing grades:', err);
             return res.status(500).json({ error: 'Error reviewing grades' });

@@ -65,19 +65,29 @@ export const buildScholarChecklist = ({ duties = [], history = [], grades = [], 
           : latestSubmissionOfType(history, submissionType, task.created_at)
         : null;
       const rawStatus = normalizeReviewStatus(latest) || null;
-      const done = isApprovedReviewStatus(latest);
+      const approved = isApprovedReviewStatus(latest);
+      const needsRevision = ['rejected', 'returned', 'needs_revision', 'needs-revision'].includes(rawStatus);
       const isGoogleClassroom = String(task.source || '').toLowerCase() === 'google_classroom';
       const dueDate = task.due_date || null;
       const duePassed = isPastDue(dueDate);
+      const awaitingReview = Boolean(latest) && !approved && !needsRevision;
+      const done = approved || (duePassed && awaitingReview);
       const status = done
         ? 'completed'
-        : duePassed && (!latest || ['rejected', 'returned', 'needs_revision', 'needs-revision'].includes(rawStatus))
+        : duePassed
           ? 'closed'
-          : ['rejected', 'returned', 'needs_revision', 'needs-revision'].includes(rawStatus)
+          : needsRevision
           ? 'rejected'
           : latest
             ? 'pending_review'
             : 'pending';
+      const reviewStatus = !latest
+        ? null
+        : approved
+          ? 'approved'
+          : needsRevision
+            ? 'returned'
+            : 'pending_review';
 
       return {
         id: `portal-${task.id}`,
@@ -88,11 +98,14 @@ export const buildScholarChecklist = ({ duties = [], history = [], grades = [], 
         createdByRole: task.created_by_role || '',
         createdAt: task.created_at || '',
         done,
-        completedAt: done ? latest?.approved_at || latest?.reviewed_at || latest?.submitted_at || null : null,
+        completedAt: approved
+          ? latest?.approved_at || latest?.reviewed_at || latest?.submitted_at || null
+          : done ? latest?.submitted_at || null : null,
         route: isGoogleClassroom ? null : (task.route || '/scholar/submission'),
         status,
+        reviewStatus,
         dueDate,
-        staffComment: rawStatus === 'rejected' ? (latest?.staff_comment || null) : null,
+        staffComment: needsRevision ? (latest?.staff_comment || null) : null,
         source: task.source || 'manual',
       };
     });

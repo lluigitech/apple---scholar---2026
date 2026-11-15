@@ -128,6 +128,24 @@ test('initial setup requires phone number before opening a database connection',
   assert.equal(queryCalls.length, 0);
 });
 
+test('initial setup rejects passwords without a special character before opening a database connection', async () => {
+  queryCalls.length = 0;
+  const response = await invoke(controller.completeSetup, {
+    user: { id: 23, role: 'admin' },
+    body: {
+      full_name: 'Admin User',
+      email: 'admin@example.test',
+      phone: '09123456789',
+      current_password: 'temporary-password',
+      new_password: 'newpassword123',
+    },
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.error, /special character/i);
+  assert.equal(queryCalls.length, 0);
+});
+
 test('initial setup updates staff details, hashes the new password, and clears the first-login flag', async () => {
   queryCalls.length = 0;
   connectionUser = {

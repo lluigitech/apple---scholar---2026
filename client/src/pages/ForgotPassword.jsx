@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import axios from 'axios';
 import { CheckCircle2, AlertCircle, Mail, Lock, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { getPasswordRequirementError, isValidPassword } from '../utils/passwordPolicy.js';
 
 // Official Apple Scholar logo — also the way back to the landing page
 import appleLogo from '../assets/logo/applelogo.png';
@@ -63,8 +64,8 @@ const ForgotPassword = () => {
             setError('The new password and confirmation do not match.');
             return;
         }
-        if (resetToken && password.length < 8) {
-            setError('Your new password must be at least 8 characters.');
+        if (resetToken && !isValidPassword(password)) {
+            setError(getPasswordRequirementError(password));
             return;
         }
 
@@ -141,6 +142,9 @@ const ForgotPassword = () => {
                                 style={sans}
                             />
                         </div>
+                        <p style={{ margin: '6px 0 0', fontSize: 12, color: '#8A7A68' }}>
+                            Use at least 8 characters and include a special character, such as ! or @.
+                        </p>
                     </div>
                     <div className="field-group" style={{ marginTop: 'var(--gap)' }}>
                         <label className="field-label" htmlFor="fp-confirm">Confirm new password</label>

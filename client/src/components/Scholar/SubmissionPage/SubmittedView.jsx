@@ -39,33 +39,71 @@ const card = {
 const STAGES = [
     { key: 'submitted', label: 'Submitted' },
     { key: 'officer', label: 'Officer Review' },
-    { key: 'admin', label: 'Admin Verification' },
+    { key: 'approved', label: 'Approved' },
     { key: 'completed', label: 'Completed' },
 ];
 
-// A submission always lands here immediately after a successful POST,
-// so the tracker's current stage is always the first one.
-const CURRENT_STAGE_INDEX = 0;
+const formatTimestamp = (value) => {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+        ? ''
+        : date.toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' });
+};
 
-const NEXT_STEPS = [
-    { icon: Eye, text: 'Officer reviews your report.' },
-    { icon: ShieldCheck, text: 'Admin validates requirements.' },
-    { icon: Bell, text: "You'll receive a notification." },
-    { icon: History, text: 'Status appears in Submission History.' },
-];
-
-const SubmittedView = ({ info, body: letterBody, media, onNew, onViewHistory }) => {
-    // Preserved: submitted timestamp comes from the moment this view renders.
-    const now = useMemo(() => new Date(), []);
+const SubmittedView = ({ info, body: letterBody, media, record, statusError, onNew, onViewHistory }) => {
+    const now = useMemo(
+        () => record?.submitted_at ? new Date(record.submitted_at) : new Date(),
+        [record?.submitted_at]
+    );
     const dateStr = now.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' });
     const timeStr = now.toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' });
-
-    // A human-readable receipt number derived from the submission moment —
-    // no new external state, just a display affordance for this view.
-    const submissionId = useMemo(
-        () => `ASP-${now.getTime().toString(36).toUpperCase()}`,
-        [now]
-    );
+    const submissionId = record?.id ? `ASP-${record.id}` : 'Pending';
+    const status = String(record?.status || 'pending').trim().toLowerCase();
+    const isReturned = ['returned', 'rejected', 'needs_revision', 'needs-revision'].includes(status);
+    const isApproved = status === 'approved';
+    const isCompleted = Boolean(record?.finalized_at);
+    const currentStageIndex = isReturned ? 1 : isCompleted ? 3 : isApproved ? 2 : 1;
+    const statusLabel = isReturned
+        ? 'Returned for Revision'
+        : isCompleted
+            ? 'Completed'
+            : isApproved
+                ? 'Approved'
+                : status === 'under_review'
+                    ? 'Officer Review in Progress'
+                    : 'Awaiting Officer Review';
+    const headline = isReturned
+        ? 'Revisions Requested'
+        : isCompleted
+            ? 'Monthly Report Completed'
+            : isApproved
+                ? 'Monthly Report Approved'
+                : 'Monthly Report Received';
+    const heroStart = isReturned ? DANGER : SUCCESS;
+    const heroEnd = isReturned ? '#8A3C3C' : SUCCESS_DEEP;
+    const heroEyebrow = isReturned ? 'ACTION REQUIRED' : isCompleted ? 'REVIEW COMPLETE' : 'SUCCESSFULLY SUBMITTED';
+    const nextSteps = isReturned
+        ? [
+            { icon: Eye, text: 'Review your officer’s feedback in Submission History.' },
+            { icon: History, text: 'Use “Resubmit this item” after making the requested corrections.' },
+        ]
+        : isCompleted
+            ? [
+                { icon: ShieldCheck, text: 'Your report has completed review and is finalized.' },
+                { icon: History, text: 'You can find this record any time in Submission History.' },
+            ]
+            : isApproved
+                ? [
+                    { icon: ShieldCheck, text: 'Your Officer approved this report.' },
+                    { icon: Bell, text: 'It is now available in Officer Reports and the Admin Overall Report.' },
+                    { icon: History, text: 'You can follow the latest status in Submission History.' },
+                ]
+                : [
+                    { icon: Eye, text: 'Your report is waiting for Officer review.' },
+                    { icon: Bell, text: 'The status will update here as your report moves through review.' },
+                    { icon: History, text: 'You can also follow it in Submission History.' },
+                ];
 
     const paragraphs = letterBody.split(/\n\n+/).filter((p) => p.trim());
     const wordCount = letterBody.trim().split(/\s+/).filter(Boolean).length;
@@ -80,10 +118,10 @@ const SubmittedView = ({ info, body: letterBody, media, onNew, onViewHistory }) 
     ];
 
     const summaryCards = [
-        { label: 'Submission Date', value: info.date },
+        { label: 'Submission Date', value: formatTimestamp(record?.submitted_at) || `${dateStr} · ${timeStr}` },
         { label: 'Semester', value: info.semester || '—' },
         { label: 'Document Type', value: 'Monthly Report' },
-        { label: 'Current Status', value: 'Submitted' },
+        { label: 'Current Status', value: statusLabel },
     ];
 
     return (
@@ -95,7 +133,7 @@ const SubmittedView = ({ info, body: letterBody, media, onNew, onViewHistory }) 
                     className="flex items-center justify-between gap-6"
                     style={{
                         ...card,
-                        background: `linear-gradient(120deg, ${SUCCESS} 0%, ${SUCCESS_DEEP} 100%)`,
+                        background: `linear-gradient(120deg, ${heroStart} 0%, ${heroEnd} 100%)`,
                         border: 'none',
                         padding: '28px 32px',
                         marginBottom: 20,
@@ -103,10 +141,10 @@ const SubmittedView = ({ info, body: letterBody, media, onNew, onViewHistory }) 
                 >
                     <div>
                         <p style={{ ...sans, fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.08em', color: '#DFF3E4', marginBottom: 8 }}>
-                            SUCCESSFULLY SUBMITTED
+                            {heroEyebrow}
                         </p>
                         <h1 style={{ ...display, fontSize: '1.6rem', fontWeight: 700, color: '#fff', marginBottom: 10 }}>
-                            Monthly Report Received
+                            {headline}
                         </h1>
                         <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
                             <span style={{ ...sans, fontSize: '0.8rem', color: '#ECFDF3' }}>Receipt {submissionId}</span>
@@ -123,11 +161,17 @@ const SubmittedView = ({ info, body: letterBody, media, onNew, onViewHistory }) 
 
                 {/* 2. Tracking Progress */}
                 <div style={{ ...card, padding: '24px 32px', marginBottom: 20 }}>
+                    <p style={{ ...sans, fontSize: '0.82rem', fontWeight: 700, color: PRIMARY, marginBottom: 18 }}>
+                        {statusLabel}
+                        {record?.updated_at && ` · Updated ${formatTimestamp(record.updated_at)}`}
+                    </p>
                     <div className="flex items-start justify-between" style={{ position: 'relative' }}>
                         {STAGES.map((stage, i) => {
-                            const isDone = i < CURRENT_STAGE_INDEX;
-                            const isCurrent = i === CURRENT_STAGE_INDEX;
+                            const isDone = i < currentStageIndex;
+                            const isCurrent = i === currentStageIndex;
                             const isActive = isDone || isCurrent;
+                            const isReturnedStage = isReturned && isCurrent;
+                            const stageColor = isReturnedStage ? DANGER : SUCCESS;
                             return (
                                 <div key={stage.key} className="flex-1 flex flex-col items-center" style={{ position: 'relative' }}>
                                     {i < STAGES.length - 1 && (
@@ -138,7 +182,7 @@ const SubmittedView = ({ info, body: letterBody, media, onNew, onViewHistory }) 
                                                 left: '50%',
                                                 width: '100%',
                                                 height: 2,
-                                                background: i < CURRENT_STAGE_INDEX ? SUCCESS : BORDER,
+                                                background: i < currentStageIndex ? SUCCESS : BORDER,
                                                 zIndex: 0,
                                             }}
                                         />
@@ -148,8 +192,8 @@ const SubmittedView = ({ info, body: letterBody, media, onNew, onViewHistory }) 
                                             width: 22,
                                             height: 22,
                                             borderRadius: '50%',
-                                            background: isActive ? SUCCESS : SURFACE,
-                                            border: `2px solid ${isActive ? SUCCESS : BORDER}`,
+                                            background: isActive ? stageColor : SURFACE,
+                                            border: `2px solid ${isActive ? stageColor : BORDER}`,
                                             position: 'relative',
                                             zIndex: 1,
                                         }}
@@ -159,17 +203,28 @@ const SubmittedView = ({ info, body: letterBody, media, onNew, onViewHistory }) 
                                             ...sans,
                                             fontSize: '0.72rem',
                                             fontWeight: isCurrent ? 700 : 500,
-                                            color: isActive ? INK : MUTED,
+                                            color: isReturnedStage ? DANGER : isActive ? INK : MUTED,
                                             marginTop: 10,
                                             textAlign: 'center',
                                         }}
                                     >
-                                        {stage.label}
+                                        {isReturnedStage ? 'Returned for Revision' : stage.label}
                                     </span>
                                 </div>
                             );
                         })}
                     </div>
+                    {isReturned && record?.officer_comment && (
+                        <div style={{ marginTop: 18, borderLeft: `3px solid ${DANGER}`, background: `${DANGER}0d`, borderRadius: 8, padding: '10px 14px' }}>
+                            <p style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, color: DANGER, marginBottom: 3 }}>OFFICER FEEDBACK</p>
+                            <p style={{ ...sans, fontSize: '0.82rem', lineHeight: 1.5, color: INK }}>{record.officer_comment}</p>
+                        </div>
+                    )}
+                    {statusError && (
+                        <p role="status" style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginTop: 14 }}>
+                            {statusError}
+                        </p>
+                    )}
                 </div>
 
                 {/* 3. Submission Summary */}
@@ -274,7 +329,7 @@ const SubmittedView = ({ info, body: letterBody, media, onNew, onViewHistory }) 
                         What happens next?
                     </h2>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {NEXT_STEPS.map((step, i) => (
+                        {nextSteps.map((step, i) => (
                             <div key={i} className="flex items-start gap-3">
                                 <div
                                     className="flex items-center justify-center flex-shrink-0"

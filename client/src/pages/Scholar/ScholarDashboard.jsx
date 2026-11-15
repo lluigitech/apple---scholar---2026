@@ -385,13 +385,27 @@ const ComplianceGauge = ({ score, loading, size = 84 }) => {
 
 const RequirementRow = ({ requirement }) => {
     const status = requirement.done
-        ? { label: 'Complete', detail: 'Approved', color: SUCCESS }
+        ? {
+            label: 'Complete',
+            detail: requirement.reviewStatus === 'pending_review'
+                ? 'Submitted on time · awaiting Officer review'
+                : 'Approved',
+            color: SUCCESS,
+        }
         : requirement.status === 'pending_review'
             ? { label: 'Pending Review', detail: 'Awaiting officer review', color: WARNING }
             : ['rejected', 'returned'].includes(requirement.status)
                 ? { label: 'Returned', detail: 'Revision required', color: DANGER }
                 : requirement.status === 'closed'
-                    ? { label: 'Closed', detail: 'Late submissions are not accepted', color: DANGER }
+                ? {
+                    label: 'Closed',
+                    detail: requirement.reviewStatus === 'pending_review'
+                        ? 'Late submissions are closed · awaiting Officer review'
+                        : requirement.reviewStatus === 'returned'
+                            ? 'Late submissions are closed · revision requested'
+                            : 'Late submissions are not accepted',
+                    color: DANGER,
+                }
                     : ['missed', 'missing'].includes(requirement.status)
                         ? { label: 'Missed', detail: 'Deadline passed', color: DANGER }
                         : { label: 'Pending', detail: 'Still needs attention', color: WARNING };

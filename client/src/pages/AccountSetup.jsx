@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, Eye, EyeOff, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
 import { API_ORIGIN } from '../utils/apiConfig.js';
+import { getPasswordRequirementError, isValidPassword } from '../utils/passwordPolicy.js';
 
 // Official Apple Scholar logo — also the way back to the landing page
 import appleLogo from '../assets/logo/applelogo.png';
@@ -56,8 +57,8 @@ const AccountSetup = () => {
     const handleSubmit = async (event) => {
         event.preventDefault();
         setError('');
-        if (newPassword.length < 8) {
-            setError('Your new password must be at least 8 characters.');
+        if (!isValidPassword(newPassword)) {
+            setError(getPasswordRequirementError(newPassword));
             return;
         }
         if (newPassword !== confirmPassword) {
@@ -171,7 +172,7 @@ const AccountSetup = () => {
                                         </div>
                                         <div className="as-info">
                                             <span className="as-info-chip"><KeyRound size={16} color={PRIMARY} strokeWidth={1.8} /></span>
-                                            <p>Use the temporary password sent by your administrator as your current password.</p>
+                                            <p>Use the temporary password sent by your administrator as your current password. Your new password must be at least 8 characters and include a special character, such as ! or @.</p>
                                         </div>
                                         <div className="as-stack">
                                             {passwordFields.map(([id, label, value, setValue, autoComplete]) => (

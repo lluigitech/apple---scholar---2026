@@ -6,23 +6,21 @@ const finalizeApprovedSubmissions = async () => {
         await connection.beginTransaction();
         const [submissionResult] = await connection.query(`
             UPDATE submissions
-            SET approved_at = COALESCE(approved_at, reviewed_at, submitted_at),
+            SET approved_at = COALESCE(approved_at, reviewed_at, submitted_at, NOW()),
                 finalized_at = NOW(),
                 export_available_at = NOW(),
-                finalization_batch_id = CONCAT('auto-approved-', scholar_id, '-', id)
+                finalization_batch_id = CONCAT('approved-submission-', id)
             WHERE status = 'approved'
               AND finalized_at IS NULL
-              AND COALESCE(approved_at, reviewed_at, submitted_at) <= DATE_SUB(NOW(), INTERVAL 3 DAY)
         `);
         const [gradeResult] = await connection.query(`
             UPDATE grades
-            SET approved_at = COALESCE(approved_at, created_at),
+            SET approved_at = COALESCE(approved_at, created_at, NOW()),
                 finalized_at = NOW(),
                 export_available_at = NOW(),
-                finalization_batch_id = CONCAT('auto-approved-grade-', scholar_id, '-', id)
+                finalization_batch_id = CONCAT('approved-grade-', id)
             WHERE verification_status = 'approved'
               AND finalized_at IS NULL
-              AND COALESCE(approved_at, created_at) <= DATE_SUB(NOW(), INTERVAL 3 DAY)
         `);
         await connection.commit();
         return {

@@ -304,6 +304,9 @@ function Submission() {
   const [historyError, setHistoryError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [submittedId, setSubmittedId] = useState(null);
+  const [submittedRecord, setSubmittedRecord] = useState(null);
+  const [submissionStatusError, setSubmissionStatusError] = useState('');
   const [taskDeadlines, setTaskDeadlines] = useState(null);
   const [taskDeadlinesLoading, setTaskDeadlinesLoading] = useState(Boolean(localStorage.getItem('scholar_id')));
   const [taskDeadlinesError, setTaskDeadlinesError] = useState('');
@@ -324,14 +327,22 @@ function Submission() {
     : selectedType === 'cor' ? 'cor'
       : selectedType === 'other' ? 'other' : null;
   const selectedDeadline = selectedDeadlineType ? taskDeadlines?.[selectedDeadlineType] : null;
+  const submissionLocked = Boolean(
+    selectedDeadline?.has_submission && !selectedDeadline.can_resubmit
+  );
   const deadlineBlocked = Boolean(selectedDeadlineType && (
-    taskDeadlinesLoading || taskDeadlinesError || !selectedDeadline?.assigned || selectedDeadline.closed
+    taskDeadlinesLoading || taskDeadlinesError || !selectedDeadline?.assigned || selectedDeadline.closed || submissionLocked
   ));
   const deadlineMessage = !selectedDeadlineType ? ''
     : taskDeadlinesError ? 'Could not verify the task deadline. Please try again later.'
       : taskDeadlinesLoading ? 'Checking the task deadline…'
         : !selectedDeadline?.assigned ? 'There is no active task assigned for this requirement.'
-          : selectedDeadline.closed ? 'This task is closed. Late submissions are not accepted.' : '';
+          : selectedDeadline.closed ? 'This task is closed. Late submissions are not accepted.'
+            : submissionLocked
+              ? selectedDeadline.submission_status === 'approved'
+                ? 'Your submission was approved. Please wait for the next task from Admin before submitting again.'
+                : 'You already submitted this task. Please wait for Officer review, or resubmit if it is returned for revision.'
+              : '';
   const liveEval = evalResult || {
     overallScore: 0,
     reportScore: 0,
@@ -435,7 +446,36 @@ function Submission() {
     } finally { setHistoryLoading(false); }
   }, [scholarId]);
 
+  const fetchSubmittedStatus = useCallback(async () => {
+    if (!scholarId || !submittedId) return;
+    try {
+      const { data } = await axios.get(`${API_BASE}/status/${submittedId}`, { headers: authHeader() });
+      setSubmittedRecord(data);
+      setSubmissionStatusError('');
+    } catch {
+      setSubmissionStatusError('Live status could not be refreshed. Showing the latest available update.');
+    }
+  }, [scholarId, submittedId]);
+
   useEffect(() => { if (tab === 'history') fetchHistory(); }, [tab, fetchHistory]);
+
+  useEffect(() => {
+    if (tab !== 'submit' || view !== 'submitted' || !submittedId) return undefined;
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState === 'visible') fetchSubmittedStatus();
+    };
+    refreshIfVisible();
+    const intervalId = window.setInterval(refreshIfVisible, 30_000);
+    window.addEventListener('focus', refreshIfVisible);
+    document.addEventListener('visibilitychange', refreshIfVisible);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refreshIfVisible);
+      document.removeEventListener('visibilitychange', refreshIfVisible);
+    };
+  }, [tab, view, submittedId, fetchSubmittedStatus]);
 
   const refreshTaskDeadlines = useCallback(async () => {
     if (!scholarId) return null;
@@ -488,6 +528,7 @@ function Submission() {
             source: 'flagged',
             flagged: true,
             flagReason: scoreResponse.data.flag_reason || 'This submission does not appear to be a valid letter.',
+            accepted: false,
             riskColor: DANGER,
             riskLabel: 'Invalid Letter',
             checklist: fallbackChecklist,
@@ -555,9 +596,11 @@ function Submission() {
   const handleNewSubmission = () => {
     setInfo(prev => ({ ...prev, date: '' }));
     setBody(''); setMedia([]); setEvalResult(null); setView('editor'); setSubmitError(''); setResubmitNotice('');
+    setSubmittedId(null); setSubmittedRecord(null); setSubmissionStatusError('');
   };
 
-  const handleResubmit = (item) => {
+  const handleResubmit = async (item) => {
+    await refreshTaskDeadlines();
     const nextType = SUBMISSION_TYPE_TO_TAB[item.submission_type] || 'monthly-report';
     setSelectedType(nextType);
     setSubmitError(''); setDocError(''); setDocSuccess(''); setDocFile(null);
@@ -597,6 +640,12 @@ function Submission() {
           : 'This task is closed. Late submissions are not accepted.');
         return;
       }
+      if (letterDeadline.has_submission && !letterDeadline.can_resubmit) {
+        setSubmitError(letterDeadline.submission_status === 'approved'
+          ? 'Your submission was approved. Please wait for the next task from Admin before submitting again.'
+          : 'You already submitted this task. Please wait for Officer review, or resubmit if it is returned for revision.');
+        return;
+      }
       const formData = new FormData();
       formData.append('letter_content', body_);
       formData.append('name', info.name || '');
@@ -615,7 +664,17 @@ function Submission() {
         resumableUploads.push(await uploadResumableFile(item.file, 'media'));
       }
       formData.append('resumable_uploads', JSON.stringify(resumableUploads));
-      await postWithRetry(`${API_BASE}/submit`, formData);
+      const response = await postWithRetry(`${API_BASE}/submit`, formData);
+      const id = response.data?.submissionId;
+      setSubmittedId(id || null);
+      setSubmittedRecord({
+        id,
+        submission_type: 'letter',
+        status: 'pending',
+        submitted_at: new Date().toISOString(),
+      });
+      setSubmissionStatusError(id ? '' : 'Your report was submitted, but live tracking is unavailable. Check My History for updates.');
+      await refreshTaskDeadlines();
       setShowConfirm(false); setView('submitted');
     } catch (err) {
       setSubmitError(err.response?.data?.error || 'Something went wrong while submitting. Please try again.');
@@ -641,6 +700,12 @@ function Submission() {
             : 'This task is closed. Late submissions are not accepted.');
           return;
         }
+        if (requirementDeadline.has_submission && !requirementDeadline.can_resubmit) {
+          setDocError(requirementDeadline.submission_status === 'approved'
+            ? 'Your submission was approved. Please wait for the next task from Admin before submitting again.'
+            : 'You already submitted this task. Please wait for Officer review, or resubmit if it is returned for revision.');
+          return;
+        }
       }
       const formData = new FormData();
       formData.append('letter_content', ''); formData.append('quality_score', 0); formData.append('quality_status', 'pending');
@@ -651,6 +716,7 @@ function Submission() {
       await postWithRetry(`${API_BASE}/submit`, formData);
       setDocSuccess('Document submitted successfully! Forwarded to admin/office for review.');
       setDocFile(null); setResubmitNotice('');
+      await refreshTaskDeadlines();
     } catch (err) {
       setDocError(err.response?.data?.error || 'Something went wrong while uploading. Please try again.');
     } finally { setDocUploading(false); }
@@ -661,8 +727,8 @@ function Submission() {
 
   // ── Quick stats — derived from existing state only, no new calculations ──
   const totalSubmissions = history.length;
-  const acceptedCount = history.filter((h) => (h.status === 'approved' || h.quality_status === 'approved')).length;
-  const pendingReviewCount = Math.max(totalSubmissions - acceptedCount, 0);
+  const acceptedCount = history.filter((h) => String(h.status || '').toLowerCase() === 'approved').length;
+  const pendingReviewCount = history.filter((h) => ['pending', 'under_review'].includes(String(h.status || '').toLowerCase())).length;
   const checklistPassedCount = CHECKLIST.filter((item) => item.check(info, body_, media)).length;
 
   // ── History filter — UI-only, over the already-fetched `history` array ──
@@ -956,7 +1022,7 @@ function Submission() {
 
                 <div className="flex flex-wrap items-center justify-end gap-2 px-4 sm:px-5 py-3" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderTop: `1px solid ${BG}` }}>
                   <button onClick={() => setView('editor')} className="flex-1 sm:flex-initial" style={outlineBtn}><Bookmark size={13} /> Edit </button>
-                  <button onClick={() => { setSubmitError(''); setShowConfirm(true); }} disabled={deadlineBlocked} className="flex-1 sm:flex-initial disabled:opacity-50" style={{ ...filledBtn, cursor: deadlineBlocked ? 'not-allowed' : 'pointer' }}><Send size={13} /> Submit Report</button>
+                  <button onClick={() => { setSubmitError(''); setShowConfirm(true); }} disabled={deadlineBlocked || evalResult.flagged} className="flex-1 sm:flex-initial disabled:opacity-50" style={{ ...filledBtn, cursor: deadlineBlocked || evalResult.flagged ? 'not-allowed' : 'pointer' }}><Send size={13} /> Submit Report</button>
                 </div>
 
                 {evalResult.flagged && (
@@ -1109,7 +1175,20 @@ function Submission() {
               </div>
             )}
 
-            {view === 'submitted' && <SubmittedView info={info} body={body_} media={media} onNew={handleNewSubmission} />}
+            {view === 'submitted' && (
+              <SubmittedView
+                info={info}
+                body={body_}
+                media={media}
+                record={submittedRecord}
+                statusError={submissionStatusError}
+                onNew={handleNewSubmission}
+                onViewHistory={() => {
+                  setTab('history');
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+              />
+            )}
             {showConfirm && evalResult && (
               <ConfirmModal ev={evalResult} submitting={submitting} submitError={submitError}
                 onCancel={() => setShowConfirm(false)} onConfirm={handleConfirmSubmit} />
@@ -1192,6 +1271,7 @@ function Submission() {
                     <option value="all">All statuses</option>
                     <option value="approved">Approved</option>
                     <option value="pending">Pending</option>
+                    <option value="returned">Returned for revision</option>
                     <option value="rejected">Rejected</option>
                   </select>
                 </div>

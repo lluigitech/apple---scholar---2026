@@ -297,3 +297,14 @@ test('malformed password input is rejected without reading or changing the accou
   assert.equal(response.statusCode, 400);
   assert.equal(queryCalls.length, 0);
 });
+
+test('password change rejects passwords without a special character before reading the account', async () => {
+  queryCalls.length = 0;
+  const response = await invoke(authController.changePassword, {
+    user: { id: 8, role: 'officer' },
+    body: { current_password: 'current-password', new_password: 'newpassword123' },
+  });
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body.error, /special character/i);
+  assert.equal(queryCalls.length, 0);
+});

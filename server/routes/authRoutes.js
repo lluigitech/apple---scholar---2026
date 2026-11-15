@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken');
 const { logAuditEvent } = require('../utils/auditLogger');
 const { verifyToken } = require('../middleware/authMiddleware');
 const { sendPasswordResetEmail } = require('../utils/notifyHelpers');
+const { isValidPassword, PASSWORD_REQUIREMENTS_ERROR } = require('../utils/passwordPolicy');
 const authController = require('../controllers/authController');
 const accountSetupController = require('../controllers/accountSetupController');
 
@@ -44,8 +45,11 @@ router.post('/forgot-password', (req, res) => {
 
 router.post('/reset-password', async (req, res) => {
     const { token, new_password } = req.body || {};
-    if (!token || !new_password || String(new_password).length < 8) {
-        return res.status(400).json({ error: 'A valid reset token and a password of at least 8 characters are required.' });
+    if (!token) {
+        return res.status(400).json({ error: 'A valid reset token is required.' });
+    }
+    if (!isValidPassword(new_password)) {
+        return res.status(400).json({ error: PASSWORD_REQUIREMENTS_ERROR });
     }
 
     try {

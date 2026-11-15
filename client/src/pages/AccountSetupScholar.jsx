@@ -3,6 +3,7 @@ import axios from 'axios';
 import { AlertCircle, ArrowRight, Eye, EyeOff, KeyRound, ShieldCheck, UserRound } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getEducationStage } from '../utils/educationStage';
+import { getPasswordRequirementError, isValidPassword } from '../utils/passwordPolicy.js';
 
 // Official Apple Scholar logo — also the way back to the landing page
 import appleLogo from '../assets/logo/applelogo.png';
@@ -147,8 +148,8 @@ const New = () => {
         event.preventDefault();
         setError('');
 
-        if (newPassword.length < 8) {
-            setError('Your new password must be at least 8 characters.');
+        if (!isValidPassword(newPassword)) {
+            setError(getPasswordRequirementError(newPassword));
             return;
         }
         if (newPassword !== confirmPassword) {
@@ -295,7 +296,7 @@ const New = () => {
                                         />
                                         <div className="sa-info">
                                             <span className="sa-info-chip"><KeyRound size={16} color={PRIMARY} strokeWidth={1.8} /></span>
-                                            <p>Use the temporary password from the administrator&rsquo;s email as your current password.</p>
+                                            <p>Use the temporary password from the administrator&rsquo;s email as your current password. Your new password must be at least 8 characters and include a special character, such as ! or @.</p>
                                         </div>
                                         <div className="sa-stack">
                                             <PasswordField id="sa-current-password" label="Current password" value={currentPassword} onChange={setCurrentPassword} show={showCurrent} onToggle={() => setShowCurrent((v) => !v)} autoComplete="current-password" />

@@ -49,7 +49,7 @@ const uploadCloud = multer({
 
 const uploadChunk = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 1024 * 1024 },
+    limits: { fileSize: 1024 * 1024 + 1 },
 });
 
 const scoreLimiter = rateLimit({ windowMs: 60 * 1000, max: 60, message: 'Score prediction limit reached. Please try again later.' });
@@ -76,6 +76,7 @@ router.post('/score', scoreLimiter, verifyToken, requireRole(['scholar']), submi
 router.get('/deadlines', verifyToken, requireRole(['scholar']), submissionController.getScholarTaskDeadlines);
 
 // HISTORY (Owner or Staff/Admin)
+router.get('/status/:id', verifyToken, requireRole(['scholar']), submissionController.getScholarSubmissionStatus);
 router.get('/history/:scholar_id', verifyToken, authorizeScholarAccess({
     getScholarId: (req) => req.params.scholar_id,
     action: 'VIEW_SCHOLAR',
