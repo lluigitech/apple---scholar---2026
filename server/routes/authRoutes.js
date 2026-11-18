@@ -130,6 +130,19 @@ router.post('/login', (req, res) => {
                 return res.status(401).json({ message: 'Invalid Login ID, email, or password' });
             }
 
+            if (String(user.status || '').toLowerCase() === 'archived') {
+                logAuditEvent({
+                    req,
+                    userId: user.id,
+                    role: normalizedRole,
+                    action: 'login',
+                    module: 'Authentication',
+                    details: `Archived account sign-in blocked for ${user.scholar_id || user.email || user.id}`,
+                    result: 'failed',
+                }).catch(() => {});
+                return res.status(403).json({ message: 'This account has been archived. Contact an administrator for help.' });
+            }
+
             const token = jwt.sign(
                 { id: user.id, role: normalizedRole, email: user.email, scholar_id: user.scholar_id },
                 jwtSecret,

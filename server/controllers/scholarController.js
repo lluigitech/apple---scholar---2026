@@ -1,7 +1,13 @@
 const db = require('../config/db');
 const ExcelJS = require('exceljs');
 const { logAuditEvent } = require('../utils/auditLogger');
-const { calculateComplianceScore, getOverdueComplianceTaskCounts, getAcademicTier, normalizeAcademicGrade } = require('../utils/complianceLogger');
+const {
+    calculateComplianceScore,
+    getOverdueComplianceTaskCounts,
+    getComplianceRiskTier,
+    getAcademicTier,
+    normalizeAcademicGrade,
+} = require('../utils/complianceLogger');
 const { checkOutDutyAttendance } = require('../services/dutyAttendanceService');
 
 const calculateAge = (birthDate) => {
@@ -412,15 +418,14 @@ exports.getComplianceStatus = (req, res) => {
     }
 
     const settingsSql = `
-        SELECT id, min_compliance, allowed_missed, required_hours,
-            missed_submission_deduction, service_hour_shortfall_deduction,
+        SELECT id, min_compliance, allowed_missed,
+            missed_submission_deduction, late_duty_deduction,
             absent_duty_deduction, late_submission_deduction,
             negative_letter_deduction, quality_drop_deduction,
-            extra_service_bonus, good_maintenance_bonus,
-            missed_submission_grace_count, late_submission_grace_count,
+            good_maintenance_bonus,
+            missed_submission_grace_count,
             recovery_enabled, early_submission_bonus,
-            service_hours_completion_bonus, consecutive_early_bonus,
-            perfect_attendance_bonus, monthly_recovery_cap
+            consecutive_early_bonus, perfect_attendance_bonus, monthly_recovery_cap
         FROM compliance_settings WHERE id = 1 LIMIT 1
     `;
 
@@ -449,9 +454,12 @@ exports.getComplianceStatus = (req, res) => {
                     AVG(quality_score) AS avg_quality,
                     SUM(CASE WHEN service_hours IS NOT NULL THEN service_hours ELSE 0 END) AS total_service_hours,
                     MAX(submitted_at) AS last_submission,
-                    SUM(CASE WHEN sentiment_label LIKE '%Negative%' THEN 1 ELSE 0 END) AS negative_letters,
                     SUM(CASE WHEN submission_type = 'letter' AND submitted_at <= DATE_SUB(LAST_DAY(submitted_at), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS early_submissions,
-                    GROUP_CONCAT(DISTINCT DATE_FORMAT(submitted_at, '%Y-%m') ORDER BY DATE_FORMAT(submitted_at, '%Y-%m') SEPARATOR ',') AS early_submission_months
+                    GROUP_CONCAT(DISTINCT CASE
+                        WHEN submission_type = 'letter' AND submitted_at <= DATE_SUB(LAST_DAY(submitted_at), INTERVAL 7 DAY)
+                        THEN DATE_FORMAT(submitted_at, '%Y-%m')
+                    END ORDER BY DATE_FORMAT(submitted_at, '%Y-%m') SEPARATOR ',') AS early_submission_months,
+                    SUM(CASE WHEN sentiment_label LIKE '%Negative%' THEN 1 ELSE 0 END) AS negative_letters
                 FROM submissions
                 WHERE scholar_id = ?
             `,
@@ -466,11 +474,15 @@ exports.getComplianceStatus = (req, res) => {
                     `
                         SELECT
                             COUNT(*) AS total_duties,
-                            SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) AS present,
-                            SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) AS absent
-                        FROM duty_attendance
-                        WHERE scholar_id = ?
-                          AND (COALESCE(is_makeup, 0) = 0 OR check_out_at IS NOT NULL)
+                            SUM(CASE WHEN da.status = 'present' THEN 1 ELSE 0 END) AS present,
+                            SUM(CASE WHEN da.status = 'late' THEN 1 ELSE 0 END) AS late,
+                            SUM(CASE WHEN da.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+                            GROUP_CONCAT(DISTINCT DATE_FORMAT(COALESCE(d.duty_date, da.marked_at), '%Y-%m') ORDER BY DATE_FORMAT(COALESCE(d.duty_date, da.marked_at), '%Y-%m') SEPARATOR ',') AS duty_months,
+                            GROUP_CONCAT(DISTINCT CASE WHEN COALESCE(da.status, '') <> 'present' THEN DATE_FORMAT(COALESCE(d.duty_date, da.marked_at), '%Y-%m') END ORDER BY DATE_FORMAT(COALESCE(d.duty_date, da.marked_at), '%Y-%m') SEPARATOR ',') AS imperfect_duty_months
+                        FROM duty_attendance da
+                        LEFT JOIN duties d ON d.id = da.duty_id
+                        WHERE da.scholar_id = ?
+                          AND (COALESCE(da.is_makeup, 0) = 0 OR da.check_out_at IS NOT NULL)
                     `,
                     [scholar_id],
                     (attErr, attRows) => {
@@ -505,6 +517,7 @@ exports.getComplianceStatus = (req, res) => {
                                         att,
                                         settings,
                                         overdueTaskCount: overdueTasksByScholar[scholar_id] || 0,
+                                        accountCreatedAt: gradeRows[0]?.created_at,
                                         today,
                                     });
 
@@ -527,19 +540,17 @@ exports.getComplianceStatus = (req, res) => {
                             const academicStatus = getAcademicTier(academicScore);
 
                             const scholarFlags = [];
-                            if (score.deductions.serviceHourShortfall.points > 0) {
+                            if (score.deductions.lateDuty.points > 0) {
                                 scholarFlags.push({
-                                    type: 'Service Hours',
-                                    description: score.deductions.serviceHourShortfall.missingHours === 0
-                                        ? 'You are meeting your current service hours target for this term.'
-                                        : `You are ${score.deductions.serviceHourShortfall.missingHours} service hour${score.deductions.serviceHourShortfall.missingHours === 1 ? '' : 's'} short of your current target.`,
-                                    severity: score.deductions.serviceHourShortfall.missingHours >= 5 ? 'medium' : 'low',
+                                    type: 'Late to Duty',
+                                    description: `${score.deductions.lateDuty.lateCount} late duty attendance${score.deductions.lateDuty.lateCount === 1 ? '' : 's'} resulted in a ${score.deductions.lateDuty.points}-point deduction.`,
+                                    severity: score.deductions.lateDuty.lateCount >= 3 ? 'medium' : 'low',
                                 });
                             }
                             if (score.deductions.missedSubmission.points > 0) {
                                 scholarFlags.push({
                                     type: 'Overdue Compliance Tasks',
-                                    description: `${score.deductions.missedSubmission.overdueTasks} overdue compliance task${score.deductions.missedSubmission.overdueTasks === 1 ? '' : 's'}; ${score.deductions.missedSubmission.penalizedTasks} exceeded the grace allowances.`,
+                                    description: `${score.deductions.missedSubmission.penalizedTasks} overdue compliance task${score.deductions.missedSubmission.penalizedTasks === 1 ? '' : 's'} incurred an immediate deduction.`,
                                     severity: score.deductions.missedSubmission.penalizedTasks >= 2 ? 'medium' : 'low',
                                 });
                             }
@@ -573,13 +584,6 @@ exports.getComplianceStatus = (req, res) => {
                                     severity: score.deductions.qualityDrop.avgQuality < 50 ? 'medium' : 'low',
                                 });
                             }
-                            if (score.deductions.extraServiceBonus.points > 0) {
-                                scholarFlags.push({
-                                    type: 'Service Bonus',
-                                    description: 'You have extra service hours and are earning bonus credit toward your compliance score.',
-                                    severity: 'low',
-                                });
-                            }
                             if (score.deductions.goodMaintenanceBonus.points > 0) {
                                 scholarFlags.push({
                                     type: 'Good Progress',
@@ -590,11 +594,8 @@ exports.getComplianceStatus = (req, res) => {
 
                             res.json({
                                 overall_compliance: score.overallCompliance,
-                                required_hours: score.requiredHours,
-                                risk_level: score.overallCompliance >= 70 ? 'low' : score.overallCompliance >= 50 ? 'medium' : 'high',
-                                recoverable_credits: Number(score.recoverableCredits || 0),
+                                risk_level: getComplianceRiskTier(score.overallCompliance, score.minComplianceNum),
                                 total_bonus_points: Number(score.totalBonusPoints || 0),
-                                recovery_enabled: Boolean(score.recoveryEnabled),
                                 flags: scholarFlags,
                                 academic_status: academicStatus,
                                 normalized_academic_score: academicScore,
@@ -783,10 +784,10 @@ exports.checkInToDuty = (req, res) => {
 
                 // Step 5: Insert attendance
                 const insertSql = `
-                    INSERT INTO duty_attendance (duty_id, scholar_id, status, method, marked_at, is_makeup)
-                    VALUES (?, ?, ?, 'qr', NOW(), ?)
+                    INSERT INTO duty_attendance (duty_id, scholar_id, status, method, marked_at, is_makeup, marked_by_id)
+                    VALUES (?, ?, ?, 'qr', NOW(), ?, ?)
                 `;
-                db.query(insertSql, [duty.id, scholar_id, attendanceStatus, isMakeup], (err, result) => {
+                db.query(insertSql, [duty.id, scholar_id, attendanceStatus, isMakeup, req.user?.id || null], (err, result) => {
                     if (err) return res.status(500).json({ error: 'Error recording attendance' });
                     if (permissionUsed) {
                         db.query(

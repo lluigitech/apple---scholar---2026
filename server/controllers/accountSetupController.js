@@ -11,7 +11,7 @@ const isFirstLogin = (value) => value === true || value === 1 || value === '1';
 exports.getProfile = async (req, res) => {
     try {
         const [rows] = await db.promise().query(
-            `SELECT id, scholar_id AS login_id, full_name, email, phone, role, must_change_password
+            `SELECT id, scholar_id AS login_id, full_name, email, role, must_change_password
              FROM users WHERE id = ? LIMIT 1`,
             [req.user.id]
         );
@@ -25,7 +25,6 @@ exports.getProfile = async (req, res) => {
             login_id: user.login_id,
             full_name: user.full_name,
             email: user.email,
-            phone: user.phone || '',
             role: user.role,
         });
     } catch (error) {
@@ -36,7 +35,7 @@ exports.getProfile = async (req, res) => {
 
 exports.completeSetup = async (req, res) => {
     const body = req.body;
-    const allowedFields = new Set(['full_name', 'email', 'phone', 'current_password', 'new_password']);
+    const allowedFields = new Set(['full_name', 'email', 'current_password', 'new_password']);
     if (
         !body ||
         typeof body !== 'object' ||
@@ -44,24 +43,18 @@ exports.completeSetup = async (req, res) => {
         Object.keys(body).some((key) => !allowedFields.has(key)) ||
         typeof body.full_name !== 'string' ||
         typeof body.email !== 'string' ||
-        typeof body.phone !== 'string' ||
         typeof body.current_password !== 'string' ||
         typeof body.new_password !== 'string'
     ) {
-        return res.status(400).json({ error: 'Provide your name, email, phone number, and password details.' });
+        return res.status(400).json({ error: 'Provide your name, email, and password details.' });
     }
-
     const fullName = body.full_name.trim();
     const email = body.email.trim().toLowerCase();
-    const phone = body.phone.trim();
     if (!fullName || fullName.length > 255) {
         return res.status(400).json({ error: 'Full name is required and must not exceed 255 characters.' });
     }
     if (!EMAIL_PATTERN.test(email) || email.length > 255) {
         return res.status(400).json({ error: 'Enter a valid email address.' });
-    }
-    if (!phone || phone.length > 64) {
-        return res.status(400).json({ error: 'Phone number is required and must not exceed 64 characters.' });
     }
     if (!body.current_password) {
         return res.status(400).json({ error: 'Enter your current password.' });
@@ -107,9 +100,9 @@ exports.completeSetup = async (req, res) => {
         await query(
             connection,
             `UPDATE users
-             SET full_name = ?, email = ?, phone = ?, password = ?, must_change_password = 0
+             SET full_name = ?, email = ?, password = ?, must_change_password = 0
              WHERE id = ?`,
-            [fullName, email, phone, hashedPassword, req.user.id]
+            [fullName, email, hashedPassword, req.user.id]
         );
         await connection.commit();
     } catch (error) {

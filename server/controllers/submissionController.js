@@ -405,7 +405,7 @@ const uploadFileToConfiguredStorage = async (file, scholarId) => {
 const uploadPermanentFiles = async (files, scholarId) => {
     await Promise.all(files.map(async (file) => {
         const asset = await uploadFileToConfiguredStorage(file, scholarId);
-        file.path = asset.url || asset.secure_url;
+        file.path = asset.secure_url || asset.url;
         file.storageAsset = asset;
     }));
 };
@@ -413,7 +413,7 @@ const uploadPermanentFiles = async (files, scholarId) => {
 const registerFileAssets = async (scholarId, files) => {
     for (const file of files) {
         const asset = file.storageAsset || file.cloudinaryAsset;
-        const fileUrl = asset?.url || asset?.secure_url;
+        const fileUrl = asset?.secure_url || asset?.url;
         const publicId = asset?.key || asset?.public_id;
         if (!fileUrl || !publicId) throw new Error('Stored upload is missing its asset reference.');
         await new Promise((resolve, reject) => {
@@ -670,31 +670,26 @@ exports.submitCompliance = async (req, res) => {
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
 
-            calculateCurrentCompliance(scholar_id, (preCalcErr, preCompliance, preMinCompliance, preScore) => {
-                if (preCalcErr) {
-                    console.error('Error calculating compliance before submission:', preCalcErr);
-                }
-
-                db.query(sql, [
-                    normalizedPayload.scholar_id,
-                    normalizedPayload.submission_type,
-                    normalizedPayload.letter_content,
-                    normalizedPayload.sentiment_score,
-                    normalizedPayload.sentiment_label,
-                    normalizedPayload.content_score,
-                    normalizedPayload.content_breakdown,
-                    normalizedPayload.quality_label,
-                    normalizedPayload.report_card_path,
-                    normalizedPayload.cor_path,
-                    normalizedPayload.service_activity,
-                    normalizedPayload.service_hours,
-                    normalizedPayload.service_date,
-                    normalizedPayload.quality_score,
-                    normalizedPayload.quality_status,
-                    'pending',   // status - always starts fresh, regardless of any earlier rejected row
-                    null,        // officer_comment - always starts empty, old officer feedback stays only on the old row
-                    prediction?.sentiment === -1 ? 1 : 0,
-                ], (err, result) => {
+            db.query(sql, [
+                normalizedPayload.scholar_id,
+                normalizedPayload.submission_type,
+                normalizedPayload.letter_content,
+                normalizedPayload.sentiment_score,
+                normalizedPayload.sentiment_label,
+                normalizedPayload.content_score,
+                normalizedPayload.content_breakdown,
+                normalizedPayload.quality_label,
+                normalizedPayload.report_card_path,
+                normalizedPayload.cor_path,
+                normalizedPayload.service_activity,
+                normalizedPayload.service_hours,
+                normalizedPayload.service_date,
+                normalizedPayload.quality_score,
+                normalizedPayload.quality_status,
+                'pending',   // status - always starts fresh, regardless of any earlier rejected row
+                null,        // officer_comment - always starts empty, old officer feedback stays only on the old row
+                prediction?.sentiment === -1 ? 1 : 0,
+            ], (err, result) => {
                     if (err) {
                         console.error('DB error saving submission:', err);
                         return res.status(500).json({ error: 'Error saving submission' });
@@ -744,7 +739,7 @@ exports.submitCompliance = async (req, res) => {
                     }
                 }
 
-                calculateCurrentCompliance(scholar_id, (calcErr, currentCompliance, minCompliance, currentScore) => {
+                calculateCurrentCompliance(scholar_id, (calcErr, currentCompliance) => {
                     if (!calcErr && typeof currentCompliance === 'number') {
                         logComplianceIncident(
                             scholar_id,
@@ -754,18 +749,6 @@ exports.submitCompliance = async (req, res) => {
                             currentCompliance,
                             `Compliance submission recorded for ${resolvedType}.`
                         );
-
-                        if (currentScore?.totalBonusPoints > (preScore?.totalBonusPoints || 0)) {
-                            const bonusDelta = Math.round((currentScore.totalBonusPoints - (preScore?.totalBonusPoints || 0)) * 100) / 100;
-                            logComplianceBonus(
-                                scholar_id,
-                                'submission_recovery_bonus',
-                                bonusDelta,
-                                preCompliance,
-                                currentCompliance,
-                                `Recovery bonus awarded after ${resolvedType} submission.`
-                            );
-                        }
                     }
                 });
 
@@ -819,8 +802,7 @@ exports.submitCompliance = async (req, res) => {
                     quality_score: normalizedPayload.quality_score,
                     quality_status: normalizedPayload.quality_status,
                 });
-        });
-    });
+            });
         };
     } catch (err) {
         console.error('Submit error:', err);
@@ -1014,7 +996,7 @@ exports.previewCloudinaryFile = async (req, res) => {
             return res.status(404).json({ error: 'File is not registered in the system' });
         }
         const scholarId = fileRows[0].scholar_id;
-        const canView = await canAccessScholar(req, scholarId, { document: true });
+        const canView = await canAccessScholar(req, scholarId);
         await logPrivacyAccess(req, {
             action: canView ? 'VIEW_DOCUMENT' : 'DENIED_ACCESS',
             resourceType: 'scholar_document',
@@ -1057,7 +1039,7 @@ exports.previewCloudinaryFile = async (req, res) => {
         // Basic safety check: only allow proxying actual Cloudinary URLs.
         const parsedUrl = new URL(url);
         const configuredCloudName = process.env.CLOUDINARY_CLOUD_NAME;
-        if (parsedUrl.protocol !== 'https:' || parsedUrl.hostname !== 'res.cloudinary.com' || !configuredCloudName || parsedUrl.pathname.split('/')[1] !== configuredCloudName) {
+        if (!['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.hostname !== 'res.cloudinary.com' || !configuredCloudName || parsedUrl.pathname.split('/')[1] !== configuredCloudName) {
             return res.status(400).json({ error: 'Invalid file source' });
         }
 
@@ -1085,6 +1067,9 @@ exports.previewCloudinaryFile = async (req, res) => {
                     attachment: false,
                 }
             );
+        } else if (parsedUrl.protocol === 'http:') {
+            parsedUrl.protocol = 'https:';
+            fetchUrl = parsedUrl.toString();
         }
 
         const remoteRes = await fetch(fetchUrl, { redirect: 'follow' });
@@ -1851,7 +1836,7 @@ exports.submitGrades = (req, res) => {
             return uploadFileToConfiguredStorage(req.file, scholar_id).then((asset) => ({ asset, assignedTask }));
         })
         .then(async ({ asset, assignedTask }) => {
-            req.file.path = asset.url || asset.secure_url;
+            req.file.path = asset.secure_url || asset.url;
             req.file.storageAsset = asset;
             await registerFileAssets(scholar_id, [req.file]);
             return saveGradesWithProofPath(req, res, scholar_id, semester, academic_year, subjects, req.file.path, assignedTask);

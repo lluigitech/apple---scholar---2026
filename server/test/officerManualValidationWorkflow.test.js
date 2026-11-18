@@ -15,6 +15,7 @@ fakeDbModule.exports = fakeDb;
 require.cache[dbPath] = fakeDbModule;
 
 const submissionController = require('../controllers/submissionController');
+const cloudinary = require('../config/cloudinary');
 
 delete require.cache[dbPath];
 
@@ -135,4 +136,85 @@ test('Admin cannot make a compliance review decision', async () => {
   assert.equal(submissionResponse.statusCode, 403);
   assert.equal(gradesResponse.statusCode, 403);
   assert.equal(queryCount, 0);
+});
+
+test('authenticated Cloudinary uploads with stored http URLs preview securely over https', async () => {
+  const originalCloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const originalPrivateDownloadUrl = cloudinary.utils.private_download_url;
+  const originalFetch = global.fetch;
+  const cloudinaryUrl = 'http://res.cloudinary.com/test-cloud/image/authenticated/s--signed--/v1/apple-scholar/submissions/other-documents/photo.jpg';
+  let fetchedUrl = '';
+  let privateDownloadOptions;
+  const responseHeaders = {};
+
+  process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
+  cloudinary.utils.private_download_url = (publicId, extension, options) => {
+    privateDownloadOptions = { publicId, extension, options };
+    return 'https://res.cloudinary.com/test-cloud/image/authenticated/private_download/photo.jpg';
+  };
+  global.fetch = async (url) => {
+    fetchedUrl = String(url);
+    return {
+      ok: true,
+      headers: { get: name => name === 'content-type' ? 'image/jpeg' : null },
+      arrayBuffer: async () => Buffer.from([1, 2, 3]),
+    };
+  };
+
+  fakeDb.query = (sql, values, callback) => {
+    if (sql.includes('FROM submissions')) {
+      callback(null, [{ scholar_id: 'S12', resource_id: 21, resource_type: 'other' }]);
+    } else if (sql.includes('FROM privacy_settings')) {
+      callback(null, [{ access_logging: false, privacy_monitoring: false }]);
+    } else if (sql.includes('FROM file_assets')) {
+      callback(null, [{
+        public_id: 'apple-scholar/submissions/other-documents/photo',
+        resource_type: 'image',
+        file_format: 'jpg',
+        scholar_id: 'S12',
+      }]);
+    } else if (sql.includes('FROM admin_preferences')) {
+      callback(null, []);
+    } else if (sql.includes('INSERT INTO audit_logs')) {
+      callback(null, { affectedRows: 1 });
+    } else {
+      callback(new Error(`Unexpected query: ${sql}`));
+    }
+  };
+
+  try {
+    let statusCode = 200;
+    let body;
+    const response = await submissionController.previewCloudinaryFile({
+      query: { url: cloudinaryUrl },
+      user: { id: 8, role: 'admin' },
+    }, {
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json(value) {
+        body = value;
+      },
+      setHeader(name, value) {
+        responseHeaders[name.toLowerCase()] = value;
+      },
+      send(value) {
+        body = value;
+      },
+    });
+
+    assert.equal(response, undefined);
+    assert.equal(statusCode, 200);
+    assert.ok(Buffer.isBuffer(body));
+    assert.equal(responseHeaders['content-type'], 'image/jpeg');
+    assert.equal(privateDownloadOptions.publicId, 'apple-scholar/submissions/other-documents/photo');
+    assert.equal(privateDownloadOptions.options.type, 'authenticated');
+    assert.ok(fetchedUrl.startsWith('https://'));
+  } finally {
+    if (originalCloudName === undefined) delete process.env.CLOUDINARY_CLOUD_NAME;
+    else process.env.CLOUDINARY_CLOUD_NAME = originalCloudName;
+    cloudinary.utils.private_download_url = originalPrivateDownloadUrl;
+    global.fetch = originalFetch;
+  }
 });

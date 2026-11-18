@@ -79,7 +79,6 @@ test('initial setup profile only returns allowed role details while password cha
     login_id: 'STF-2026-001',
     full_name: 'Staff User',
     email: 'staff@example.test',
-    phone: '',
     role: 'staff',
     must_change_password: 1,
   };
@@ -90,7 +89,6 @@ test('initial setup profile only returns allowed role details while password cha
     login_id: 'STF-2026-001',
     full_name: 'Staff User',
     email: 'staff@example.test',
-    phone: '',
     role: 'staff',
   });
   assert.doesNotMatch(JSON.stringify(response.body), /password/i);
@@ -101,31 +99,12 @@ test('initial setup rejects accounts that are not awaiting first-login setup', a
     login_id: 'OFF-2026-001',
     full_name: 'Officer User',
     email: 'officer@example.test',
-    phone: '',
     role: 'officer',
     must_change_password: 0,
   };
 
   const response = await invoke(controller.getProfile, { user: { id: 22, role: 'officer' } });
   assert.equal(response.statusCode, 403);
-});
-
-test('initial setup requires phone number before opening a database connection', async () => {
-  queryCalls.length = 0;
-  const response = await invoke(controller.completeSetup, {
-    user: { id: 23, role: 'admin' },
-    body: {
-      full_name: 'Admin User',
-      email: 'admin@example.test',
-      phone: '',
-      current_password: 'temporary-password',
-      new_password: 'new-secure-password',
-    },
-  });
-
-  assert.equal(response.statusCode, 400);
-  assert.match(response.body.error, /phone number is required/i);
-  assert.equal(queryCalls.length, 0);
 });
 
 test('initial setup rejects passwords without a special character before opening a database connection', async () => {
@@ -135,7 +114,6 @@ test('initial setup rejects passwords without a special character before opening
     body: {
       full_name: 'Admin User',
       email: 'admin@example.test',
-      phone: '09123456789',
       current_password: 'temporary-password',
       new_password: 'newpassword123',
     },
@@ -146,7 +124,7 @@ test('initial setup rejects passwords without a special character before opening
   assert.equal(queryCalls.length, 0);
 });
 
-test('initial setup updates staff details, hashes the new password, and clears the first-login flag', async () => {
+test('initial setup completes without a phone number and preserves existing phone data', async () => {
   queryCalls.length = 0;
   connectionUser = {
     id: 24,
@@ -160,7 +138,6 @@ test('initial setup updates staff details, hashes the new password, and clears t
     body: {
       full_name: '  Staff User  ',
       email: ' STAFF@example.test ',
-      phone: '09123456789',
       current_password: 'temporary-password',
       new_password: 'new-secure-password',
     },
@@ -175,8 +152,10 @@ test('initial setup updates staff details, hashes the new password, and clears t
 
   const update = queryCalls.find(({ sql }) => sql.startsWith('UPDATE users'));
   assert.ok(update);
-  assert.deepEqual(update.values.slice(0, 3), ['Staff User', 'staff@example.test', '09123456789']);
-  assert.match(update.values[3], /^\$2[aby]\$/);
-  assert.equal(update.values[4], 24);
+  assert.match(update.sql, /SET full_name = \?, email = \?, password = \?, must_change_password = 0/);
+  assert.doesNotMatch(update.sql, /phone/i);
+  assert.deepEqual(update.values.slice(0, 2), ['Staff User', 'staff@example.test']);
+  assert.match(update.values[2], /^\$2[aby]\$/);
+  assert.equal(update.values[3], 24);
   assert.ok(queryCalls.some(({ sql }) => sql.startsWith('INSERT INTO audit_logs')));
 });

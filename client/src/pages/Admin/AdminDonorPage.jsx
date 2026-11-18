@@ -1,22 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  BarChart,
-  Bar,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-} from 'recharts';
-import {
-  Users, GraduationCap, Clock, Download, X, HeartHandshake, FileText, CheckCircle2,
+  Users, Download, X, HeartHandshake, FileText,
   Search, ChevronLeft, ChevronRight, AlertTriangle,
 } from 'lucide-react';
 import { formatAdminMonth } from '../../utils/adminPreferences';
@@ -24,7 +9,7 @@ import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
 /**
  * DEPENDENCIES — install if not already present:
- *   npm install recharts lucide-react
+ *   npm install lucide-react
  *
  * FONTS — add to index.html <head>:
  *   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -48,7 +33,6 @@ const INK = '#241512';
 const MUTED = '#8A7A68';
 const BRONZE = '#A9784E';
 const SUCCESS = '#6B8F71';
-const WARNING = '#C08A3E';
 const DANGER = '#A24A4A';
 const RADIUS = 16;
 
@@ -66,7 +50,14 @@ const YEAR_LEVEL_ORDER = [
   '1st Year College', '2nd Year College', '3rd Year College', '4th Year College', '5th Year College',
 ];
 
-const CHART_PALETTE = [PRIMARY, BRONZE, SUCCESS, WARNING, PRIMARY_DEEP, '#B08968', '#8A9A8C', '#D8B98C', '#C97A8B', '#9C6B4E', '#5E8A66'];
+const DOCUMENT_TASK_LABELS = {
+  'Monthly Report': 'Monthly Letter',
+  'COR Upload': 'COR',
+  'Report Card': 'Grades',
+  'Other Documents': 'Other Document',
+};
+const DOCUMENT_TASK_ORDER = ['Monthly Report', 'COR Upload', 'Report Card', 'Other Documents'];
+const SCHOLAR_REPORT_DOCUMENT_CATEGORIES = ['Monthly Letter', 'Grades', 'COR', 'Other Documents'];
 
 const SCHOLARS_PER_PAGE = 20;
 
@@ -89,40 +80,43 @@ const formatYearLevel = (value) => {
   return aliasMap[normalized] || value;
 };
 
-// ---------------------------------------------------------------------------
-// Missing-data helpers.
-// A value that is null / undefined / '' / not a number is "no data" (null).
-// A real 0 from the backend stays 0. Nothing here converts missing → 0.
-// ---------------------------------------------------------------------------
-const num = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const n = Number(value);
-  return Number.isFinite(n) ? n : null;
-};
-const validOnly = (values) => values.filter((v) => v !== null);
-const sumValid = (values) => {
-  const valid = validOnly(values);
-  return valid.length ? valid.reduce((a, b) => a + b, 0) : null;
-};
-const avgValid = (values) => {
-  const valid = validOnly(values);
-  return valid.length ? valid.reduce((a, b) => a + b, 0) / valid.length : null;
-};
-const fmtNum = (value, digits) => {
-  if (value === null || value === undefined) return '—';
-  return digits != null ? Number(value).toFixed(digits) : String(value);
-};
-
-const gpaOf = (row) => num(row.gpa);
-const reportsOf = (row) => num(row.reports_submitted);
-const hoursOf = (row) => num(row.total_duty_hours);
-const activitiesOf = (row) => num(row.activities_attended);
-// Only a real backend value counts. No proxy / estimate is ever made.
-
-const joinList = (items) => {
-  if (items.length <= 1) return items[0] || '';
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(', ')}, and ${items[items.length - 1]}`;
+const buildScholarSubmissionFilename = ({ month, yearLevel, complianceType, scholarName, filePath, contentType }) => {
+  const [year, monthNumber] = String(month || '').split('-').map(Number);
+  const monthName = year && monthNumber
+    ? new Intl.DateTimeFormat('en-US', { month: 'long' }).format(new Date(year, monthNumber - 1, 1))
+    : 'Month';
+  const nameParts = String(scholarName || 'Scholar').trim().split(/\s+/).filter(Boolean);
+  const commaNameParts = String(scholarName || '').split(',');
+  const surnameFirstName = scholarName?.includes(',')
+    ? `${commaNameParts[0]} ${commaNameParts.slice(1).join(' ')}`
+    : nameParts.length > 1
+      ? `${nameParts[nameParts.length - 1]} ${nameParts.slice(0, -1).join(' ')}`
+      : nameParts[0] || 'Scholar';
+  const safePart = (value) => String(value || '')
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+  const sourceExtension = String(filePath || '').split(/[?#]/)[0].match(/\.([a-z0-9]{1,8})$/i)?.[1];
+  const mimeType = String(contentType || '').split(';')[0].toLowerCase();
+  const mimeExtensions = {
+    'application/pdf': 'pdf',
+    'application/msword': 'doc',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+    'image/jpeg': 'jpg',
+    'image/png': 'png',
+    'image/gif': 'gif',
+    'image/webp': 'webp',
+    'image/bmp': 'bmp',
+  };
+  const extension = (sourceExtension || mimeExtensions[mimeType] || 'file').toLowerCase();
+  const parts = [
+    monthName,
+    formatYearLevel(yearLevel || 'Unspecified Level').replace(/[_-]+/g, ' '),
+    complianceType || 'Document',
+    surnameFirstName,
+  ].map(safePart);
+  return `${parts.join('_')}.${extension}`;
 };
 
 const getInitials = (name) => {
@@ -141,6 +135,14 @@ const formatMonthLabel = (value) => {
   return formatAdminMonth(date);
 };
 
+const formatReportDate = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString();
+};
+
+const formatReportTime = (value) => value ? String(value).slice(0, 5) : '';
+
 const pageNumbers = (current, total) => {
   if (total <= 5) return Array.from({ length: total }, (_, i) => i + 1);
   const pages = new Set([1, total, current - 1, current, current + 1]);
@@ -153,38 +155,9 @@ const pageNumbers = (current, total) => {
   return out;
 };
 
-const toCsv = (rows) => {
-  const header = ['Scholar', 'Student ID', 'Year Level', 'GPA', 'Reports Submitted', 'Service Hours', 'Activities'];
-  const esc = (v) => {
-    let s = v === null || v === undefined ? '' : String(v);
-    if (/^[=+\-@]/.test(s)) s = `'${s}`; // avoid spreadsheet formula injection
-    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  const lines = rows.map((row) => [
-    row.scholar, row.scholar_id, row.year_level ? formatYearLevel(row.year_level) : '',
-    gpaOf(row), reportsOf(row), hoursOf(row), activitiesOf(row),
-  ].map(esc).join(','));
-  return `\uFEFF${[header.join(','), ...lines].join('\r\n')}`;
-};
-
 // ---------------------------------------------------------------------------
 // Donor report data (per scholar)
 // ---------------------------------------------------------------------------
-
-const buildFallbackNarrative = (row) => {
-  const name = row.scholar || 'This scholar';
-  const gpa = gpaOf(row);
-  const reports = reportsOf(row);
-  const hours = hoursOf(row);
-  const activities = activitiesOf(row);
-  const clauses = [];
-  if (gpa !== null) clauses.push(`maintained a GPA of ${gpa.toFixed(2)}`);
-  if (reports !== null) clauses.push(`submitted ${reports} progress report${reports === 1 ? '' : 's'}`);
-  if (hours !== null) clauses.push(`completed ${hours.toFixed(1)} community service hour${hours === 1 ? '' : 's'}`);
-  if (activities !== null) clauses.push(`participated in ${activities} program activit${activities === 1 ? 'y' : 'ies'}`);
-  if (!clauses.length) return `Progress data for ${name} is not yet available for this period.`;
-  return `During this period, ${name} ${joinList(clauses)}.`;
-};
 
 const fetchScholarReport = async (row, month) => {
   const scholarId = row.scholar_id || row.scholar;
@@ -195,15 +168,16 @@ const fetchScholarReport = async (row, month) => {
     });
     const data = res.data || {};
     return {
-      narrative: data.narrative || buildFallbackNarrative(row),
-      photos: Array.isArray(data.photos) ? data.photos : [],
-      milestones: Array.isArray(data.milestones) ? data.milestones : [],
+      documents: Array.isArray(data.documents) ? data.documents : [],
+      grades: Array.isArray(data.grades) ? data.grades : [],
+      duty_attendance: Array.isArray(data.duty_attendance) ? data.duty_attendance : [],
     };
   } catch (err) {
     return {
-      narrative: row.narrative || buildFallbackNarrative(row),
-      photos: Array.isArray(row.photos) ? row.photos : [],
-      milestones: Array.isArray(row.milestones) ? row.milestones : [],
+      documents: [],
+      grades: [],
+      duty_attendance: [],
+      loadError: err.response?.data?.message || err.response?.data?.error || "Could not load the scholar's submitted documents and attendance.",
     };
   }
 };
@@ -211,15 +185,6 @@ const fetchScholarReport = async (row, month) => {
 // ---------------------------------------------------------------------------
 // Presentational pieces
 // ---------------------------------------------------------------------------
-
-const chartTooltipStyle = {
-  background: SURFACE,
-  border: `1px solid ${BORDER}`,
-  borderRadius: 10,
-  ...body,
-  fontSize: '0.8rem',
-  color: INK,
-};
 
 const IconBadge = ({ icon: Icon, color = PRIMARY, size = 40 }) => (
   <div
@@ -260,31 +225,229 @@ const NoData = ({ text = 'No data available' }) => (
   <div style={{ ...body, fontSize: '0.82rem', color: MUTED, textAlign: 'center', padding: '1.6rem 0' }}>{text}</div>
 );
 
-// Horizontal bar list. value === null → "—" and no bar (never drawn as 0).
-const HBarList = ({ items, max, color, format }) => {
-  const safeMax = max > 0 ? max : 1;
-  return (
-    <div role="list" style={{ display: 'grid', gap: 10 }}>
+const DocumentTaskList = ({ items, onView }) => (
+  items.length ? (
+    <div
+      role="list"
+      aria-label="Document tasks by year level"
+      style={{ display: 'grid', gap: 9, ...(onView && items.length > 4 ? { maxHeight: 360, overflowY: 'auto', paddingRight: 4 } : {}) }}
+    >
       {items.map((item) => (
-        <div
-          key={item.label}
-          role="listitem"
-          style={{ display: 'grid', gridTemplateColumns: 'minmax(92px, 124px) minmax(0, 1fr) 48px', alignItems: 'center', gap: 10 }}
-        >
-          <span style={{ ...body, fontSize: '0.76rem', color: INK }}>{item.label}</span>
-          <div style={{ height: 12, borderRadius: 999, background: '#F2E9DC', overflow: 'hidden' }}>
-            {item.value !== null && item.value > 0 && (
-              <div style={{ width: `${Math.max(2, (item.value / safeMax) * 100)}%`, height: '100%', background: color, borderRadius: 999 }} />
-            )}
+        <div key={item.key} role="listitem" className="flex items-center justify-between gap-3" style={{ border: `1px solid ${BORDER}`, borderRadius: 12, background: '#fff', padding: '10px 12px' }}>
+          <div style={{ minWidth: 0 }}>
+            <strong style={{ ...body, display: 'block', fontSize: '0.76rem', color: INK }}>{item.label}</strong>
+            <div className="flex flex-wrap gap-x-3 gap-y-1" style={{ marginTop: 3 }}>
+              <span style={{ ...body, fontSize: '0.67rem', color: MUTED, whiteSpace: 'nowrap' }}>
+                Overall: <strong style={{ color: INK }}>{item.overallProgress.percent}%</strong> ({item.overallProgress.submitted}/{item.overallProgress.eligible} eligible scholars)
+              </span>
+              {item.documentProgress.map((progress) => (
+                <span key={progress.type} style={{ ...body, fontSize: '0.67rem', color: MUTED, whiteSpace: 'nowrap' }}>
+                  {progress.label}: <strong style={{ color: INK }}>{progress.percent}%</strong> ({progress.submitted}/{progress.eligible} eligible scholars)
+                </span>
+              ))}
+            </div>
           </div>
-          <span style={{ ...body, fontSize: '0.76rem', fontWeight: 600, color: item.value === null ? MUTED : INK, textAlign: 'right' }}>
-            {item.value === null ? '—' : format(item.value)}
-          </span>
+          {onView && (
+            <button
+              type="button"
+              onClick={() => onView(item.key)}
+              aria-label={`View ${item.label} scholars and document status`}
+              aria-haspopup="dialog"
+              style={{ ...body, fontSize: '0.72rem', fontWeight: 600, color: PRIMARY, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '6px 12px', background: '#fff', cursor: 'pointer' }}
+            >
+              View
+            </button>
+          )}
         </div>
       ))}
     </div>
-  );
+  ) : <NoData text="No document task assigned for this period." />
+);
+
+const DocumentTaskModal = ({ task, month, onClose }) => (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 sm:p-8"
+    style={{ background: 'rgba(36,21,18,0.5)' }}
+    onClick={onClose}
+  >
+    <section
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="document-task-title"
+      onClick={(event) => event.stopPropagation()}
+      style={{ ...surfaceCard, maxWidth: 820, width: '100%', maxHeight: '90vh', overflow: 'hidden' }}
+    >
+      <header className="flex items-start justify-between gap-4" style={{ padding: '1.2rem 1.4rem', borderBottom: `1px solid ${BORDER}`, background: BG }}>
+        <div>
+          <h2 id="document-task-title" style={{ ...display, fontSize: '1.3rem', color: INK }}>{task.label}</h2>
+          <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 3 }}>
+            Document submissions · {formatMonthLabel(month)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close document task details"
+          style={{ ...body, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '7px', background: '#fff', cursor: 'pointer' }}
+        >
+          <X size={15} />
+        </button>
+      </header>
+      <div style={{ padding: '1rem 1.2rem', overflow: 'auto', maxHeight: 'calc(90vh - 84px)' }}>
+        <div style={{ overflowX: 'auto', border: `1px solid ${BORDER}`, borderRadius: 10 }}>
+          <table style={{ width: '100%', minWidth: 760, borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ background: BG }}>
+                {['Scholar', 'Year Level', ...DOCUMENT_TASK_ORDER.map((type) => DOCUMENT_TASK_LABELS[type])].map((heading) => (
+                  <th key={heading} style={{ ...body, fontSize: '0.68rem', color: MUTED, padding: '10px 12px', whiteSpace: 'nowrap' }}>{heading}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {task.scholars.map((scholar) => {
+                return (
+                  <tr key={scholar.scholar_id} style={{ borderTop: `1px solid ${BORDER}` }}>
+                    <td style={{ ...body, fontSize: '0.74rem', color: INK, padding: '10px 12px' }}>
+                      {scholar.scholar}<span style={{ color: MUTED }}> · {scholar.scholar_id}</span>
+                    </td>
+                    <td style={{ ...body, fontSize: '0.72rem', color: MUTED, padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                      {formatYearLevel(scholar.year_level)}
+                    </td>
+                    {DOCUMENT_TASK_ORDER.map((type) => {
+                      const progress = scholar.document_progress[type];
+                      const status = !progress?.total
+                        ? { label: 'No task', color: MUTED, background: '#F0ECE6' }
+                        : progress.submitted === progress.total
+                          ? { label: 'Submitted', color: '#236B3B', background: '#E8F4EA' }
+                          : progress.submitted === 0
+                            ? { label: 'Not submitted', color: '#9A5B00', background: '#FFF3D6' }
+                            : { label: `${progress.submitted}/${progress.total} submitted`, color: '#9A5B00', background: '#FFF3D6' };
+                      return (
+                        <td key={type} style={{ padding: '10px 12px' }}>
+                          <span
+                            title={progress?.task_titles?.join(', ') || 'No task assigned'}
+                            style={{ ...body, fontSize: '0.66rem', color: status.color, background: status.background, borderRadius: 999, padding: '4px 9px', whiteSpace: 'nowrap' }}
+                          >
+                            {status.label}
+                          </span>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+);
+
+const DUTY_STATUS_STYLES = {
+  present: { label: 'Present', color: '#236B3B', background: '#E8F4EA' },
+  late: { label: 'Late', color: '#9A5B00', background: '#FFF3D6' },
+  absent: { label: 'Absent', color: '#A12A2A', background: '#FCE8E6' },
+  excused: { label: 'Excused', color: '#625A50', background: '#F0ECE6' },
 };
+
+const dutyStatusKey = (status) => {
+  const normalized = String(status || '').trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(DUTY_STATUS_STYLES, normalized) ? normalized : null;
+};
+
+const DutyGroupProgressList = ({ items, onView }) => (
+  items.length ? (
+    <div
+      role="list"
+      aria-label="Duty groups"
+      style={{ display: 'grid', gap: 9, ...(onView && items.length > 4 ? { maxHeight: 360, overflowY: 'auto', paddingRight: 4 } : {}) }}
+    >
+      {items.map((item) => (
+        <div key={item.group_id} role="listitem" className="flex items-center justify-between gap-3" style={{ border: `1px solid ${BORDER}`, borderRadius: 12, background: '#fff', padding: '11px 13px' }}>
+          <strong style={{ ...body, fontSize: '0.8rem', color: INK }}>{item.group_name}</strong>
+          {onView && (
+            <button
+              type="button"
+              onClick={() => onView(item.group_id)}
+              aria-label={`View ${item.group_name} scholars and attendance`}
+              aria-haspopup="dialog"
+              style={{ ...body, fontSize: '0.72rem', fontWeight: 600, color: PRIMARY, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '6px 12px', background: '#fff', cursor: 'pointer' }}
+            >
+              View
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
+  ) : <NoData text="No group duties scheduled for this month." />
+);
+
+const DutyGroupModal = ({ group, month, onClose }) => (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4 sm:p-8"
+    style={{ background: 'rgba(36,21,18,0.5)' }}
+    onClick={onClose}
+  >
+    <section
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="duty-group-title"
+      onClick={(event) => event.stopPropagation()}
+      style={{ ...surfaceCard, maxWidth: 820, width: '100%', maxHeight: '90vh', overflow: 'hidden' }}
+    >
+      <header className="flex items-start justify-between gap-4" style={{ padding: '1.2rem 1.4rem', borderBottom: `1px solid ${BORDER}`, background: BG }}>
+        <div>
+          <h2 id="duty-group-title" style={{ ...display, fontSize: '1.3rem', color: INK }}>{group.group_name}</h2>
+          <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 3 }}>
+            Attendance summary for {formatMonthLabel(month)}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close group attendance"
+          style={{ ...body, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '7px', background: '#fff', cursor: 'pointer' }}
+        >
+          <X size={15} />
+        </button>
+      </header>
+      <div style={{ padding: '1rem 1.2rem', overflow: 'auto', maxHeight: 'calc(90vh - 84px)' }}>
+        <div style={{ overflowX: 'auto', border: `1px solid ${BORDER}`, borderRadius: 10 }}>
+          <table style={{ width: '100%', minWidth: 620, borderCollapse: 'collapse', textAlign: 'left' }}>
+            <thead>
+              <tr style={{ background: BG }}>
+                {['Scholar', 'Year Level', 'Present', 'Late', 'Absent', 'Excused'].map((heading) => (
+                  <th key={heading} style={{ ...body, fontSize: '0.68rem', color: MUTED, padding: '10px 12px', whiteSpace: 'nowrap' }}>{heading}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {group.scholars.map((scholar) => (
+                <tr key={scholar.scholar_id} style={{ borderTop: `1px solid ${BORDER}` }}>
+                  <td style={{ ...body, fontSize: '0.74rem', color: INK, padding: '10px 12px' }}>
+                    {scholar.scholar}<span style={{ color: MUTED }}> · {scholar.scholar_id}</span>
+                  </td>
+                  <td style={{ ...body, fontSize: '0.72rem', color: MUTED, padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                    {formatYearLevel(scholar.year_level)}
+                  </td>
+                  {Object.keys(DUTY_STATUS_STYLES).map((status) => (
+                    <td key={status} style={{ ...body, fontSize: '0.74rem', color: DUTY_STATUS_STYLES[status].color, padding: '10px 12px', textAlign: 'center' }}>
+                      {scholar.status_counts[status]}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p style={{ ...body, fontSize: '0.69rem', color: MUTED, marginTop: 9 }}>
+          Counts are recorded attendance for this group’s duties during the selected month.
+        </p>
+      </div>
+    </section>
+  </div>
+);
 
 const Skeleton = ({ w = '100%', h = 14, r = 8, style }) => (
   <div style={{ width: w, height: h, borderRadius: r, background: '#EFE3D4', ...style }} />
@@ -326,49 +489,18 @@ const EmptyState = ({ title, text }) => (
   </div>
 );
 
-const MilestoneTimeline = ({ milestones }) => (
-  <div style={{ position: 'relative', paddingLeft: 22 }}>
-    <div style={{ position: 'absolute', left: 5, top: 6, bottom: 6, width: 2, background: BORDER }} />
-    {milestones.map((m, i) => (
-      <div key={i} style={{ position: 'relative', marginBottom: i === milestones.length - 1 ? 0 : 14 }}>
-        <span
-          style={{
-            position: 'absolute', left: -22, top: 3, width: 10, height: 10, borderRadius: '50%',
-            background: PRIMARY, border: `2px solid ${SURFACE}`, boxShadow: `0 0 0 1px ${PRIMARY}`,
-          }}
-        />
-        <span style={{ ...body, fontSize: '0.88rem', color: INK }}>{typeof m === 'string' ? m : m.label}</span>
-      </div>
-    ))}
-  </div>
-);
-
-const PhotoMasonry = ({ photos, scholarName }) => (
-  <div style={{ columnCount: 2, columnGap: 12 }} className="sm:[column-count:3]">
-    {photos.map((photo, i) => {
-      const src = typeof photo === 'string' ? photo : photo.url;
-      const caption = typeof photo === 'string' ? '' : photo.caption;
-      return (
-        <figure key={i} style={{ margin: '0 0 12px', breakInside: 'avoid' }}>
-          <img
-            src={src}
-            alt={caption || `${scholarName} highlight ${i + 1}`}
-            style={{ width: '100%', borderRadius: 14, border: `1px solid ${BORDER}`, display: 'block' }}
-          />
-          {caption && <figcaption style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 6 }}>{caption}</figcaption>}
-        </figure>
-      );
-    })}
-  </div>
-);
-
 // ---------------------------------------------------------------------------
 // Donor Report Modal (per scholar)
 // ---------------------------------------------------------------------------
 
 const DonorReportModal = ({ row, month, onClose }) => {
   const [loading, setLoading] = useState(true);
-  const [report, setReport] = useState({ narrative: '', photos: [], milestones: [] });
+  const [report, setReport] = useState({
+    documents: [], grades: [], duty_attendance: [],
+  });
+  const [fileError, setFileError] = useState('');
+  const [filePreview, setFilePreview] = useState(null);
+  const [letterPreview, setLetterPreview] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -383,39 +515,88 @@ const DonorReportModal = ({ row, month, onClose }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [row, month]);
 
-  const handlePrint = () => window.print();
-
-  // null values are passed as undefined so the chart leaves a gap instead of drawing 0
-  const snapshot = {
-    metric: 'This period',
-    Reports: reportsOf(row) ?? undefined,
-    Activities: activitiesOf(row) ?? undefined,
-    'Community Service Hours': hoursOf(row) ?? undefined,
+  const openReportFile = async (filePath, label, complianceType) => {
+    setFileError('');
+    setFilePreview({ label, loading: true });
+    try {
+      const response = await axios.get(`${API}/submission/preview`, {
+        ...authHeaders(),
+        params: { url: filePath },
+        responseType: 'blob',
+      });
+      const objectUrl = URL.createObjectURL(response.data);
+      const contentType = response.headers['content-type'] || '';
+      const extension = String(filePath).split(/[?#]/)[0].split('.').pop().toLowerCase();
+      const type = contentType.includes('pdf') || extension === 'pdf'
+        ? 'pdf'
+        : contentType.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(extension)
+          ? 'image'
+          : 'other';
+      const downloadName = buildScholarSubmissionFilename({
+        month,
+        yearLevel: row.year_level,
+        complianceType,
+        scholarName: row.scholar,
+        filePath,
+        contentType,
+      });
+      setFilePreview({ label, url: objectUrl, type, downloadName });
+    } catch (err) {
+      setFilePreview(null);
+      setFileError(err.response?.data?.error || 'Unable to open this submitted document.');
+    }
   };
-  const hasSnapshot = [snapshot.Reports, snapshot.Activities, snapshot['Community Service Hours']].some((v) => v !== undefined);
+
+  useEffect(() => {
+    const objectUrl = filePreview?.url;
+    return () => {
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [filePreview?.url]);
+
+  const documentsByCategory = SCHOLAR_REPORT_DOCUMENT_CATEGORIES.reduce((groups, category) => {
+    groups[category] = (report.documents || []).filter((document) => document.category === category);
+    return groups;
+  }, {});
+  const gradePeriods = Object.values((report.grades || []).reduce((periods, grade) => {
+    const key = `${grade.semester || ''}|${grade.academic_year || ''}`;
+    if (!periods[key]) {
+      periods[key] = {
+        semester: grade.semester,
+        academic_year: grade.academic_year,
+        subjects: [],
+        proofFiles: [],
+      };
+    }
+    periods[key].subjects.push(grade);
+    if (grade.proof_path && !periods[key].proofFiles.some((file) => file.path === grade.proof_path)) {
+      periods[key].proofFiles.push({ label: `${grade.semester} ${grade.academic_year} grade proof`, path: grade.proof_path });
+    }
+    return periods;
+  }, {})).map((period) => {
+    const totalUnits = period.subjects.reduce((sum, grade) => sum + (Number(grade.units) > 0 ? Number(grade.units) : 0), 0);
+    const weightedGrade = period.subjects.reduce((sum, grade) => (
+      Number(grade.units) > 0 ? sum + Number(grade.units) * Number(grade.grade || 0) : sum
+    ), 0);
+    return {
+      ...period,
+      gwa: totalUnits > 0 ? weightedGrade / totalUnits : null,
+    };
+  });
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8"
+      className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4"
       style={{ background: 'rgba(36,21,18,0.5)' }}
       onClick={onClose}
     >
-      <style>{`
-        @media print {
-          @page { size: A4 portrait; margin: 16mm; }
-          body * { visibility: hidden; }
-          #donor-report-printable, #donor-report-printable * { visibility: visible; }
-          #donor-report-printable { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; }
-        }
-      `}</style>
       <div
         onClick={(e) => e.stopPropagation()}
-        id="donor-report-printable"
-        style={{ ...surfaceCard, maxWidth: 760, width: '100%', margin: 'auto', overflow: 'hidden' }}
+        style={{ ...surfaceCard, maxWidth: 920, width: '100%', maxHeight: 'calc(100vh - 32px)', margin: 'auto', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}
       >
         <div
           className="flex items-start justify-between gap-4"
-          style={{ padding: '1.5rem 1.7rem', borderBottom: `1px solid ${BORDER}`, background: BG }}
+          style={{ padding: '1rem 1.4rem', borderBottom: `1px solid ${BORDER}`, background: BG, flexShrink: 0 }}
         >
           <div>
             <p style={{ ...body, color: BRONZE, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
@@ -426,17 +607,7 @@ const DonorReportModal = ({ row, month, onClose }) => {
               {formatYearLevel(row.year_level)} · Reporting month {formatMonthLabel(month)}
             </p>
           </div>
-          <div className="flex gap-2 print:hidden">
-            <button
-              onClick={handlePrint}
-              style={{
-                ...body, fontSize: '0.8rem', fontWeight: 600, color: '#fff',
-                border: 'none', borderRadius: 10, padding: '9px 16px', background: PRIMARY,
-                display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
-              }}
-            >
-              <Download size={14} /> Print / Export
-            </button>
+          <div className="flex gap-2">
             <button
               onClick={onClose}
               aria-label="Close report"
@@ -451,67 +622,168 @@ const DonorReportModal = ({ row, month, onClose }) => {
           </div>
         </div>
 
-        <div style={{ padding: '1.7rem' }}>
+        <div style={{ padding: '1.1rem 1.4rem', overflowY: 'auto' }}>
           {loading ? (
             <div style={{ ...body, color: MUTED, textAlign: 'center', padding: '2rem 0' }}>Building report…</div>
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-7">
-                {[
-                  { label: 'GPA', value: fmtNum(gpaOf(row), 2), accent: BRONZE },
-                  { label: 'Reports', value: fmtNum(reportsOf(row)), accent: SUCCESS },
-                  { label: 'Service Hours', value: fmtNum(hoursOf(row), 1), accent: PRIMARY },
-                  { label: 'Activities', value: fmtNum(activitiesOf(row)), accent: WARNING },
-                ].map((stat) => (
-                  <div key={stat.label} style={{ border: `1px solid ${BORDER}`, borderRadius: 14, padding: '0.9rem', background: BG }}>
-                    <div style={{ ...body, fontSize: '0.65rem', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{stat.label}</div>
-                    <div style={{ ...display, fontSize: '1.5rem', marginTop: 4, color: stat.value === '—' ? MUTED : stat.accent }}>{stat.value}</div>
-                  </div>
-                ))}
-              </div>
-
+              {report.loadError && (
+                <p role="alert" style={{ ...body, color: DANGER, background: '#FFF4F2', border: '1px solid #E8C7C1', borderRadius: 10, padding: '0.8rem 1rem', marginBottom: 16 }}>
+                  {report.loadError}
+                </p>
+              )}
+              {fileError && (
+                <p role="alert" style={{ ...body, color: DANGER, background: '#FFF4F2', border: '1px solid #E8C7C1', borderRadius: 10, padding: '0.8rem 1rem', marginBottom: 16 }}>
+                  {fileError}
+                </p>
+              )}
               <div className="mb-7">
-                <h3 style={{ ...display, fontSize: '1.1rem', marginBottom: 10, color: INK }}>Progress Summary</h3>
-                <div style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 14, padding: '1.1rem 1.2rem' }}>
-                  <p style={{ ...body, color: INK, fontSize: '0.94rem', lineHeight: 1.7 }}>{report.narrative}</p>
-                </div>
-              </div>
-
-              <div className="mb-7">
-                <h3 style={{ ...display, fontSize: '1.1rem', marginBottom: 10, color: INK }}>Progress Snapshot</h3>
-                {hasSnapshot ? (
-                  <div style={{ width: '100%', minWidth: 0, height: 160 }}>
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
-                      <LineChart data={[snapshot]}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={BORDER} vertical={false} />
-                        <XAxis dataKey="metric" tick={{ ...body, fontSize: 11, fill: MUTED }} axisLine={{ stroke: BORDER }} tickLine={false} />
-                        <YAxis tick={{ ...body, fontSize: 11, fill: MUTED }} axisLine={false} tickLine={false} />
-                        <Tooltip contentStyle={chartTooltipStyle} />
-                        <Legend wrapperStyle={{ ...body, fontSize: 11 }} />
-                        <Line type="monotone" dataKey="Reports" stroke={PRIMARY} strokeWidth={2} dot={{ r: 4 }} />
-                        <Line type="monotone" dataKey="Activities" stroke={SUCCESS} strokeWidth={2} dot={{ r: 4 }} />
-                        <Line type="monotone" dataKey="Community Service Hours" stroke={BRONZE} strokeWidth={2} dot={{ r: 4 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
+                <h3 style={{ ...display, fontSize: '1.1rem', marginBottom: 10, color: INK }}>Submitted Documents</h3>
+                {report.loadError ? (
+                  <p style={{ ...body, fontSize: '0.85rem', color: MUTED }}>Document records could not be loaded.</p>
                 ) : (
-                  <NoData />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {SCHOLAR_REPORT_DOCUMENT_CATEGORIES.map((category) => {
+                      const items = documentsByCategory[category];
+                      return (
+                        <section key={category} style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '0.75rem 0.85rem', background: '#fff' }}>
+                          <h4 style={{ ...body, fontSize: '0.84rem', fontWeight: 700, color: INK }}>{category}</h4>
+
+                          {category === 'Grades' && gradePeriods.length > 0 && (
+                            <div className="space-y-2 mt-2">
+                              {gradePeriods.map((period) => (
+                                <div key={`${period.semester}-${period.academic_year}`} style={{ background: BG, borderRadius: 9, padding: '0.65rem' }}>
+                                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                                    <div>
+                                      <p style={{ ...body, color: INK, fontSize: '0.75rem', fontWeight: 600 }}>{period.semester} Semester · AY {period.academic_year}</p>
+                                      <p style={{ ...body, color: PRIMARY, fontSize: '0.72rem', fontWeight: 700, marginTop: 2 }}>
+                                        GWA (submitted): {period.gwa === null ? '—' : period.gwa.toFixed(2)}
+                                      </p>
+                                    </div>
+                                    {period.proofFiles.map((file) => (
+                                      <button
+                                        key={file.path}
+                                        type="button"
+                                        aria-label={`View ${file.label}`}
+                                        onClick={() => openReportFile(file.path, file.label, 'Grades')}
+                                        style={{ ...body, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '5px 8px', color: PRIMARY, background: '#fff', cursor: 'pointer', fontSize: '0.7rem', fontWeight: 600 }}
+                                      >
+                                        <span className="inline-flex items-center gap-1"><FileText size={12} /> View</span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                  <div style={{ overflowX: 'auto' }}>
+                                    <table style={{ width: '100%', minWidth: 350, borderCollapse: 'collapse' }}>
+                                      <thead>
+                                        <tr style={{ textAlign: 'left' }}>
+                                          {['Subject', 'Units', 'Grade'].map((heading) => (
+                                            <th key={heading} style={{ ...body, color: MUTED, fontSize: '0.62rem', textTransform: 'uppercase', padding: '5px 6px' }}>{heading}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {period.subjects.map((grade) => (
+                                          <tr key={grade.id} style={{ borderTop: `1px solid ${BORDER}` }}>
+                                            <td style={{ ...body, color: INK, fontSize: '0.72rem', padding: '5px 6px' }}>{grade.subject_name}</td>
+                                            <td style={{ ...body, color: INK, fontSize: '0.71rem', padding: '5px 6px' }}>{grade.units ?? '—'}</td>
+                                            <td style={{ ...body, color: INK, fontSize: '0.71rem', padding: '5px 6px' }}>{grade.grade ?? '—'}</td>
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          {items.length > 0 ? (
+                            <div className="space-y-2 mt-2">
+                              {items.map((item) => (
+                                <div key={item.id} className="flex items-center justify-between gap-2" style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 7 }}>
+                                  <div>
+                                    <p style={{ ...body, color: INK, fontSize: '0.73rem', fontWeight: 600 }}>{category}</p>
+                                    <p style={{ ...body, color: MUTED, fontSize: '0.66rem', marginTop: 2 }}>
+                                      Submitted {formatReportDate(item.submitted_at)} · {String(item.status || 'pending').replace(/_/g, ' ')}
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {item.files.map((file) => (
+                                      <button
+                                        key={file.path}
+                                        type="button"
+                                        aria-label={`View ${file.label}`}
+                                        onClick={() => openReportFile(file.path, file.label, category)}
+                                        style={{ ...body, border: `1px solid ${BORDER}`, borderRadius: 7, padding: '5px 8px', color: PRIMARY, background: BG, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 600, flexShrink: 0 }}
+                                      >
+                                        <span className="inline-flex items-center gap-1"><FileText size={12} /> View</span>
+                                      </button>
+                                    ))}
+                                    {!item.files.length && item.content && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setLetterPreview({ title: item.title || category, content: item.content })}
+                                        style={{ ...body, border: `1px solid ${BORDER}`, borderRadius: 7, padding: '5px 8px', color: PRIMARY, background: BG, cursor: 'pointer', fontSize: '0.68rem', fontWeight: 600, flexShrink: 0 }}
+                                      >
+                                        <span className="inline-flex items-center gap-1"><FileText size={12} /> View</span>
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : category !== 'Grades' || gradePeriods.length === 0 ? (
+                            <p style={{ ...body, color: MUTED, fontSize: '0.7rem', marginTop: 5 }}>Not submitted this month.</p>
+                          ) : null}
+                        </section>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
 
-              {report.milestones.length > 0 && (
-                <div className="mb-7">
-                  <h3 style={{ ...display, fontSize: '1.1rem', marginBottom: 12, color: INK }}>Milestones</h3>
-                  <MilestoneTimeline milestones={report.milestones} />
-                </div>
-              )}
-
-              <div className="mb-2">
-                <h3 style={{ ...display, fontSize: '1.1rem', marginBottom: 10, color: INK }}>Photo Highlights</h3>
-                {report.photos.length > 0 ? (
-                  <PhotoMasonry photos={report.photos} scholarName={row.scholar} />
+              <div className="mb-7">
+                <h3 style={{ ...display, fontSize: '1.1rem', marginBottom: 10, color: INK }}>Duty Attendance</h3>
+                {report.loadError ? (
+                  <p style={{ ...body, fontSize: '0.85rem', color: MUTED }}>Duty attendance could not be loaded.</p>
+                ) : report.duty_attendance.length ? (
+                  <div className="space-y-2">
+                    {report.duty_attendance.map((attendance) => {
+                      const status = String(attendance.status || 'not_marked').toLowerCase();
+                      const statusStyle = status === 'present'
+                        ? { color: '#28633B', borderColor: '#B8D7BE', background: '#EEF7F0' }
+                        : status === 'absent'
+                          ? { color: '#9B3535', borderColor: '#E8C1BE', background: '#FFF1EF' }
+                          : status === 'late'
+                            ? { color: '#8B5C10', borderColor: '#E9D5A9', background: '#FFF8E8' }
+                            : { color: MUTED, borderColor: BORDER, background: BG };
+                      const time = [attendance.time_start && formatReportTime(attendance.time_start), attendance.time_end && formatReportTime(attendance.time_end)]
+                        .filter(Boolean)
+                        .join(' – ');
+                      const details = [
+                        formatReportDate(attendance.duty_date),
+                        time,
+                        attendance.group_name,
+                        attendance.location,
+                        attendance.is_makeup ? 'Make-up duty' : null,
+                      ].filter(Boolean).join(' · ');
+                      return (
+                        <div key={`${attendance.duty_id}-${attendance.marked_at}`} className="flex flex-wrap items-center justify-between gap-3" style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: '0.7rem 0.85rem', background: '#fff' }}>
+                          <div>
+                            <p style={{ ...body, color: INK, fontSize: '0.78rem', fontWeight: 600 }}>{attendance.duty_title}</p>
+                            <p style={{ ...body, color: MUTED, fontSize: '0.68rem', marginTop: 3 }}>{details}</p>
+                          </div>
+                          <span style={{ ...body, fontSize: '0.68rem', fontWeight: 700, textTransform: 'capitalize', border: `1px solid ${statusStyle.borderColor}`, borderRadius: 20, padding: '4px 9px', ...statusStyle }}>
+                            {status === 'not_marked' ? 'Not marked yet' : status.replace(/_/g, ' ')}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 ) : (
-                  <p style={{ ...body, fontSize: '0.85rem', color: MUTED }}>No photos uploaded for this period yet.</p>
+                  <p style={{ ...body, fontSize: '0.78rem', color: MUTED, border: `1px dashed ${BORDER}`, borderRadius: 10, padding: '0.75rem 0.85rem' }}>
+                    No duty is scheduled for this scholar&apos;s group this month.
+                  </p>
                 )}
               </div>
 
@@ -523,6 +795,97 @@ const DonorReportModal = ({ row, month, onClose }) => {
           )}
         </div>
       </div>
+      {filePreview && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-3 sm:p-6"
+          style={{ background: 'rgba(24,16,19,0.78)' }}
+          onClick={(event) => {
+            event.stopPropagation();
+            setFilePreview(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={filePreview.label || 'Document preview'}
+            onClick={(event) => event.stopPropagation()}
+            style={{ ...surfaceCard, width: '100%', maxWidth: 1050, height: 'min(88vh, 900px)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+          >
+            <div className="flex items-center justify-between gap-3" style={{ padding: '0.8rem 1rem', borderBottom: `1px solid ${BORDER}`, background: BG, flexShrink: 0 }}>
+              <div>
+                <p style={{ ...body, color: BRONZE, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase' }}>Document Preview</p>
+                <h3 style={{ ...body, color: INK, fontSize: '0.86rem', fontWeight: 700, marginTop: 2 }}>{filePreview.label}</h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {!filePreview.loading && filePreview.url && (
+                  <a
+                    href={filePreview.url}
+                    download={filePreview.downloadName}
+                    style={{ ...body, display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: '0.75rem', fontWeight: 600, color: PRIMARY, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '7px 10px', background: '#fff', textDecoration: 'none' }}
+                  >
+                    <Download size={14} /> Download
+                  </a>
+                )}
+                <button
+                  type="button"
+                  aria-label="Close document preview"
+                  onClick={() => setFilePreview(null)}
+                  style={{ ...body, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 7, background: '#fff', cursor: 'pointer' }}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            </div>
+            <div className="flex-1 min-h-0 flex items-center justify-center" style={{ background: '#241F20', padding: 12 }}>
+              {filePreview.loading ? (
+                <p style={{ ...body, color: '#fff', fontSize: '0.85rem' }}>Loading document…</p>
+              ) : filePreview.type === 'pdf' ? (
+                <iframe title={filePreview.label} src={filePreview.url} style={{ width: '100%', height: '100%', border: 0, borderRadius: 6, background: '#fff' }} />
+              ) : filePreview.type === 'image' ? (
+                <img src={filePreview.url} alt={filePreview.label} style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+              ) : (
+                <div style={{ ...body, color: '#fff', textAlign: 'center', fontSize: '0.84rem' }}>
+                  <p>This file type cannot be previewed here.</p>
+                  <p style={{ marginTop: 8 }}>Use Download above to save the file.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      {letterPreview && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+          style={{ background: 'rgba(36,21,18,0.65)' }}
+          onClick={(event) => {
+            event.stopPropagation();
+            setLetterPreview(null);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={letterPreview.title}
+            onClick={(event) => event.stopPropagation()}
+            style={{ ...surfaceCard, width: '100%', maxWidth: 680, maxHeight: '85vh', overflow: 'auto', padding: '1.2rem' }}
+          >
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <h3 style={{ ...display, fontSize: '1.15rem', color: INK }}>{letterPreview.title}</h3>
+              <button
+                type="button"
+                aria-label="Close document preview"
+                onClick={() => setLetterPreview(null)}
+                style={{ ...body, color: MUTED, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 6, background: '#fff', cursor: 'pointer' }}
+              >
+                <X size={15} />
+              </button>
+            </div>
+            <pre style={{ ...body, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', color: INK, fontSize: '0.86rem', lineHeight: 1.7, margin: 0 }}>
+              {letterPreview.content}
+            </pre>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -540,63 +903,73 @@ const REPORT_PAGE = {
   padding: '28px 32px',
 };
 
-const MonthlyReportModal = ({ rows, month, totals, distributionData, gpaByLevelData, onClose }) => {
+const MonthlyReportModal = ({
+  month,
+  totals,
+  overallTaskCompletion,
+  documentTaskLevelData,
+  dutyGroupProgress,
+  onClose,
+}) => {
   const monthLabel = formatMonthLabel(month);
-  const aggregatedScholarStats = useMemo(() => {
-    const groups = new Map();
-    rows.forEach((row) => {
-      const level = row.year_level ? formatYearLevel(row.year_level) : 'Unspecified';
-      const current = groups.get(level) || { level, scholars: 0, gpas: [], hours: [], activities: [] };
-      current.scholars += 1;
-      const gpa = gpaOf(row);
-      const hours = hoursOf(row);
-      const activities = activitiesOf(row);
-      if (gpa !== null) current.gpas.push(gpa);
-      if (hours !== null) current.hours.push(hours);
-      if (activities !== null) current.activities.push(activities);
-      groups.set(level, current);
+  const documentCategoryTotals = new Map();
+  documentTaskLevelData.forEach((level) => {
+    level.documentProgress.forEach((progress) => {
+      const current = documentCategoryTotals.get(progress.type) || { submitted: 0, eligible: 0 };
+      current.submitted += progress.submitted;
+      current.eligible += progress.eligible;
+      documentCategoryTotals.set(progress.type, current);
     });
-    return [...groups.values()].map((group) => ({
-      ...group,
-      averageGpa: avgValid(group.gpas),
-      totalHours: sumValid(group.hours),
-      totalActivities: sumValid(group.activities),
-    }));
-  }, [rows]);
-
-  const narrative = useMemo(() => {
-    const clauses = [];
-    if (totals.averageGpa !== null) clauses.push(`maintained an average GPA of ${totals.averageGpa.toFixed(2)}`);
-    if (totals.totalDutyHours !== null) clauses.push(`completed ${totals.totalDutyHours.toFixed(0)} community service hours`);
-    if (totals.totalActivities !== null) clauses.push(`took part in ${totals.totalActivities} program activit${totals.totalActivities === 1 ? 'y' : 'ies'}`);
-    const lead = `During ${monthLabel}, ${totals.totalScholars} scholar${totals.totalScholars === 1 ? '' : 's'} took part in the scholarship program`;
-    const detail = clauses.length ? `, and together they ${joinList(clauses)}` : '';
-    return `${lead}${detail}. Donor support helps sustain scholarship access, academic progress, and community engagement across the foundation's scholar community.`;
-  }, [monthLabel, totals]);
-
-  const communityPhotos = useMemo(() => {
-    const items = [];
-    rows.forEach((row) => {
-      (Array.isArray(row.photos) ? row.photos : []).forEach((photo) => {
-        const src = typeof photo === 'string' ? photo : photo.url;
-        if (src) items.push({ src });
-      });
-    });
-    return items.slice(0, 6);
-  }, [rows]);
+  });
+  const documentSummary = DOCUMENT_TASK_ORDER
+    .map((type) => {
+      const progress = documentCategoryTotals.get(type);
+      if (!progress?.eligible) return null;
+      const percent = Math.round((progress.submitted / progress.eligible) * 100);
+      return `${DOCUMENT_TASK_LABELS[type]} ${progress.submitted}/${progress.eligible} (${percent}%)`;
+    })
+    .filter(Boolean)
+    .join('; ');
+  const completionSummary = overallTaskCompletion.eligible
+    ? `${overallTaskCompletion.submitted} of ${overallTaskCompletion.eligible} eligible scholars (${overallTaskCompletion.percent}%) completed all assigned documents.`
+    : 'No document tasks were assigned for this month.';
+  const dutyGroupSummaries = dutyGroupProgress.map((group) => ({
+    ...group,
+    attendanceCounts: Object.keys(DUTY_STATUS_STYLES).reduce((counts, status) => {
+      counts[status] = group.scholars.reduce(
+        (sum, scholar) => sum + (Number(scholar.status_counts[status]) || 0),
+        0
+      );
+      return counts;
+    }, {}),
+  }));
+  const attendanceTotals = Object.keys(DUTY_STATUS_STYLES).reduce((counts, status) => {
+    counts[status] = dutyGroupSummaries.reduce((sum, group) => sum + group.attendanceCounts[status], 0);
+    return counts;
+  }, {});
+  const dutySummary = dutyGroupSummaries.length
+    ? `Duty attendance was recorded across ${dutyGroupSummaries.length} group${dutyGroupSummaries.length === 1 ? '' : 's'}: ${Object.entries(DUTY_STATUS_STYLES)
+      .map(([status, style]) => `${attendanceTotals[status]} ${style.label.toLowerCase()}`)
+      .join(', ')}.`
+    : 'No group duties were scheduled.';
+  const categorySummary = documentSummary
+    ? `By document category: ${documentSummary}.`
+    : '';
+  const narrative = `During ${monthLabel}, ${totals.totalScholars} active scholars were included in the report. ${completionSummary} ${categorySummary} ${dutySummary} We appreciate your support for Apple Scholar scholars' education and community service.`;
 
   const handlePrint = () => window.print();
 
   const kpis = [
     { label: 'Active Scholars', value: totals.totalScholars, accent: PRIMARY },
-    { label: 'Average GPA', value: fmtNum(totals.averageGpa, 2), accent: BRONZE },
-    { label: 'Community Service Hours', value: totals.totalDutyHours === null ? '—' : `${totals.totalDutyHours.toFixed(0)} hrs`, accent: WARNING },
-    { label: 'Program Activities', value: fmtNum(totals.totalActivities), accent: SUCCESS },
+    {
+      label: 'Overall Task Completion',
+      value: overallTaskCompletion.percent === null ? '—' : `${overallTaskCompletion.percent}%`,
+      note: overallTaskCompletion.eligible
+        ? `${overallTaskCompletion.submitted}/${overallTaskCompletion.eligible} eligible scholars completed all assigned documents.`
+        : 'No document tasks assigned this month.',
+      accent: SUCCESS,
+    },
   ];
-
-  const th = { ...body, textAlign: 'left', fontSize: '0.68rem', textTransform: 'uppercase', letterSpacing: '0.04em', color: MUTED, padding: '8px 6px' };
-  const td = { ...body, fontSize: '0.8rem', color: INK, padding: '7px 6px' };
-  const tf = { ...body, fontSize: '0.78rem', fontWeight: 700, color: INK, padding: '9px 6px' };
 
   return (
     <div
@@ -667,125 +1040,46 @@ const MonthlyReportModal = ({ rows, month, totals, distributionData, gpaByLevelD
                 <div key={kpi.label} style={{ border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 16px' }}>
                   <div style={{ ...body, fontSize: '0.65rem', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{kpi.label}</div>
                   <div style={{ ...display, fontSize: '1.7rem', marginTop: 6, color: kpi.value === '—' ? MUTED : kpi.accent }}>{kpi.value}</div>
+                  {kpi.note && <p style={{ ...body, fontSize: '0.68rem', color: MUTED, marginTop: 4 }}>{kpi.note}</p>}
                 </div>
               ))}
             </div>
 
-            <p style={{ ...body, fontSize: '0.86rem', color: INK, lineHeight: 1.7, marginTop: 20 }}>{narrative}</p>
+            <section style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 16px', marginTop: 20 }}>
+              <h2 style={{ ...display, fontSize: '1.05rem', color: INK, marginBottom: 6 }}>Donor Summary</h2>
+              <p style={{ ...body, fontSize: '0.84rem', color: INK, lineHeight: 1.7 }}>{narrative}</p>
+            </section>
           </div>
 
-          {/* Page 2 — Impact analytics */}
+          {/* Page 2 — Donor reporting overview */}
           <div className="monthly-report-page" style={{ ...REPORT_PAGE, marginBottom: 20 }}>
-            <h2 style={{ ...display, fontSize: '1.3rem', color: INK, marginBottom: 4 }}>Overall Impact Metrics</h2>
-            <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginBottom: 16 }}>Distribution and academic performance</p>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <h3 style={{ ...body, fontSize: '0.78rem', fontWeight: 700, color: INK, marginBottom: 6 }}>Scholar Distribution</h3>
-                {distributionData.length ? (
-                  <div style={{ width: '100%', minWidth: 0, height: 200 }}>
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
-                      <PieChart>
-                        <Pie data={distributionData} dataKey="value" nameKey="name" innerRadius={44} outerRadius={78} paddingAngle={2}>
-                          {distributionData.map((entry, i) => <Cell key={entry.name} fill={CHART_PALETTE[i % CHART_PALETTE.length]} />)}
-                        </Pie>
-                        <Tooltip contentStyle={chartTooltipStyle} />
-                      </PieChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : <NoData />}
-              </div>
-              <div>
-                <h3 style={{ ...body, fontSize: '0.78rem', fontWeight: 700, color: INK, marginBottom: 6 }}>Average GPA by Year Level</h3>
-                {gpaByLevelData.length ? (
-                  <div style={{ width: '100%', minWidth: 0, height: 200 }}>
-                    <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={1}>
-                      <BarChart data={gpaByLevelData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke={BORDER} vertical={false} />
-                        <XAxis dataKey="level" tick={{ ...body, fontSize: 9, fill: MUTED }} axisLine={{ stroke: BORDER }} tickLine={false} interval={0} angle={-25} textAnchor="end" height={50} />
-                        <YAxis tick={{ ...body, fontSize: 10, fill: MUTED }} axisLine={false} tickLine={false} domain={[0, 4]} />
-                        <Tooltip contentStyle={chartTooltipStyle} />
-                        <Bar dataKey="gpa" fill={PRIMARY} radius={[6, 6, 0, 0]} barSize={20} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                ) : <NoData text="No GPA data available" />}
-              </div>
-            </div>
-          </div>
-
-          <div className="monthly-report-page" style={{ ...REPORT_PAGE, marginBottom: 20 }}>
-            <h2 style={{ ...display, fontSize: '1.3rem', color: INK, marginBottom: 14 }}>Scholar Progress by Year Level</h2>
-            <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginBottom: 12 }}>
-              Aggregated statistics only; individual scholar details are not included in this donor report.
+            <h2 style={{ ...display, fontSize: '1.3rem', color: INK, marginBottom: 4 }}>Impact Overview</h2>
+            <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginBottom: 16 }}>
+              Monthly document task completion and duty group attendance for {monthLabel}.
             </p>
-            <table className="w-full" style={{ borderCollapse: 'collapse' }}>
-              <thead>
-                <tr style={{ borderBottom: `2px solid ${INK}` }}>
-                  {['Year Level', 'Scholars', 'Average GPA', 'Service Hours', 'Activities'].map((heading) => (
-                    <th key={heading} style={th}>{heading}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {aggregatedScholarStats.map((group) => (
-                  <tr key={group.level} style={{ borderBottom: `1px solid ${BORDER}` }}>
-                    <td style={td}>{group.level}</td>
-                    <td style={td}>{group.scholars}</td>
-                    <td style={td}>{fmtNum(group.averageGpa, 2)}</td>
-                    <td style={td}>{fmtNum(group.totalHours, 1)}</td>
-                    <td style={td}>{fmtNum(group.totalActivities)}</td>
-                  </tr>
-                ))}
-              </tbody>
-              {aggregatedScholarStats.length > 0 && (
-                <tfoot>
-                  <tr style={{ borderTop: `2px solid ${INK}` }}>
-                    <td style={tf}>All levels</td>
-                    <td style={tf}>{totals.totalScholars}</td>
-                    <td style={tf}>{fmtNum(totals.averageGpa, 2)}</td>
-                    <td style={tf}>{fmtNum(totals.totalDutyHours, 1)}</td>
-                    <td style={tf}>{fmtNum(totals.totalActivities)}</td>
-                  </tr>
-                </tfoot>
-              )}
-            </table>
-          </div>
 
-          {/* Community impact */}
-          <div className="monthly-report-page" style={{ ...REPORT_PAGE, marginBottom: 20 }}>
-            <h2 style={{ ...display, fontSize: '1.3rem', color: INK, marginBottom: 14 }}>Community Impact</h2>
-            {communityPhotos.length > 0 ? (
-              <div className="grid grid-cols-2 gap-3">
-                {communityPhotos.map((photo, i) => (
-                  <figure key={i} style={{ margin: 0 }}>
-                    <img src={photo.src} alt="Scholar community activity" style={{ width: '100%', height: 130, objectFit: 'cover', borderRadius: 12, border: `1px solid ${BORDER}` }} />
-                  </figure>
-                ))}
-              </div>
-            ) : (
-              <p style={{ ...body, fontSize: '0.85rem', color: MUTED }}>No verified activity photos are attached to this period's scholar records yet.</p>
-            )}
-          </div>
-
-          {/* SDG alignment & donor narrative */}
-          <div className="monthly-report-page" style={{ ...REPORT_PAGE }}>
-            <h2 style={{ ...display, fontSize: '1.3rem', color: INK, marginBottom: 16 }}>SDG Alignment &amp; Donor Narrative</h2>
-
-            <div style={{ border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px', display: 'flex', alignItems: 'center', gap: 16, marginBottom: 18 }}>
-              <div style={{ width: 46, height: 46, borderRadius: '50%', background: `${SUCCESS}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <CheckCircle2 size={22} color={SUCCESS} />
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <h3 style={{ ...body, fontSize: '0.78rem', fontWeight: 700, color: INK, marginBottom: 10 }}>Document Task Status by Year Level</h3>
+                <DocumentTaskList items={documentTaskLevelData} />
               </div>
               <div>
-                <div style={{ ...body, fontSize: '0.68rem', color: MUTED, textTransform: 'uppercase', letterSpacing: '0.05em' }}>SDG 4 — Quality Education</div>
-                <div style={{ ...body, fontSize: '0.88rem', color: INK, lineHeight: 1.55, marginTop: 4 }}>
-                  Aligned through scholarship access, academic support, and student progress monitoring.
-                </div>
+                <h3 style={{ ...body, fontSize: '0.78rem', fontWeight: 700, color: INK, marginBottom: 10 }}>Duty Groups</h3>
+                {dutyGroupSummaries.length ? (
+                  <div role="list" aria-label="Duty groups and attendance" style={{ display: 'grid', gap: 9 }}>
+                    {dutyGroupSummaries.map((group) => (
+                      <div key={group.group_id} role="listitem" style={{ border: `1px solid ${BORDER}`, borderRadius: 12, background: '#fff', padding: '10px 12px' }}>
+                        <strong style={{ ...body, display: 'block', fontSize: '0.76rem', color: INK }}>{group.group_name}</strong>
+                        <p style={{ ...body, fontSize: '0.68rem', color: MUTED, marginTop: 4 }}>
+                          {group.scholars.length} scholars · {Object.entries(DUTY_STATUS_STYLES)
+                            .map(([status, style]) => `${style.label} ${group.attendanceCounts[status]}`)
+                            .join(' · ')}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : <NoData text="No group duties scheduled for this month." />}
               </div>
-            </div>
-
-            <div style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '18px 20px' }}>
-              <p style={{ ...body, fontSize: '0.9rem', color: INK, lineHeight: 1.75 }}>{narrative}</p>
             </div>
 
             <div style={{ marginTop: '2rem', paddingTop: '1.2rem', borderTop: `1px solid ${BORDER}`, textAlign: 'center' }}>
@@ -810,10 +1104,12 @@ const AdminDonorPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [reportRow, setReportRow] = useState(null);
+  const [selectedDutyGroupId, setSelectedDutyGroupId] = useState(null);
+  const [selectedDocumentTaskKey, setSelectedDocumentTaskKey] = useState(null);
   const [showMonthlyReport, setShowMonthlyReport] = useState(false);
   const [scholarSearch, setScholarSearch] = useState('');
+  const [scholarGradeFilter, setScholarGradeFilter] = useState('');
   const [scholarPage, setScholarPage] = useState(1);
-  const [impactView, setImpactView] = useState('hours'); // 'hours' | 'activities'
 
   const fetchDonorOverview = async () => {
     try {
@@ -836,15 +1132,21 @@ const AdminDonorPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [month, yearLevel]);
 
-  useEffect(() => { setScholarPage(1); }, [scholarSearch, rows]);
+  useEffect(() => {
+    setSelectedDutyGroupId(null);
+    setSelectedDocumentTaskKey(null);
+  }, [month, yearLevel]);
+
+  useEffect(() => { setScholarPage(1); }, [scholarSearch, scholarGradeFilter, rows]);
 
   const filteredScholarRows = useMemo(() => {
     const query = scholarSearch.trim().toLowerCase();
     return rows.filter((row) => {
       if (query && !(row.scholar || '').toLowerCase().includes(query)) return false;
+      if (scholarGradeFilter && formatYearLevel(row.year_level) !== scholarGradeFilter) return false;
       return true;
     });
-  }, [rows, scholarSearch]);
+  }, [rows, scholarSearch, scholarGradeFilter]);
 
   const scholarPageCount = Math.max(1, Math.ceil(filteredScholarRows.length / SCHOLARS_PER_PAGE));
   const pageStart = (scholarPage - 1) * SCHOLARS_PER_PAGE;
@@ -853,61 +1155,138 @@ const AdminDonorPage = () => {
     [filteredScholarRows, pageStart]
   );
 
-  // Totals: missing values stay null ("no data"), they are never turned into 0.
-  const totals = useMemo(() => ({
-    totalScholars: rows.length,
-    averageGpa: avgValid(rows.map(gpaOf)),
-    totalDutyHours: sumValid(rows.map(hoursOf)),
-    totalActivities: sumValid(rows.map(activitiesOf)),
-  }), [rows]);
-
-  // One grouping reused by every chart. Only year levels that exist in the data appear.
-  const levelStats = useMemo(() => {
-    const map = new Map();
-    rows.forEach((row) => {
-      const level = row.year_level ? formatYearLevel(row.year_level) : 'Unspecified';
-      if (!map.has(level)) map.set(level, []);
-      map.get(level).push(row);
-    });
-    const ordered = [
-      ...YEAR_LEVEL_ORDER.filter((lvl) => map.has(lvl)),
-      ...[...map.keys()].filter((lvl) => !YEAR_LEVEL_ORDER.includes(lvl)),
-    ];
-    return ordered.map((level) => {
-      const group = map.get(level);
-      return {
-        level,
-        count: group.length,
-        gpa: avgValid(group.map(gpaOf)),
-        hours: sumValid(group.map(hoursOf)),
-        activities: sumValid(group.map(activitiesOf)),
-      };
-    });
+  const totals = { totalScholars: rows.length };
+  const overallTaskCompletion = useMemo(() => {
+    const eligibleScholars = rows.filter((row) => row.submission_task_progress?.length > 0);
+    const submittedScholars = eligibleScholars.filter((row) => (
+      row.submission_task_progress.every((task) => task.submitted)
+    )).length;
+    return {
+      eligible: eligibleScholars.length,
+      submitted: submittedScholars,
+      percent: eligibleScholars.length
+        ? Math.round((submittedScholars / eligibleScholars.length) * 100)
+        : null,
+    };
   }, [rows]);
 
-  const distributionData = useMemo(() => levelStats.map((s) => ({ name: s.level, value: s.count })), [levelStats]);
-  const gpaByLevelData = useMemo(
-    () => levelStats.filter((s) => s.gpa !== null).map((s) => ({ level: s.level, gpa: Number(s.gpa.toFixed(2)) })),
-    [levelStats]
+  const documentTaskLevelData = useMemo(() => {
+    const groups = new Map();
+    rows.forEach((row) => {
+      const level = row.year_level ? formatYearLevel(row.year_level) : 'Unspecified';
+      const key = level;
+      const group = groups.get(key) || {
+        key: level,
+        level,
+        taskTypes: new Set(),
+        scholars: new Map(),
+      };
+      const scholarId = String(row.scholar_id);
+      const scholar = group.scholars.get(scholarId) || {
+        scholar_id: row.scholar_id,
+        scholar: row.scholar,
+        year_level: row.year_level,
+        document_progress: {},
+      };
+      (row.submission_task_progress || []).forEach((task) => {
+        group.taskTypes.add(task.task_type);
+        const progress = scholar.document_progress[task.task_type] || {
+          submitted: 0,
+          total: 0,
+          task_titles: [],
+        };
+        progress.total += 1;
+        if (task.submitted) progress.submitted += 1;
+        if (task.task_title && !progress.task_titles.includes(task.task_title)) {
+          progress.task_titles.push(task.task_title);
+        }
+        scholar.document_progress[task.task_type] = progress;
+      });
+      group.scholars.set(scholarId, scholar);
+      groups.set(key, group);
+    });
+    return [...groups.values()]
+      .filter((group) => group.taskTypes.size > 0)
+      .sort((a, b) => YEAR_LEVEL_ORDER.indexOf(b.level) - YEAR_LEVEL_ORDER.indexOf(a.level))
+      .map((group) => ({
+        key: group.key,
+        level: group.level,
+        label: group.level,
+        overallProgress: (() => {
+          const eligibleScholars = [...group.scholars.values()].filter(
+            (scholar) => Object.keys(scholar.document_progress).length > 0
+          );
+          const submitted = eligibleScholars.filter((scholar) => (
+            Object.values(scholar.document_progress).every((progress) => progress.submitted === progress.total)
+          )).length;
+          return {
+            eligible: eligibleScholars.length,
+            submitted,
+            percent: eligibleScholars.length ? Math.round((submitted / eligibleScholars.length) * 100) : 0,
+          };
+        })(),
+        documentProgress: DOCUMENT_TASK_ORDER
+          .filter((type) => group.taskTypes.has(type))
+          .map((type) => {
+            const eligibleScholars = [...group.scholars.values()].filter(
+              (scholar) => scholar.document_progress[type]?.total > 0
+            );
+            const submitted = eligibleScholars.filter((scholar) => (
+              scholar.document_progress[type].submitted === scholar.document_progress[type].total
+            )).length;
+            return {
+              type,
+              label: DOCUMENT_TASK_LABELS[type],
+              eligible: eligibleScholars.length,
+              submitted,
+              percent: eligibleScholars.length ? Math.round((submitted / eligibleScholars.length) * 100) : 0,
+            };
+          }),
+        scholars: [...group.scholars.values()].sort((a, b) => (
+          String(a.scholar).localeCompare(String(b.scholar), undefined, { sensitivity: 'base' })
+        )),
+      }));
+  }, [rows]);
+  const dutyGroupProgress = useMemo(() => {
+    const groups = new Map();
+    rows.forEach((row) => {
+      (row.duty_group_attendance || []).forEach((attendance) => {
+        const key = String(attendance.group_id);
+        const group = groups.get(key) || {
+          group_id: attendance.group_id,
+          group_name: attendance.group_name,
+          scholars: new Map(),
+        };
+        const scholarId = String(attendance.scholar_id);
+        const scholar = group.scholars.get(scholarId) || {
+          scholar_id: attendance.scholar_id,
+          scholar: attendance.scholar,
+          year_level: attendance.year_level,
+          status_counts: Object.keys(DUTY_STATUS_STYLES).reduce((counts, status) => {
+            counts[status] = 0;
+            return counts;
+          }, {}),
+        };
+        const status = dutyStatusKey(attendance.attendance_status);
+        if (status) scholar.status_counts[status] += 1;
+        group.scholars.set(scholarId, scholar);
+        groups.set(key, group);
+      });
+    });
+    return [...groups.values()]
+      .map((group) => ({
+        group_id: group.group_id,
+        group_name: group.group_name,
+        scholars: [...group.scholars.values()].sort((a, b) => (
+          String(a.scholar).localeCompare(String(b.scholar), undefined, { sensitivity: 'base' })
+        )),
+      }))
+      .sort((a, b) => String(a.group_name).localeCompare(String(b.group_name), undefined, { numeric: true, sensitivity: 'base' }));
+  }, [rows]);
+  const selectedDutyGroup = dutyGroupProgress.find(
+    (group) => String(group.group_id) === String(selectedDutyGroupId)
   );
-
-  const panelStats = useMemo(() => [...levelStats].reverse(), [levelStats]); // highest level first
-  const impactKey = impactView === 'hours' ? 'hours' : 'activities';
-  const hasImpactData = levelStats.some((s) => s[impactKey] !== null);
-  const maxOf = (key) => Math.max(0, ...levelStats.map((s) => s[key] ?? 0));
-
-  const handleExportTable = () => {
-    const blob = new Blob([toCsv(filteredScholarRows)], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `scholar-impact-${month}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-  };
-
+  const selectedDocumentTask = documentTaskLevelData.find((task) => task.key === selectedDocumentTaskKey);
   const initialLoading = loading && rows.length === 0;
   const hasRows = rows.length > 0;
   const fieldStyle = { ...body, width: '100%', borderRadius: 12, padding: '9px 12px', border: `1px solid ${BORDER}`, background: '#fff', color: INK, fontSize: '0.85rem' };
@@ -969,7 +1348,7 @@ const AdminDonorPage = () => {
                     <span style={{ ...body, fontSize: '0.78rem', color: PRIMARY, fontWeight: 600 }}>{formatMonthLabel(month)}</span>
                   </div>
                   <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 3, maxWidth: 620, lineHeight: 1.55 }}>
-                    Generate a comprehensive donor-ready report for the selected month, including scholar progress, community impact, and verified highlights.
+                    Generate a donor-ready report with the same document task progress and duty group attendance shown below.
                   </p>
                 </div>
               </div>
@@ -989,21 +1368,18 @@ const AdminDonorPage = () => {
             </section>
 
             {/* KPI cards */}
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 mb-5">
+            <div className="grid gap-3 sm:grid-cols-2 mb-5">
               <KPICard
                 icon={Users} label="Active Scholars" accent={PRIMARY}
                 value={hasRows ? totals.totalScholars : '—'}
-                note={hasRows ? 'Scholars supported this period.' : 'No scholar data for this period'}
+                note={hasRows ? 'Current active scholar roster.' : 'No active scholars found.'}
               />
               <KPICard
-                icon={GraduationCap} label="Average GPA" accent={BRONZE}
-                value={fmtNum(totals.averageGpa, 2)}
-                note={totals.averageGpa === null ? 'No GPA data available' : 'Academic performance average.'}
-              />
-              <KPICard
-                icon={Clock} label="Community Service Hours" accent={SUCCESS}
-                value={fmtNum(totals.totalDutyHours, 1)}
-                note={totals.totalDutyHours === null ? 'No records available' : 'Verified service hours completed.'}
+                icon={FileText} label="Overall Task Completion" accent={SUCCESS}
+                value={overallTaskCompletion.percent === null ? '—' : `${overallTaskCompletion.percent}%`}
+                note={overallTaskCompletion.eligible
+                  ? `${overallTaskCompletion.submitted}/${overallTaskCompletion.eligible} eligible scholars completed all assigned documents.`
+                  : 'No document tasks assigned this month.'}
               />
             </div>
 
@@ -1012,42 +1388,14 @@ const AdminDonorPage = () => {
               Impact Overview
             </p>
             <div className="grid gap-4 lg:grid-cols-2 mb-6">
-              <Panel icon={Users} title="Scholar Distribution by Year Level" subtitle="Number of active scholars per year level.">
-                {hasRows ? (
-                  <HBarList
-                    items={panelStats.map((s) => ({ label: s.level, value: s.count }))}
-                    max={Math.max(...levelStats.map((s) => s.count))}
-                    color={PRIMARY}
-                    format={(v) => String(v)}
-                  />
-                ) : <NoData />}
+              <Panel icon={FileText} title="Document Task Status by Year Level" subtitle="Monthly Letter, COR, Grades, and Other Document submissions; percentages use eligible scholars.">
+                {documentTaskLevelData.length ? (
+                  <DocumentTaskList items={documentTaskLevelData} onView={setSelectedDocumentTaskKey} />
+                ) : <NoData text={`No document task assigned for ${formatMonthLabel(month)}.`} />}
               </Panel>
 
-              <Panel icon={HeartHandshake} title="Community Impact" subtitle="Service hours and participation by year level.">
-                <div role="group" aria-label="Community impact view" style={{ display: 'inline-flex', padding: 3, borderRadius: 11, background: '#F2E9DC', marginBottom: 14 }}>
-                  {[['hours', 'Service Hours'], ['activities', 'Program Activities']].map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      aria-pressed={impactView === key}
-                      onClick={() => setImpactView(key)}
-                      style={{
-                        ...body, fontSize: '0.74rem', fontWeight: 600, border: 0, borderRadius: 9, padding: '6px 12px', cursor: 'pointer',
-                        background: impactView === key ? PRIMARY : 'transparent', color: impactView === key ? '#fff' : MUTED,
-                      }}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                {hasImpactData ? (
-                  <HBarList
-                    items={panelStats.map((s) => ({ label: s.level, value: s[impactKey] }))}
-                    max={maxOf(impactKey)}
-                    color={impactView === 'hours' ? SUCCESS : WARNING}
-                    format={(v) => (impactView === 'hours' ? v.toFixed(1) : String(v))}
-                  />
-                ) : <NoData text={impactView === 'hours' ? 'No service hour records available' : 'No activity data available'} />}
+              <Panel icon={HeartHandshake} title="Duty Groups" subtitle={`Groups assigned to duties in ${formatMonthLabel(month)}.`}>
+                <DutyGroupProgressList items={dutyGroupProgress} onView={setSelectedDutyGroupId} />
               </Panel>
             </div>
 
@@ -1075,19 +1423,16 @@ const AdminDonorPage = () => {
                         style={{ ...fieldStyle, paddingLeft: 34 }}
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={handleExportTable}
-                      disabled={filteredScholarRows.length === 0}
-                      style={{
-                        ...body, fontSize: '0.8rem', fontWeight: 600, color: PRIMARY, background: '#fff',
-                        border: `1px solid ${PRIMARY}`, borderRadius: 12, padding: '9px 14px', whiteSpace: 'nowrap',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7,
-                        cursor: filteredScholarRows.length ? 'pointer' : 'not-allowed', opacity: filteredScholarRows.length ? 1 : 0.55,
-                      }}
+                    <select
+                      value={scholarGradeFilter}
+                      onChange={(e) => setScholarGradeFilter(e.target.value)}
+                      aria-label="Filter by grade"
+                      className="dr-field"
+                      style={{ ...fieldStyle, width: 'auto', minWidth: 170, cursor: 'pointer' }}
                     >
-                      <Download size={14} /> Export Table
-                    </button>
+                      <option value="">Filter by grade</option>
+                      {YEAR_LEVEL_ORDER.map((level) => <option key={level} value={level}>{level}</option>)}
+                    </select>
                   </div>
                 )}
               </div>
@@ -1095,14 +1440,14 @@ const AdminDonorPage = () => {
               {!hasRows ? (
                 <EmptyState title="No scholars found" text="No scholar data is available for the selected reporting period." />
               ) : filteredScholarRows.length === 0 ? (
-                <EmptyState title="No scholars match your search." text="Try adjusting your search or filters." />
+                <EmptyState title="No scholars match your search or grade filter." text="Try adjusting your search or filters." />
               ) : (
                 <>
                   <div style={{ overflowX: 'auto', border: `1px solid ${BORDER}`, borderRadius: 12 }}>
-                    <table style={{ width: '100%', minWidth: 980, borderCollapse: 'collapse' }}>
+                    <table style={{ width: '100%', minWidth: 720, borderCollapse: 'collapse' }}>
                       <thead>
                         <tr>
-                          {['#', 'Scholar', 'Student ID', 'Year Level', 'GPA', 'Reports Submitted', 'Service Hours', 'Activities', 'Actions'].map((h) => (
+                          {['#', 'Scholar', 'Student ID', 'Year Level', 'Actions'].map((h) => (
                             <th key={h} scope="col" style={thStyle}>{h}</th>
                           ))}
                         </tr>
@@ -1122,10 +1467,6 @@ const AdminDonorPage = () => {
                               </td>
                               <td style={{ ...tdStyle, color: MUTED }}>{row.scholar_id || '—'}</td>
                               <td style={tdStyle}>{formatYearLevel(row.year_level)}</td>
-                              <td style={tdStyle}>{fmtNum(gpaOf(row), 2)}</td>
-                              <td style={tdStyle}>{fmtNum(reportsOf(row))}</td>
-                              <td style={tdStyle}>{fmtNum(hoursOf(row), 1)}</td>
-                              <td style={tdStyle}>{fmtNum(activitiesOf(row))}</td>
                               <td style={tdStyle}>
                                 <button
                                   type="button"
@@ -1199,13 +1540,29 @@ const AdminDonorPage = () => {
 
       {reportRow && <DonorReportModal row={reportRow} month={month} onClose={() => setReportRow(null)} />}
 
+      {selectedDutyGroup && (
+        <DutyGroupModal
+          group={selectedDutyGroup}
+          month={month}
+          onClose={() => setSelectedDutyGroupId(null)}
+        />
+      )}
+
+      {selectedDocumentTask && (
+        <DocumentTaskModal
+          task={selectedDocumentTask}
+          month={month}
+          onClose={() => setSelectedDocumentTaskKey(null)}
+        />
+      )}
+
       {showMonthlyReport && (
         <MonthlyReportModal
-          rows={rows}
           month={month}
           totals={totals}
-          distributionData={distributionData}
-          gpaByLevelData={gpaByLevelData}
+          overallTaskCompletion={overallTaskCompletion}
+          documentTaskLevelData={documentTaskLevelData}
+          dutyGroupProgress={dutyGroupProgress}
           onClose={() => setShowMonthlyReport(false)}
         />
       )}

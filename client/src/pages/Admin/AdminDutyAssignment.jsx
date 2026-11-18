@@ -1,9 +1,9 @@
 import { API_ORIGIN } from '../../utils/apiConfig.js';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
   AlertCircle, ArrowRight, Bell, CalendarDays, CheckCircle2, CheckSquare, ChevronLeft, ChevronRight,
-  Clock, FilterX, Info, Loader2, MapPin, MoreHorizontal, Plus, RefreshCw,
+  Clock, FilterX, Info, Loader2, MapPin, MoreHorizontal, Plus,
   Search, Send, Trash2, Users, X,
 } from 'lucide-react';
 import { formatAdminDate } from '../../utils/adminPreferences';
@@ -350,10 +350,8 @@ const AdminDutyAssignment = () => {
   const [notifyError, setNotifyError] = useState('');
   const [activeDialog, setActiveDialog] = useState(null); // 'notify' | 'makeup' | null
 
-  // UI-only state: row-actions menu, "last updated", client-side filters and pagination.
+  // UI-only state: row-actions menu, client-side filters and pagination.
   const [menu, setMenu] = useState(null); // { duty, top, right }
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [now, setNow] = useState(Date.now());
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [groupFilter, setGroupFilter] = useState('all');
@@ -361,8 +359,8 @@ const AdminDutyAssignment = () => {
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
 
-  const fetchData = async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
     setError('');
     try {
       const [dutiesResponse, groupsResponse] = await Promise.all([
@@ -381,16 +379,20 @@ const AdminDutyAssignment = () => {
       setGroups(groupsResponse.data || []);
       const makeupResponse = await axios.get(`${API}/staff/duties/makeup-candidates`, authHeaders());
       setMakeupCandidates(makeupResponse.data || []);
-      setLastUpdated(new Date());
-      setNow(Date.now());
     } catch (loadError) {
       setError(loadError.response?.data?.error || 'Unable to load duty assignments.');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') fetchData(true);
+    }, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [fetchData]);
 
   useEffect(() => {
     let active = true;
@@ -415,12 +417,6 @@ const AdminDutyAssignment = () => {
       clearInterval(intervalId);
       window.removeEventListener('focus', refreshMakeupCandidates);
     };
-  }, []);
-
-  // Keeps the "Last updated" label fresh.
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 30000);
-    return () => clearInterval(timer);
   }, []);
 
   // Close any open dialog with Escape and lock background scroll while one is open.
@@ -597,14 +593,6 @@ const AdminDutyAssignment = () => {
     setSearch(''); setStatusFilter('all'); setGroupFilter('all'); setDateFrom(''); setDateTo('');
   };
 
-  const updatedLabel = (() => {
-    if (!lastUpdated) return 'Updating…';
-    const minutes = Math.floor((now - lastUpdated.getTime()) / 60000);
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes} min ago`;
-    return lastUpdated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  })();
-
   const columns = ['#', 'Duty', 'Date & Time', 'Location', 'Assigned Groups', 'Status', 'Actions'];
 
   return (
@@ -616,15 +604,7 @@ const AdminDutyAssignment = () => {
           description="Create and organize scholar duty schedules, assign groups, and manage duty-related actions."
           actions={
             <div className="flex items-center gap-4 flex-wrap">
-            <div style={{ textAlign: 'right', paddingRight: 16, borderRight: `1px solid ${BORDER}` }}>
-              <p style={{ ...body, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED }}>Last updated</p>
-              <p style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: INK, marginTop: 2 }}>{updatedLabel}</p>
-            </div>
             <div className="flex items-center gap-2.5 flex-wrap">
-              <button type="button" onClick={fetchData} title="Refresh duties" className="ad-ghost flex items-center gap-2"
-                style={{ border: `1px solid ${BORDER}`, background: CARD, color: INK, borderRadius: 10, padding: '9px 14px', ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(36,21,18,0.06)' }}>
-                <RefreshCw size={14} /> Refresh
-              </button>
               <button type="button" onClick={() => setShowCreate(true)} className="ad-primary flex items-center gap-2"
                 style={{ border: 0, background: PRIMARY, color: '#fff', borderRadius: 10, padding: '10px 18px', ...body, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
                 <Plus size={15} /> Create Duty
@@ -720,7 +700,7 @@ const AdminDutyAssignment = () => {
             </div>
           </div>
 
-          {/* Footer: result count on the left, clear + refresh on the right */}
+          {/* Footer: result count and filters */}
           <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '9px 16px', borderTop: `1px solid ${BORDER}`, background: BG }}>
             <p style={{ ...body, fontSize: '0.74rem', color: MUTED }}>
               Showing{' '}
@@ -736,10 +716,6 @@ const AdminDutyAssignment = () => {
                   <FilterX size={12} /> Clear filters
                 </button>
               )}
-              <button type="button" onClick={fetchData} title="Refresh duties" className="ad-ghost flex items-center gap-1.5"
-                style={{ height: 30, border: `1px solid ${BORDER}`, background: CARD, color: INK, borderRadius: 8, padding: '0 10px', ...body, fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                <RefreshCw size={12} className={loading ? 'animate-spin' : undefined} /> Refresh
-              </button>
             </div>
           </div>
         </div>

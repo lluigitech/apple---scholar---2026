@@ -1,11 +1,5 @@
 const SETTINGS_KEY = 'admin-system-settings';
 
-const LOCALES = {
-  'English (Philippines)': 'en-PH',
-  'English (US)': 'en-US',
-  Filipino: 'fil-PH',
-};
-
 const TIMEZONES = {
   '(GMT+8) Manila, Philippines': 'Asia/Manila',
   '(GMT+0) UTC': 'UTC',
@@ -22,7 +16,7 @@ export const getAdminPreferences = () => {
   }
 };
 
-export const getAdminLocale = (preferences = getAdminPreferences()) => LOCALES[preferences.language] || 'en-PH';
+export const getAdminLocale = () => 'en-PH';
 export const getAdminTimezone = (preferences = getAdminPreferences()) => TIMEZONES[preferences.timezone] || 'Asia/Manila';
 
 export const formatAdminDate = (value, options = {}) => {

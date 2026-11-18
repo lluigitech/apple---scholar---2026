@@ -120,3 +120,25 @@ test('login rejects missing identifiers or password without querying the databas
   assert.equal(missingPassword.statusCode, 400);
   assert.equal(capturedQuery, undefined);
 });
+
+test('archived users cannot sign in even with valid credentials', async () => {
+  queryResult = [{
+    scholar_id: 'ADM-2026-0001',
+    role: 'admin',
+    status: 'archived',
+    id: 8,
+    full_name: 'Archived Admin',
+    email: 'archived@example.com',
+    password: 'correct-password',
+    must_change_password: 0,
+  }];
+
+  const response = await invokeLogin({
+    loginId: 'ADM-2026-0001',
+    email: 'archived@example.com',
+    password: 'correct-password',
+  });
+
+  assert.equal(response.statusCode, 403);
+  assert.match(response.payload.message, /account has been archived/i);
+});

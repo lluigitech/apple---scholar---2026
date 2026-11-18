@@ -132,7 +132,6 @@ const buildReportSummaryHTML = ({
       </tr>`;
   }).join('') : '';
   const lowRiskCount = isComplianceSummary ? detailRows.filter(row => String(row.riskStatus || 'low').toLowerCase() === 'low').length : 0;
-  const mediumRiskCount = isComplianceSummary ? detailRows.filter(row => String(row.riskStatus || '').toLowerCase() === 'medium').length : 0;
   const highRiskCount = isComplianceSummary ? detailRows.filter(row => String(row.riskStatus || '').toLowerCase() === 'high').length : 0;
   const safeRows = isAttendanceReport
     ? attendanceRows
@@ -210,6 +209,7 @@ const buildReportSummaryHTML = ({
       td.muted { color: var(--muted); }
       .empty { color: var(--muted); font-style: italic; }
       .summary { display: grid; grid-template-columns: 32mm 32mm 1fr; gap: 8mm; margin: 22mm 0 10mm; padding: 6mm; border: 1px solid #D8D3D0; background: #F8F7F5; }
+      .compliance-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .summary-breakdown { display: block; }
       .task-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .breakdown-heading > .summary-label { margin-bottom: 8px; }
@@ -271,9 +271,8 @@ const buildReportSummaryHTML = ({
           : '<colgroup><col class="batch"><col class="compliance"><col class="missing"></colgroup><thead><tr><th>BATCH</th><th>COMPLIANCE</th><th>MISSING</th></tr></thead>'}
         <tbody>${safeRows || '<tr><td colspan="3" class="empty">No report rows available</td></tr>'}</tbody>
       </table>`}
-      ${detailRows.length && !isAttendanceReport && !isSubmissionRecords && !isMonthlyLetterReview ? `<section class="summary ${isExportReport ? 'summary-breakdown' : isTaskCompletion ? 'task-summary' : ''}">
+      ${detailRows.length && !isAttendanceReport && !isSubmissionRecords && !isMonthlyLetterReview ? `<section class="summary ${isComplianceSummary ? 'compliance-summary' : isExportReport ? 'summary-breakdown' : isTaskCompletion ? 'task-summary' : ''}">
         ${isComplianceSummary ? `<div><span class="summary-label">LOW RISK</span><strong>${lowRiskCount}</strong></div>
-        <div><span class="summary-label">MEDIUM RISK</span><strong>${mediumRiskCount}</strong></div>
         <div><span class="summary-label">HIGH RISK</span><strong>${highRiskCount}</strong></div>` : isExportReport ? `<div class="breakdown-heading"><span class="summary-label">REPORT BREAKDOWN</span>${exportBreakdown}</div>` : isTaskCompletion ? `<div><span class="summary-label">ASSIGNED</span><strong>${taskTotals.assigned}</strong></div>
         <div><span class="summary-label">COMPLETED</span><strong>${taskTotals.completed}</strong></div>
         <div><span class="summary-label">MISSING</span><strong>${taskTotals.missing}</strong></div>

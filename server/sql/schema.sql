@@ -40,8 +40,6 @@ ON DUPLICATE KEY UPDATE id = id;
 
 CREATE TABLE IF NOT EXISTS privacy_settings (
   id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
-  role_based_access TINYINT(1) NOT NULL DEFAULT 1,
-  document_protection TINYINT(1) NOT NULL DEFAULT 1,
   access_logging TINYINT(1) NOT NULL DEFAULT 1,
   privacy_monitoring TINYINT(1) NOT NULL DEFAULT 1,
   updated_by INT DEFAULT NULL,
@@ -178,18 +176,19 @@ CREATE TABLE IF NOT EXISTS grades (
 
 CREATE TABLE IF NOT EXISTS compliance_settings (
   id INT PRIMARY KEY,
-  min_compliance DECIMAL(5,2) NOT NULL DEFAULT 70.00,
-  allowed_missed INT NOT NULL DEFAULT 2,
+  min_compliance DECIMAL(5,2) NOT NULL DEFAULT 50.00,
+  allowed_missed INT NOT NULL DEFAULT 0,
   required_hours INT NOT NULL DEFAULT 30,
-  missed_submission_deduction INT NOT NULL DEFAULT 2,
-  service_hour_shortfall_deduction INT NOT NULL DEFAULT 1,
-  absent_duty_deduction INT NOT NULL DEFAULT 2,
-  late_submission_deduction INT NOT NULL DEFAULT 1,
+  missed_submission_deduction INT NOT NULL DEFAULT 5,
+  service_hour_shortfall_deduction INT NOT NULL DEFAULT 2,
+  late_duty_deduction INT NOT NULL DEFAULT 2,
+  absent_duty_deduction INT NOT NULL DEFAULT 10,
+  late_submission_deduction INT NOT NULL DEFAULT 10,
   negative_letter_deduction INT NOT NULL DEFAULT 1,
-  quality_drop_deduction DECIMAL(4,2) NOT NULL DEFAULT 0.50,
+  quality_drop_deduction DECIMAL(4,2) NOT NULL DEFAULT 5.00,
   extra_service_bonus INT NOT NULL DEFAULT 2,
   good_maintenance_bonus INT NOT NULL DEFAULT 5,
-  missed_submission_grace_count INT NOT NULL DEFAULT 2,
+  missed_submission_grace_count INT NOT NULL DEFAULT 0,
   late_submission_grace_count INT NOT NULL DEFAULT 2,
   recovery_enabled TINYINT(1) NOT NULL DEFAULT 1,
   early_submission_bonus DECIMAL(4,2) NOT NULL DEFAULT 0.50,
@@ -197,6 +196,7 @@ CREATE TABLE IF NOT EXISTS compliance_settings (
   consecutive_early_bonus DECIMAL(4,2) NOT NULL DEFAULT 1.00,
   perfect_attendance_bonus DECIMAL(4,2) NOT NULL DEFAULT 0.50,
   monthly_recovery_cap DECIMAL(4,2) NOT NULL DEFAULT 2.00,
+  policy_version INT NOT NULL DEFAULT 8,
   updated_by INT DEFAULT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -333,6 +333,7 @@ CREATE TABLE IF NOT EXISTS duty_attendance (
   status VARCHAR(32) DEFAULT 'present',
   method VARCHAR(32) DEFAULT 'manual',
   marked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  marked_by_id INT DEFAULT NULL,
   check_out_at DATETIME DEFAULT NULL,
   is_makeup TINYINT DEFAULT 0
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

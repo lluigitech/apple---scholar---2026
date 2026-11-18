@@ -4,6 +4,7 @@ const admin   = require('../../controllers/adminController');
 const adminDashboard = require('../../controllers/adminDashboardController');
 const privacy = require('../../controllers/privacyController');
 const staff   = require('../../controllers/staffController');
+const executiveRecommendations = require('../../controllers/executiveRecommendationsController');
 const { verifyToken, requireRole } = require('../../middleware/authMiddleware');
 
 router.use(verifyToken, requireRole(['admin'], {
@@ -20,6 +21,7 @@ router.get('/privacy/logs', privacy.getAccessLogs);
 // Users
 router.get   ('/users',              requireRole(['admin'], { action: 'VIEW_SCHOLAR', resourceType: 'user_directory' }), admin.getAllUsers);
 router.get   ('/archive/scholars',   requireRole(['admin'], { action: 'VIEW_SCHOLAR', resourceType: 'scholar_archive' }), admin.getArchivedScholars);
+router.get   ('/archive/users',      requireRole(['admin'], { action: 'VIEW_SCHOLAR', resourceType: 'user_archive' }), admin.getArchivedUsers);
 router.get   ('/officer-assignments', admin.getOfficerAssignments);
 router.put   ('/officer-assignments/:id', admin.updateOfficerAssignments);
 router.get   ('/staff-assignments', admin.getStaffAssignments);
@@ -35,8 +37,8 @@ router.delete('/scholar-groups/:group_id/members/:scholar_id', staff.removeGroup
 router.post  ('/users',              admin.createUser);
 router.put   ('/users/:id',          admin.updateUser);
 router.post  ('/users/:id/role',     admin.assignUserRole);
-router.patch ('/users/:id/archive',  admin.archiveScholar);
-router.put   ('/users/:id/restore',  admin.restoreScholar);
+router.patch ('/users/:id/archive',  admin.archiveUser);
+router.put   ('/users/:id/restore',  admin.restoreUser);
 router.delete('/users/:id',          admin.deleteUser);
 router.get   ('/privacy-requests',   admin.getPrivacyRequests);
 router.patch ('/privacy-requests/:id', admin.updatePrivacyRequest);
@@ -45,6 +47,7 @@ router.put   ('/settings/profile', admin.updateAdminProfile);
 router.get   ('/settings', admin.getAdminSettings);
 router.put   ('/settings', admin.updateAdminSettings);
 router.get('/dashboard-summary', adminDashboard.getSummary);
+router.post('/analytics/executive-recommendations', executiveRecommendations.generate);
 
 // Scholar profile
 router.get('/scholars/:id/profile',     requireRole(['admin'], { action: 'VIEW_SCHOLAR', resourceType: 'scholar', getResourceId: (req) => req.params.id }), admin.getScholarProfile);

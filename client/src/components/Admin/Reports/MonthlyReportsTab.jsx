@@ -66,12 +66,11 @@ const fieldStyle = {
 
 const labelStyle = { ...body, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY, display: 'block', marginBottom: 6 };
 
-// Status presentation — keyed by the statuses the API already returns.
-// medium-risk is shown as "For Review", high-risk as "Needs Revision".
 const STATUS = {
-  accepted: { label: 'Accepted', color: '#4F7656', bg: '#EAF3EB' },
-  'medium-risk': { label: 'For Review', color: '#9A6B1F', bg: '#FBF1DF' },
-  'high-risk': { label: 'Needs Revision', color: '#A83A3A', bg: '#FBEAE8' },
+  accepted: { label: 'Submitted', color: '#4F7656', bg: '#EAF3EB' },
+  'medium-risk': { label: 'Submitted', color: '#4F7656', bg: '#EAF3EB' },
+  'high-risk': { label: 'Submitted', color: '#4F7656', bg: '#EAF3EB' },
+  'not-submitted': { label: 'Not Submitted', color: '#A83A3A', bg: '#FBEAE8' },
 };
 const normalizeStatus = (s) => (s === 'approved' || !s ? 'accepted' : s);
 
@@ -309,9 +308,7 @@ export default function MonthlyReportsTab({
   statusFilter,
   setStatusFilter,
   month,
-  setMonth,
   yearLevel,
-  setYearLevel,
   onRefresh,
   onSelectReport,
 }) {
@@ -319,8 +316,8 @@ export default function MonthlyReportsTab({
   const [page, setPage] = useState(1);
   const [docType, setDocType] = useState('all');
   const [selected, setSelected] = useState(() => new Set());
-  const [exportOpen, setExportOpen] = useState(false);
   const [generatingPdfId, setGeneratingPdfId] = useState(null);
+  const [reportPdfLoading, setReportPdfLoading] = useState(false);
   const [bulkPdfLoading, setBulkPdfLoading] = useState(false);
   const [bulkDocxLoading, setBulkDocxLoading] = useState(false);
   const [pdfError, setPdfError] = useState('');
@@ -332,21 +329,6 @@ export default function MonthlyReportsTab({
   const [archiving, setArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState('');
   const [archiveMessage, setArchiveMessage] = useState('');
-
-  // Period choices: All Periods + the last 12 months (+ the active one if older).
-  const periodOptions = useMemo(() => {
-    const out = [];
-    const now = new Date();
-    for (let i = 0; i < 12; i += 1) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      out.push({ value, label: new Intl.DateTimeFormat(getAdminLocale(), { timeZone: getAdminTimezone(), month: 'long', year: 'numeric' }).format(d) });
-    }
-    if (month && !out.some(o => o.value === month)) {
-      out.push({ value: month, label: monthLabel(`${month}-01T00:00:00`) });
-    }
-    return out;
-  }, [month]);
 
   // Local search layered on the parent's filtered list (scholar name, ID, or assigned officer).
   // Archived rows are kept out of this active list (they live in Archive Management).
@@ -394,13 +376,6 @@ export default function MonthlyReportsTab({
   }, [archiveOpen, archiving]);
 
   const hasActiveFilters = Boolean(searchTerm || yearLevel || statusFilter !== 'all' || docType !== 'all' || month !== new Date().toISOString().slice(0, 7));
-  const handleResetFilters = () => {
-    setSearchTerm('');
-    setDocType('all');
-    setYearLevel('');
-    setStatusFilter('all');
-    setMonth(new Date().toISOString().slice(0, 7));
-  };
 
   if (error) {
     return (
@@ -416,7 +391,7 @@ export default function MonthlyReportsTab({
     );
   }
 
-  const pageKeys = pageRows.map((r, i) => rowKey(r, start + i));
+  const pageKeys = pageRows.map((r, i) => !r.isMissing && rowKey(r, start + i)).filter(Boolean);
   const allOnPage = pageKeys.length > 0 && pageKeys.every(k => selected.has(k));
   const toggleAll = () => {
     const next = new Set(selected);
@@ -433,7 +408,7 @@ export default function MonthlyReportsTab({
   const letterTargets = (selected.size
     ? searchedReports.filter((r, i) => selected.has(rowKey(r, i)))
     : searchedReports
-  ).filter(r => requirementOf(r) === 'Monthly Letter');
+  ).filter(r => !r.isMissing && requirementOf(r) === 'Monthly Letter');
 
   // Submission IDs of the selected rows (reuses the existing `selected` Set), de-duplicated.
   const selectedIds = [...new Set(
@@ -631,7 +606,9 @@ export default function MonthlyReportsTab({
   };
 
   const handleExportPdf = async () => {
+    if (reportPdfLoading || searchedReports.length === 0) return;
     setPdfError('');
+    setReportPdfLoading(true);
     try {
       await downloadReportSummaryPdf({
         role: 'admin',
@@ -649,14 +626,14 @@ export default function MonthlyReportsTab({
     } catch (exportError) {
       console.error('Could not export compliance reports PDF:', exportError);
       setPdfError(exportError.response?.data?.message || 'Unable to export the PDF report.');
+    } finally {
+      setReportPdfLoading(false);
     }
   };
 
   const th = { ...body, fontSize: '0.74rem', fontWeight: 700, color: INK, textAlign: 'left', padding: '12px 14px', whiteSpace: 'nowrap', borderBottom: `1px solid ${BORDER}`, background: BG };
   const td = { ...body, fontSize: '0.82rem', color: INK, padding: '12px 14px', whiteSpace: 'nowrap', borderBottom: `1px solid ${BORDER}66` };
   const actionBtn = { ...body, fontSize: '0.76rem', fontWeight: 600, padding: '5px 12px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${PRIMARY}`, background: '#fff', color: PRIMARY };
-  const menuItem = { ...body, color: INK, fontSize: '0.82rem', background: 'transparent', border: 'none', cursor: 'pointer' };
-  const runExport = (fn) => () => { setExportOpen(false); fn(); };
   const archiveDisabled = selectedIds.length === 0 || archiving;
 
   return (
@@ -664,7 +641,7 @@ export default function MonthlyReportsTab({
 
       {/* ── Filter bar (filters apply live) ── */}
       <div
-        className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_1.5fr_auto] items-end"
+        className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.5fr_auto] items-end"
         style={{ ...surfaceCard }}
       >
         <div>
@@ -672,35 +649,6 @@ export default function MonthlyReportsTab({
           <select value={docType} onChange={e => setDocType(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }} onFocus={focus} onBlur={blur}>
             <option value="all">All Requirements</option>
             {REQUIREMENT_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label style={labelStyle}>Month / Period</label>
-          <select value={month} onChange={e => setMonth(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }} onFocus={focus} onBlur={blur}>
-            <option value="">All Periods</option>
-            {periodOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </div>
-
-        <div>
-          <label style={labelStyle}>Year Level</label>
-          <select value={yearLevel} onChange={e => setYearLevel(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }} onFocus={focus} onBlur={blur}>
-            <option value="">All Year Levels</option>
-            <option value="1st Year College">1st Year College</option>
-            <option value="2nd Year College">2nd Year College</option>
-            <option value="3rd Year College">3rd Year College</option>
-            <option value="4th Year College">4th Year College</option>
-          </select>
-        </div>
-
-        <div>
-          <label style={labelStyle}>Status</label>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }} onFocus={focus} onBlur={blur}>
-            <option value="all">All Statuses</option>
-            <option value="accepted">Accepted</option>
-            <option value="medium-risk">For Review</option>
-            <option value="high-risk">Needs Revision</option>
           </select>
         </div>
 
@@ -720,49 +668,38 @@ export default function MonthlyReportsTab({
           </div>
         </div>
 
+        <div>
+          <label style={labelStyle}>Status</label>
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }} onFocus={focus} onBlur={blur}>
+            <option value="all">All Statuses</option>
+            <option value="submitted">Submitted</option>
+            <option value="not-submitted">Not Submitted</option>
+          </select>
+        </div>
+
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={handleResetFilters}
-            disabled={!hasActiveFilters}
+            onClick={handleExportPdf}
+            disabled={reportPdfLoading || searchedReports.length === 0}
             style={{
-              height: 44, padding: '0 16px', borderRadius: 12, border: `1px solid ${hasActiveFilters ? PRIMARY : BORDER}`,
-              background: '#fff', color: hasActiveFilters ? PRIMARY : MUTED,
-              ...body, fontSize: '0.82rem', fontWeight: 700, cursor: hasActiveFilters ? 'pointer' : 'default', whiteSpace: 'nowrap',
+              height: 44, padding: '0 16px', borderRadius: 12, border: 'none',
+              background: PRIMARY, color: '#fff',
+              ...body, fontSize: '0.82rem', fontWeight: 700, cursor: reportPdfLoading || searchedReports.length === 0 ? 'not-allowed' : 'pointer',
+              opacity: reportPdfLoading || searchedReports.length === 0 ? 0.6 : 1, whiteSpace: 'nowrap',
             }}
           >
-            Reset filters
+            <span className="inline-flex items-center gap-2"><FileText size={15} /> {reportPdfLoading ? 'Generating PDF…' : 'Export PDF'}</span>
           </button>
-
-          <div style={{ position: 'relative' }}>
-            <button
-              type="button"
-              onClick={() => setExportOpen(o => !o)}
-              aria-haspopup="menu"
-              aria-expanded={exportOpen}
-              className="flex items-center gap-2"
-              style={{ height: 44, padding: '0 18px', borderRadius: 12, border: `1px solid ${PRIMARY}`, background: PRIMARY, color: '#fff', ...body, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
-            >
-              <Download size={15} /> Export
-            </button>
-            {exportOpen && (
-              <>
-                <div onClick={() => setExportOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
-                <div
-                  role="menu"
-                  className="flex flex-col gap-0.5"
-                  style={{ ...surfaceCard, position: 'absolute', right: 0, top: 'calc(100% + 6px)', minWidth: 180, zIndex: 31, padding: 6, boxShadow: '0 10px 24px -10px rgba(36,21,18,0.25)' }}
-                >
-                  <button type="button" role="menuitem" onClick={runExport(handleExportPdf)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left hover:bg-[#F7F4EE]" style={menuItem}>
-                    <FileText size={15} style={{ color: PRIMARY }} /> Download PDF
-                  </button>
-                  <button type="button" role="menuitem" onClick={runExport(handleExportCsv)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left hover:bg-[#F7F4EE]" style={menuItem}>
-                    <FileSpreadsheet size={15} style={{ color: PRIMARY }} /> Download CSV
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={searchedReports.length === 0}
+            className="flex items-center gap-2"
+            style={{ height: 44, padding: '0 16px', borderRadius: 12, border: `1px solid ${PRIMARY}`, background: '#fff', color: PRIMARY, ...body, fontSize: '0.82rem', fontWeight: 700, cursor: searchedReports.length === 0 ? 'not-allowed' : 'pointer', opacity: searchedReports.length === 0 ? 0.6 : 1, whiteSpace: 'nowrap' }}
+          >
+            <FileSpreadsheet size={15} /> Export CSV
+          </button>
         </div>
       </div>
 
@@ -774,7 +711,9 @@ export default function MonthlyReportsTab({
           <div className="flex flex-wrap items-start justify-between gap-3" style={{ marginBottom: 14 }}>
             <div>
               <h2 id="scholar-submissions-title" style={{ ...display, fontSize: '1.25rem', fontWeight: 600, color: INK }}>Submission Records</h2>
-              <p style={{ ...body, fontSize: '0.82rem', color: MUTED, marginTop: 2 }}>List of scholars and their submitted requirements.</p>
+              <p style={{ ...body, fontSize: '0.82rem', color: MUTED, marginTop: 2 }}>
+                {statusFilter === 'not-submitted' ? 'Scholars without a submission for the selected period.' : 'List of scholars and their submitted requirements.'}
+              </p>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -865,7 +804,7 @@ export default function MonthlyReportsTab({
                   <thead>
                     <tr>
                       <th style={{ ...th, width: 40 }}>
-                        <input type="checkbox" aria-label="Select all on this page" checked={allOnPage} onChange={toggleAll} style={{ accentColor: PRIMARY }} />
+                        <input type="checkbox" aria-label="Select all on this page" checked={allOnPage} onChange={toggleAll} disabled={pageKeys.length === 0} style={{ accentColor: PRIMARY }} />
                       </th>
                       {['#', 'Scholar Name', 'Student ID', 'Year Level', 'Requirement', 'Period', 'Submitted Date', 'Status', 'Action'].map(h => (
                         <th key={h} style={th}>{h}</th>
@@ -883,19 +822,21 @@ export default function MonthlyReportsTab({
                       return (
                         <tr key={key} style={{ background: selected.has(key) ? `${PRIMARY}08` : 'transparent' }}>
                           <td style={td}>
-                            <input type="checkbox" aria-label={`Select ${r.scholarName || 'row'}`} checked={selected.has(key)} onChange={() => toggleOne(key)} style={{ accentColor: PRIMARY }} />
+                            <input type="checkbox" aria-label={`Select ${r.scholarName || 'row'}`} checked={selected.has(key)} onChange={() => toggleOne(key)} disabled={r.isMissing} style={{ accentColor: PRIMARY }} />
                           </td>
                           <td style={{ ...td, color: MUTED }}>{start + i + 1}</td>
                           <td style={{ ...td, fontWeight: 600 }}>{r.scholarName || 'Unknown Scholar'}</td>
                           <td style={td}>{r.studentId || r.scholar_id || '—'}</td>
                           <td style={td}>{yl ? formatYearLevelLabel(yl) : '—'}</td>
-                          <td style={td}><RequirementBadge type={requirementOf(r)} /></td>
+                          <td style={td}>{r.isMissing ? '—' : <RequirementBadge type={requirementOf(r)} />}</td>
                           <td style={td}>{periodOf(r)}</td>
                           <td style={td}>{fmtDate(r.submittedAt)}</td>
                           <td style={td}><StatusBadge status={r.status} /></td>
                           <td style={td}>
                             <div className="flex items-center gap-1.5">
-                              {isLetter ? (
+                              {r.isMissing ? (
+                                <span style={{ ...body, fontSize: '0.74rem', color: MUTED }}>—</span>
+                              ) : isLetter ? (
                                 <>
                                   <button type="button" onClick={() => onSelectReport && onSelectReport(r)} style={actionBtn}>
                                     View

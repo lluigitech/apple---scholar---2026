@@ -6,7 +6,7 @@ import {
     Users, ShieldCheck, UserCog, Trash2, Edit3, Archive,
     Search, UserPlus, X, Eye, EyeOff,
     ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, Briefcase, CheckCircle2,
-    Layers, RotateCcw, RefreshCw,
+    Layers, RotateCcw,
 } from 'lucide-react';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
@@ -490,14 +490,14 @@ const AccountCreatedModal = ({ account, onClose }) => {
 const ArchiveModal = ({ user, onClose, onConfirm, loading, error }) => (
     <ModalShell
         icon={<Archive size={17} />}
-        title="Archive this scholar?"
+        title="Archive this user?"
         subtitle={user.full_name}
         onClose={onClose}
         accent={BRONZE}
     >
         <div className="px-6 pb-6 pt-2">
             <p style={{ ...sans, fontSize: '0.82rem', color: MUTED, lineHeight: 1.6 }}>
-                You&apos;re about to move <span style={{ fontWeight: 700, color: INK }}>{user.full_name}</span> to the archived scholar records. Their historical information should remain preserved and will no longer appear in the active user registry.
+                You&apos;re about to move <span style={{ fontWeight: 700, color: INK }}>{user.full_name}</span> ({user.role}) to the archived user records. Their account will no longer be able to sign in and will disappear from the active registry.
             </p>
             <ErrBox msg={error} />
             <div className="flex gap-2.5 mt-5">
@@ -505,7 +505,7 @@ const ArchiveModal = ({ user, onClose, onConfirm, loading, error }) => (
                 <button type="button" onClick={onConfirm} disabled={loading}
                     className="flex-1 py-2.5 rounded-lg flex items-center justify-center gap-2 transition-colors hover:bg-[#4A1730] disabled:opacity-60"
                     style={{ ...sans, fontSize: '0.85rem', fontWeight: 600, background: PRIMARY, color: '#fff', border: 'none', cursor: loading ? 'default' : 'pointer' }}>
-                    {loading ? <><Spinner /> Archiving…</> : <><Archive size={14} /> Archive Scholar</>}
+                    {loading ? <><Spinner /> Archiving…</> : <><Archive size={14} /> Archive User</>}
                 </button>
             </div>
         </div>
@@ -671,8 +671,8 @@ const UserManagement = () => {
         }
     };
 
-    const handleArchiveScholar = async () => {
-        if (!selectedUser || selectedUser.role !== 'scholar') return;
+    const handleArchiveUser = async () => {
+        if (!selectedUser) return;
         try {
             setArchiving(true);
             setArchiveError('');
@@ -682,11 +682,11 @@ const UserManagement = () => {
                 headers: { Authorization: ['Bearer', token].join(' ') }
             });
             closeModal();
-            setRegistryMessage('Scholar archived successfully.');
+            setRegistryMessage('User archived successfully.');
             await fetchUsers();
         } catch (err) {
-            console.error('Error archiving scholar:', err);
-            setArchiveError(err.response?.data?.error || 'Unable to archive scholar. Please try again.');
+            console.error('Error archiving user:', err);
+            setArchiveError(err.response?.data?.error || 'Unable to archive user. Please try again.');
         } finally {
             setArchiving(false);
         }
@@ -754,11 +754,6 @@ const UserManagement = () => {
                     description="Manage scholars, staff, officers, and administrators from one secure registry."
                     actions={
                         <div className="flex flex-wrap items-center gap-3 flex-shrink-0">
-                            <button onClick={fetchUsers}
-                                className="flex items-center justify-center gap-2 rounded-xl transition-colors hover:bg-[#F7F4EE] flex-shrink-0"
-                                style={{ ...sans, fontSize: '0.85rem', fontWeight: 600, color: MUTED, height: 48, padding: '0 18px', border: `1px solid ${BORDER}`, background: '#fff', cursor: 'pointer' }}>
-                                <RefreshCw size={15} /> Refresh Registry
-                            </button>
                             <button onClick={() => setModal('create')}
                                 className="flex items-center justify-center gap-2 rounded-xl transition-colors hover:bg-[#4A1730] active:scale-[0.98] flex-shrink-0"
                                 style={{ ...sans, fontSize: '0.85rem', fontWeight: 600, color: '#fff', height: 48, padding: '0 20px', border: 'none', background: PRIMARY, cursor: 'pointer' }}>
@@ -899,11 +894,10 @@ const UserManagement = () => {
                                                                     <RowAction onClick={() => { setSelectedUser(user); setModal('edit'); }} title="Edit" hoverColor={WARNING}>
                                                                         <Edit3 size={13} />
                                                                     </RowAction>
-                                                                    {user.role === 'scholar' ? (
-                                                                        <RowAction onClick={() => { setSelectedUser(user); setArchiveError(''); setRegistryMessage(''); setModal('archive'); }} title="Archive Scholar" hoverColor={BRONZE}>
-                                                                            <Archive size={13} />
-                                                                        </RowAction>
-                                                                    ) : (
+                                                                    <RowAction onClick={() => { setSelectedUser(user); setArchiveError(''); setRegistryMessage(''); setModal('archive'); }} title="Archive User" hoverColor={BRONZE}>
+                                                                        <Archive size={13} />
+                                                                    </RowAction>
+                                                                    {user.role !== 'scholar' && (
                                                                         <RowAction onClick={() => { setSelectedUser(user); setDeleteError(''); setModal('delete'); }} title="Delete" hoverColor={DANGER}>
                                                                             <Trash2 size={13} />
                                                                         </RowAction>
@@ -969,11 +963,10 @@ const UserManagement = () => {
                                                             <RowAction onClick={() => { setSelectedUser(user); setModal('edit'); }} title="Edit" hoverColor={WARNING}>
                                                                 <Edit3 size={14} />
                                                             </RowAction>
-                                                            {user.role === 'scholar' ? (
-                                                                <RowAction onClick={() => { setSelectedUser(user); setArchiveError(''); setRegistryMessage(''); setModal('archive'); }} title="Archive Scholar" hoverColor={BRONZE}>
-                                                                    <Archive size={14} />
-                                                                </RowAction>
-                                                            ) : (
+                                                            <RowAction onClick={() => { setSelectedUser(user); setArchiveError(''); setRegistryMessage(''); setModal('archive'); }} title="Archive User" hoverColor={BRONZE}>
+                                                                <Archive size={14} />
+                                                            </RowAction>
+                                                            {user.role !== 'scholar' && (
                                                                 <RowAction onClick={() => { setSelectedUser(user); setDeleteError(''); setModal('delete'); }} title="Delete" hoverColor={DANGER}>
                                                                     <Trash2 size={14} />
                                                                 </RowAction>
@@ -1039,8 +1032,8 @@ const UserManagement = () => {
             {modal === 'created' && createdAccount && (
                 <AccountCreatedModal account={createdAccount} onClose={closeModal} />
             )}
-            {modal === 'archive' && selectedUser?.role === 'scholar' && (
-                <ArchiveModal user={selectedUser} onClose={closeModal} onConfirm={handleArchiveScholar} loading={archiving} error={archiveError} />
+            {modal === 'archive' && selectedUser && (
+                <ArchiveModal user={selectedUser} onClose={closeModal} onConfirm={handleArchiveUser} loading={archiving} error={archiveError} />
             )}
             {modal === 'delete' && selectedUser && (
                 <DeleteModal user={selectedUser} onClose={closeModal} onConfirm={handleDelete} loading={deleting} error={deleteError} />

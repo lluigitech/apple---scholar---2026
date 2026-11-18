@@ -28,13 +28,13 @@ exports.getSummary = async (req, res) => {
       COUNT(*) AS total,
       COALESCE(SUM(CASE WHEN role = 'scholar' THEN 1 ELSE 0 END), 0) AS scholars
     FROM users
-    WHERE NOT (role = 'scholar' AND COALESCE(status, '') = 'archived')
+    WHERE COALESCE(status, '') <> 'archived'
   `;
 
   const recentUsersSql = `
     SELECT id, full_name, email, role, created_at
     FROM users
-    WHERE NOT (role = 'scholar' AND COALESCE(status, '') = 'archived')
+    WHERE COALESCE(status, '') <> 'archived'
     ORDER BY created_at DESC, id DESC
     LIMIT ?
   `;

@@ -15,7 +15,7 @@ const verifyToken = (req, res, next) => {
         if (err) return res.status(401).json({ message: 'Invalid or expired token' });
 
         db.query(
-            'SELECT id, role, scholar_id FROM users WHERE id = ? LIMIT 1',
+            'SELECT id, role, scholar_id, status FROM users WHERE id = ? LIMIT 1',
             [decoded.id],
             (userError, rows) => {
                 if (userError) {
@@ -23,6 +23,9 @@ const verifyToken = (req, res, next) => {
                     return res.status(500).json({ message: 'Unable to verify authenticated user' });
                 }
                 if (!rows.length) return res.status(401).json({ message: 'Authenticated user no longer exists' });
+                if (String(rows[0].status || '').toLowerCase() === 'archived') {
+                    return res.status(401).json({ message: 'This account has been archived.' });
+                }
 
                 req.user = {
                     ...decoded,

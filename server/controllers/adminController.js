@@ -6,7 +6,17 @@ const path   = require('path');
 const { sendAnnouncementNotifyEmails, sendWelcomeEmail } = require('../utils/notifyHelpers');
 const { logAuditEvent } = require('../utils/auditLogger');
 const { getAssignedYearLevels, normalizeYearLevel, yearLevelSqlExpression } = require('../utils/officerAssignments');
-const { logComplianceIncident, clampCompliance, getComplianceSettings, calculateCurrentCompliance, calculateComplianceScore, getOverdueComplianceTaskCounts, resolveGradeScale } = require('../utils/complianceLogger');
+const {
+    logComplianceIncident,
+    clampCompliance,
+    getComplianceSettings,
+    calculateCurrentCompliance,
+    calculateComplianceScore,
+    getOverdueComplianceTaskCounts,
+    getComplianceRiskThresholds,
+    getComplianceRiskTier,
+    resolveGradeScale,
+} = require('../utils/complianceLogger');
 
 exports.getPrivacyRequests = (req, res) => {
     db.query(
@@ -72,7 +82,6 @@ exports.updateAdminProfile = (req, res) => {
 };
 
 const DEFAULT_ADMIN_PREFERENCES = {
-    language: 'English (Philippines)',
     timezone: '(GMT+8) Manila, Philippines',
     dateFormat: 'MMMM DD, YYYY',
     tableDensity: 'comfortable',
@@ -80,13 +89,14 @@ const DEFAULT_ADMIN_PREFERENCES = {
     emailNotifications: true,
     inAppNotifications: true,
     autoRefresh: true,
-    sessionTimeout: '30',
+    sessionTimeout: '20',
     requireReauth: true,
     securityAlerts: true,
     logAdminActivity: true,
 };
 
 const ADMIN_PREFERENCE_KEYS = Object.keys(DEFAULT_ADMIN_PREFERENCES);
+const SESSION_TIMEOUT_OPTIONS = ['3', '5', '10', '15', '20'];
 
 exports.getAdminSettings = (req, res) => {
     db.query(
@@ -114,11 +124,17 @@ exports.getAdminSettings = (req, res) => {
                 console.error('Invalid stored administrator preferences:', parseError);
                 return res.status(500).json({ error: 'Saved administrator preferences are invalid.' });
             }
+            const savedPreferences = { ...DEFAULT_ADMIN_PREFERENCES, ...preferences };
+            delete savedPreferences.language;
+            if (!SESSION_TIMEOUT_OPTIONS.includes(String(savedPreferences.sessionTimeout))) {
+                savedPreferences.sessionTimeout = DEFAULT_ADMIN_PREFERENCES.sessionTimeout;
+            } else {
+                savedPreferences.sessionTimeout = String(savedPreferences.sessionTimeout);
+            }
             res.json({
                 displayName: rows[0].displayName,
                 email: rows[0].email,
-                ...DEFAULT_ADMIN_PREFERENCES,
-                ...preferences,
+                ...savedPreferences,
                 scheduledBackups: rows[0].scheduledBackups == null ? process.env.ENABLE_SCHEDULED_BACKUPS !== 'false' : Boolean(rows[0].scheduledBackups),
                 backupIntervalHours: String(rows[0].backupIntervalHours || process.env.BACKUP_INTERVAL_HOURS || 24),
                 backupRetentionCount: String(rows[0].backupRetentionCount || process.env.BACKUP_DAILY_RETENTION || 14),
@@ -154,11 +170,10 @@ exports.updateAdminSettings = (req, res) => {
     }
 
     const validOptions = {
-        language: ['English (Philippines)', 'English (US)', 'Filipino'],
         timezone: ['(GMT+8) Manila, Philippines', '(GMT+0) UTC', '(GMT+9) Tokyo, Japan', '(GMT-5) New York, USA'],
         dateFormat: ['MMMM DD, YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'],
         tableDensity: ['comfortable', 'compact', 'condensed'],
-        sessionTimeout: ['15', '30', '60', '120'],
+        sessionTimeout: SESSION_TIMEOUT_OPTIONS,
     };
     for (const [key, options] of Object.entries(validOptions)) {
         if (!options.includes(settings[key])) return res.status(400).json({ error: `Invalid value for ${key}.` });
@@ -364,7 +379,7 @@ exports.getAllUsers = (req, res) => {
     const sql = `
         SELECT id, scholar_id, full_name, email, role, year_level, status, created_at
         FROM users
-        WHERE NOT (role = 'scholar' AND COALESCE(status, '') = 'archived')
+        WHERE COALESCE(status, '') <> 'archived'
         ORDER BY created_at DESC
     `;
     db.query(sql, (err, data) => {
@@ -388,6 +403,94 @@ exports.getArchivedScholars = (req, res) => {
             res.json(data);
         }
     );
+};
+
+exports.getArchivedUsers = (req, res) => {
+    db.query(
+        `SELECT id, scholar_id, full_name, email, role, year_level, status, created_at,
+                archived_at, DATE_ADD(archived_at, INTERVAL 3 YEAR) AS retention_until
+         FROM users
+         WHERE status = 'archived'
+         ORDER BY archived_at DESC, created_at DESC`,
+        (err, data) => {
+            if (err) {
+                console.error('Failed to load archived users:', err);
+                return res.status(500).json({ error: 'Unable to load archived users.' });
+            }
+            res.json(data);
+        }
+    );
+};
+
+exports.archiveUser = async (req, res) => {
+    const userId = String(req.params.id || '');
+    if (!/^[1-9]\d*$/.test(userId) || !Number.isSafeInteger(Number(userId))) {
+        return res.status(400).json({ error: 'A valid user ID is required.' });
+    }
+
+    let connection;
+    try {
+        connection = await db.promise().getConnection();
+        await connection.beginTransaction();
+
+        const [admins] = await connection.query(
+            `SELECT id FROM users
+             WHERE role = 'admin' AND COALESCE(status, '') <> 'archived'
+             FOR UPDATE`
+        );
+        const [users] = await connection.query(
+            'SELECT id, scholar_id, full_name, role, status FROM users WHERE id = ? FOR UPDATE',
+            [userId]
+        );
+        if (!users.length) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        const user = users[0];
+        if (!['admin', 'scholar', 'staff', 'officer'].includes(user.role)) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'This account role cannot be archived.' });
+        }
+        if (String(user.status || '').toLowerCase() === 'archived') {
+            await connection.rollback();
+            return res.status(409).json({ error: 'This account is already archived.' });
+        }
+        if (user.role === 'admin' && Number(user.id) === Number(req.user?.id)) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'You cannot archive your own administrator account.' });
+        }
+        if (user.role === 'admin' && admins.length <= 1) {
+            await connection.rollback();
+            return res.status(409).json({ error: 'The last administrator account cannot be archived.' });
+        }
+
+        await connection.query(
+            "UPDATE users SET status = 'archived', archived_at = NOW() WHERE id = ?",
+            [userId]
+        );
+        await connection.commit();
+        await logAuditEvent({
+            req,
+            action: 'archive',
+            module: 'User Management',
+            details: `Archived ${user.role} account ${user.full_name} (${user.scholar_id || userId})`,
+            result: 'success',
+        });
+        res.json({ message: 'User archived successfully.', userId: Number(userId) });
+    } catch (error) {
+        if (connection) {
+            try {
+                await connection.rollback();
+            } catch (rollbackError) {
+                console.error('Failed to roll back user archive:', rollbackError);
+            }
+        }
+        console.error('Failed to archive user:', error);
+        res.status(500).json({ error: 'Unable to archive user.' });
+    } finally {
+        connection?.release();
+    }
 };
 
 exports.archiveScholar = (req, res) => {
@@ -503,6 +606,36 @@ exports.restoreScholar = (req, res) => {
                 result: 'success',
             });
             res.json({ message: 'Scholar restored successfully.', userId: Number(userId) });
+        }
+    );
+};
+
+exports.restoreUser = (req, res) => {
+    const userId = String(req.params.id || '');
+    if (!/^[1-9]\d*$/.test(userId) || !Number.isSafeInteger(Number(userId))) {
+        return res.status(400).json({ error: 'A valid user ID is required.' });
+    }
+
+    db.query(
+        `UPDATE users
+         SET status = 'active', archived_at = NULL
+         WHERE id = ? AND status = 'archived'`,
+        [userId],
+        async (err, result) => {
+            if (err) {
+                console.error('Failed to restore user:', err);
+                return res.status(500).json({ error: 'Unable to restore user.' });
+            }
+            if (!result.affectedRows) return res.status(404).json({ error: 'Archived user not found.' });
+
+            await logAuditEvent({
+                req,
+                action: 'restore',
+                module: 'User Management',
+                details: `Restored user account ${userId}`,
+                result: 'success',
+            });
+            res.json({ message: 'User restored successfully.', userId: Number(userId) });
         }
     );
 };
@@ -717,10 +850,18 @@ exports.getScholarAttendance = (req, res) => {
         if (!scholarId) return res.json([]);
 
         const sql = `
-            SELECT da.id, da.status, da.method, da.marked_at,
-                d.id as duty_id, d.title, d.location, d.duty_date, d.time_start, d.time_end
+            SELECT da.id, da.status, da.method, da.marked_at, da.check_out_at, da.is_makeup,
+                d.id as duty_id, d.title, d.location, d.duty_date, d.time_start, d.time_end,
+                COALESCE((
+                    SELECT GROUP_CONCAT(DISTINCT g.group_name ORDER BY g.group_name SEPARATOR ', ')
+                    FROM scholar_group_members gm
+                    JOIN scholar_groups g ON g.id = gm.group_id
+                    WHERE gm.scholar_id = da.scholar_id
+                ), 'Unassigned') AS group_name,
+                marker.full_name AS marked_by_name, marker.role AS marked_by_role
             FROM duty_attendance da
             INNER JOIN duties d ON da.duty_id = d.id
+            LEFT JOIN users marker ON marker.id = da.marked_by_id
             WHERE da.scholar_id = ? ORDER BY d.duty_date DESC
         `;
         db.query(sql, [scholarId], (err, data) => {
@@ -735,7 +876,7 @@ exports.getScholarAttendance = (req, res) => {
 
 // ─── SCHOLAR GRADES (admin view — reads same `grades` table scholars submit to) ──
 exports.getScholarGrades = (req, res) => {
-    db.query('SELECT scholar_id FROM users WHERE id = ?', [req.params.id], (lookupErr, lookupData) => {
+    db.query('SELECT scholar_id, year_level FROM users WHERE id = ?', [req.params.id], (lookupErr, lookupData) => {
         if (lookupErr)          return res.status(500).json({ error: 'Error resolving scholar' });
         if (!lookupData.length) return res.status(404).json({ error: 'Scholar not found' });
 
@@ -743,7 +884,7 @@ exports.getScholarGrades = (req, res) => {
         if (!scholarId) return res.json([]);
 
         const sql = `
-            SELECT id, semester, academic_year, subject_name, units, grade,
+            SELECT id, semester, academic_year, subject_name, units, grade, grade_scale,
                 proof_path, verification_status, officer_comment, created_at
             FROM grades
             WHERE scholar_id = ?
@@ -759,15 +900,24 @@ exports.getScholarGrades = (req, res) => {
                     semMap[key] = {
                         semester: row.semester,
                         academic_year: row.academic_year,
+                        grade_scale: row.grade_scale || resolveGradeScale(lookupData[0].year_level),
                         subjects: [],
                         total_units: 0,
                         weighted_sum: 0,
+                        review_statuses: [],
                         proof_path: row.proof_path,
-                        verification_status: row.verification_status,
                         officer_comment: row.officer_comment,
                         submitted_at: row.created_at,
                     };
                 }
+                const submittedAt = row.created_at ? new Date(row.created_at).getTime() : NaN;
+                const latestSubmittedAt = semMap[key].submitted_at
+                    ? new Date(semMap[key].submitted_at).getTime()
+                    : NaN;
+                if (Number.isFinite(submittedAt) && (!Number.isFinite(latestSubmittedAt) || submittedAt > latestSubmittedAt)) {
+                    semMap[key].submitted_at = row.created_at;
+                }
+                semMap[key].review_statuses.push(String(row.verification_status || 'pending').toLowerCase());
                 semMap[key].subjects.push({
                     id: row.id,
                     subject_name: row.subject_name,
@@ -780,13 +930,28 @@ exports.getScholarGrades = (req, res) => {
                 semMap[key].weighted_sum += units * grade;
             });
 
-            const semesters = Object.values(semMap).map(sem => ({
-                ...sem,
-                gwa: sem.total_units > 0 ? parseFloat((sem.weighted_sum / sem.total_units).toFixed(2)) : null,
-                status: sem.total_units > 0
-                    ? (sem.weighted_sum / sem.total_units) <= 3.00 ? 'passed' : 'failed'
-                    : 'pending',
-            }));
+            const semesters = Object.values(semMap).map(sem => {
+                const { review_statuses, ...semester } = sem;
+                const average = sem.total_units > 0 ? sem.weighted_sum / sem.total_units : null;
+                const verificationStatus = review_statuses.includes('rejected')
+                    ? 'rejected'
+                    : review_statuses.every(status => status === 'approved') ? 'approved' : 'pending';
+                return {
+                    ...semester,
+                    gwa: average === null ? null : parseFloat(average.toFixed(2)),
+                    verification_status: verificationStatus,
+                    academic_outcome: average === null || verificationStatus !== 'approved'
+                        ? null
+                        : (sem.grade_scale === 'college' ? average <= 3.00 : average >= 75) ? 'passed' : 'failed',
+                };
+            });
+            semesters.sort((a, b) => {
+                const aTime = a.submitted_at ? new Date(a.submitted_at).getTime() : NaN;
+                const bTime = b.submitted_at ? new Date(b.submitted_at).getTime() : NaN;
+                if (!Number.isFinite(aTime)) return Number.isFinite(bTime) ? 1 : 0;
+                if (!Number.isFinite(bTime)) return -1;
+                return bTime - aTime;
+            });
 
             res.json(semesters);
         });
@@ -859,14 +1024,13 @@ exports.deleteScholarGrade = (req, res) => {
 
 // ─── COMPLIANCE MANAGER SETTINGS ─────────────────────────────────
 exports.getComplianceSettings = (req, res) => {
-    const sql = `SELECT id, min_compliance, allowed_missed, required_hours,
-        missed_submission_deduction, service_hour_shortfall_deduction,
+    const sql = `SELECT id, min_compliance, allowed_missed,
+        missed_submission_deduction, late_duty_deduction,
         absent_duty_deduction, late_submission_deduction,
         negative_letter_deduction, quality_drop_deduction,
-        extra_service_bonus, good_maintenance_bonus,
-        missed_submission_grace_count, late_submission_grace_count,
-        recovery_enabled, early_submission_bonus,
-        service_hours_completion_bonus, consecutive_early_bonus,
+        good_maintenance_bonus,
+        missed_submission_grace_count,
+        recovery_enabled, early_submission_bonus, consecutive_early_bonus,
         perfect_attendance_bonus, monthly_recovery_cap,
         updated_by, updated_at
         FROM compliance_settings WHERE id = 1 LIMIT 1`;
@@ -877,48 +1041,42 @@ exports.getComplianceSettings = (req, res) => {
         }
         if (!results || !results.length) {
             return res.json({
-                min_compliance: '70.00',
-                allowed_missed: 2,
-                required_hours: 30,
-                missed_submission_deduction: 2,
-                service_hour_shortfall_deduction: 1,
-                absent_duty_deduction: 2,
-                late_submission_deduction: 1,
+                min_compliance: '50.00',
+                allowed_missed: 0,
+                missed_submission_deduction: 5,
+                late_duty_deduction: 2,
+                absent_duty_deduction: 10,
+                late_submission_deduction: 10,
                 negative_letter_deduction: 1,
-                quality_drop_deduction: 0.5,
-                extra_service_bonus: 2,
+                quality_drop_deduction: 5,
                 good_maintenance_bonus: 5,
-                missed_submission_grace_count: 2,
-                late_submission_grace_count: 2,
+                missed_submission_grace_count: 0,
                 recovery_enabled: 1,
                 early_submission_bonus: 0.50,
-                service_hours_completion_bonus: 2.00,
                 consecutive_early_bonus: 1.00,
                 perfect_attendance_bonus: 0.50,
                 monthly_recovery_cap: 2.00,
             });
         }
-        res.json(results[0]);
+        res.json({
+            ...results[0],
+            allowed_missed: 0,
+            missed_submission_grace_count: 0,
+        });
     });
 };
 
 exports.upsertComplianceSettings = (req, res) => {
     const {
         min_compliance,
-        allowed_missed,
-        required_hours,
         missed_submission_deduction,
-        service_hour_shortfall_deduction,
+        late_duty_deduction,
         absent_duty_deduction,
         late_submission_deduction,
         quality_drop_deduction,
-        extra_service_bonus,
         good_maintenance_bonus,
-        missed_submission_grace_count,
-        late_submission_grace_count,
         recovery_enabled,
         early_submission_bonus,
-        service_hours_completion_bonus,
         consecutive_early_bonus,
         perfect_attendance_bonus,
         monthly_recovery_cap,
@@ -926,18 +1084,13 @@ exports.upsertComplianceSettings = (req, res) => {
 
     const requiredFields = [
         min_compliance,
-        allowed_missed,
-        required_hours,
         missed_submission_deduction,
-        service_hour_shortfall_deduction,
+        late_duty_deduction,
         absent_duty_deduction,
         late_submission_deduction,
         quality_drop_deduction,
-        missed_submission_grace_count,
-        late_submission_grace_count,
         recovery_enabled,
         early_submission_bonus,
-        service_hours_completion_bonus,
         consecutive_early_bonus,
         perfect_attendance_bonus,
         monthly_recovery_cap,
@@ -945,7 +1098,7 @@ exports.upsertComplianceSettings = (req, res) => {
 
     if (requiredFields.some((value) => value === undefined)) {
         return res.status(400).json({
-            message: 'min_compliance, allowed_missed, required_hours, and all penalty, grace, and recovery fields are required.',
+            message: 'Minimum compliance, penalty, and recovery fields are required.',
         });
     }
 
@@ -954,35 +1107,14 @@ exports.upsertComplianceSettings = (req, res) => {
         return res.status(400).json({ message: 'min_compliance must be a number between 0 and 100.' });
     }
 
-    const parsedMissed = parseInt(allowed_missed, 10);
-    if (Number.isNaN(parsedMissed) || parsedMissed < 0 || parsedMissed > 100) {
-        return res.status(400).json({ message: 'allowed_missed must be an integer between 0 and 100.' });
-    }
-
-    const parsedHours = parseInt(required_hours, 10);
-    if (Number.isNaN(parsedHours) || parsedHours < 0 || parsedHours > 10000) {
-        return res.status(400).json({ message: 'required_hours must be an integer between 0 and 10000.' });
-    }
-
     const parsedPenalties = {
-        missed_submission_deduction:      parseInt(missed_submission_deduction ?? 2, 10),
-        service_hour_shortfall_deduction:  parseInt(service_hour_shortfall_deduction ?? 1, 10),
+        missed_submission_deduction:      parseInt(missed_submission_deduction ?? 5, 10),
+        late_duty_deduction:              parseInt(late_duty_deduction ?? 2, 10),
         absent_duty_deduction:            parseInt(absent_duty_deduction ?? 2, 10),
-        late_submission_deduction:        parseInt(late_submission_deduction ?? 1, 10),
+        late_submission_deduction:        parseInt(late_submission_deduction ?? 10, 10),
         quality_drop_deduction:           parseFloat(quality_drop_deduction ?? 0.5),
-        extra_service_bonus:              parseInt(extra_service_bonus ?? 2, 10),
         good_maintenance_bonus:           parseInt(good_maintenance_bonus ?? 5, 10),
-        missed_submission_grace_count:     parseInt(missed_submission_grace_count ?? 2, 10),
-        late_submission_grace_count:       parseInt(late_submission_grace_count ?? 2, 10),
-    };
-
-    const parsedRecovery = {
-        recovery_enabled:                  recovery_enabled === true || recovery_enabled === 1 || recovery_enabled === '1' || recovery_enabled === 'true',
-        early_submission_bonus:            parseFloat(early_submission_bonus),
-        service_hours_completion_bonus:    parseFloat(service_hours_completion_bonus),
-        consecutive_early_bonus:           parseFloat(consecutive_early_bonus),
-        perfect_attendance_bonus:          parseFloat(perfect_attendance_bonus),
-        monthly_recovery_cap:              parseFloat(monthly_recovery_cap),
+        missed_submission_grace_count:     0,
     };
 
     const invalidPenalty = Object.entries(parsedPenalties).find(([, value]) => Number.isNaN(value) || value < 0 || value > 1000);
@@ -990,48 +1122,47 @@ exports.upsertComplianceSettings = (req, res) => {
         return res.status(400).json({ message: `${invalidPenalty[0]} must be a non-negative integer.` });
     }
 
-    if (parsedPenalties.missed_submission_grace_count > 100 || parsedPenalties.late_submission_grace_count > 100) {
-        return res.status(400).json({ message: 'Grace period counts must be between 0 and 100.' });
-    }
-
-    const invalidRecovery = Object.entries(parsedRecovery).find(([, value]) => {
-        if (typeof value === 'boolean') return false;
-        return Number.isNaN(value) || value < 0 || value > 100;
-    });
+    const parsedRecovery = {
+        recovery_enabled: recovery_enabled === true || recovery_enabled === 1 || recovery_enabled === '1' || recovery_enabled === 'true' ? 1 : 0,
+        early_submission_bonus: parseFloat(early_submission_bonus),
+        consecutive_early_bonus: parseFloat(consecutive_early_bonus),
+        perfect_attendance_bonus: parseFloat(perfect_attendance_bonus),
+        monthly_recovery_cap: parseFloat(monthly_recovery_cap),
+    };
+    const invalidRecovery = Object.entries(parsedRecovery)
+        .filter(([key]) => key !== 'recovery_enabled')
+        .find(([, value]) => Number.isNaN(value) || value < 0 || value > 99.99);
     if (invalidRecovery) {
-        return res.status(400).json({ message: `${invalidRecovery[0]} must be a non-negative number.` });
+        return res.status(400).json({ message: `${invalidRecovery[0]} must be between 0 and 99.99 points.` });
     }
 
     const sql = `
         INSERT INTO compliance_settings (
-            id, min_compliance, allowed_missed, required_hours,
-            missed_submission_deduction, service_hour_shortfall_deduction,
+            id, policy_version, min_compliance, allowed_missed,
+            missed_submission_deduction, late_duty_deduction,
             absent_duty_deduction, late_submission_deduction,
             negative_letter_deduction, quality_drop_deduction,
-            extra_service_bonus, good_maintenance_bonus,
+            good_maintenance_bonus,
             missed_submission_grace_count, late_submission_grace_count,
-            recovery_enabled, early_submission_bonus,
-            service_hours_completion_bonus, consecutive_early_bonus,
+            recovery_enabled, early_submission_bonus, consecutive_early_bonus,
             perfect_attendance_bonus, monthly_recovery_cap,
             updated_by
-        ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (1, 8, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
+            policy_version = 8,
             min_compliance = VALUES(min_compliance),
             allowed_missed = VALUES(allowed_missed),
-            required_hours = VALUES(required_hours),
             missed_submission_deduction = VALUES(missed_submission_deduction),
-            service_hour_shortfall_deduction = VALUES(service_hour_shortfall_deduction),
+            late_duty_deduction = VALUES(late_duty_deduction),
             absent_duty_deduction = VALUES(absent_duty_deduction),
             late_submission_deduction = VALUES(late_submission_deduction),
             negative_letter_deduction = 0,
             quality_drop_deduction = VALUES(quality_drop_deduction),
-            extra_service_bonus = VALUES(extra_service_bonus),
             good_maintenance_bonus = VALUES(good_maintenance_bonus),
             missed_submission_grace_count = VALUES(missed_submission_grace_count),
-            late_submission_grace_count = VALUES(late_submission_grace_count),
+            late_submission_grace_count = 0,
             recovery_enabled = VALUES(recovery_enabled),
             early_submission_bonus = VALUES(early_submission_bonus),
-            service_hours_completion_bonus = VALUES(service_hours_completion_bonus),
             consecutive_early_bonus = VALUES(consecutive_early_bonus),
             perfect_attendance_bonus = VALUES(perfect_attendance_bonus),
             monthly_recovery_cap = VALUES(monthly_recovery_cap),
@@ -1039,39 +1170,71 @@ exports.upsertComplianceSettings = (req, res) => {
             updated_at = NOW()
     `;
     const updatedBy = req.user && Number.isFinite(parseInt(req.user.id, 10)) ? parseInt(req.user.id, 10) : null;
-    db.query(sql, [
+    const values = [
         String(parsedCompliance.toFixed(2)),
-        parsedMissed,
-        parsedHours,
+        0,
         parsedPenalties.missed_submission_deduction,
-        parsedPenalties.service_hour_shortfall_deduction,
+        parsedPenalties.late_duty_deduction,
         parsedPenalties.absent_duty_deduction,
         parsedPenalties.late_submission_deduction,
         0,
         parsedPenalties.quality_drop_deduction,
-        parsedPenalties.extra_service_bonus,
         parsedPenalties.good_maintenance_bonus,
-        parsedPenalties.missed_submission_grace_count,
-        parsedPenalties.late_submission_grace_count,
-        parsedRecovery.recovery_enabled ? 1 : 0,
+        0,
+        parsedRecovery.recovery_enabled,
         parsedRecovery.early_submission_bonus,
-        parsedRecovery.service_hours_completion_bonus,
         parsedRecovery.consecutive_early_bonus,
         parsedRecovery.perfect_attendance_bonus,
         parsedRecovery.monthly_recovery_cap,
         updatedBy,
-    ], (err) => {
-        if (err) {
-            console.error('Error saving compliance settings:', err);
-            return res.status(500).json({ message: 'Failed to save compliance settings.' });
+    ];
+
+    const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
+    if (!currentPassword) {
+        return res.status(401).json({ message: 'Enter your current password to save compliance settings.' });
+    }
+    if (!updatedBy) {
+        return res.status(401).json({ message: 'Administrator authentication is required.' });
+    }
+
+    db.query(
+        `SELECT password FROM users WHERE id = ? AND role = 'admin' LIMIT 1`,
+        [updatedBy],
+        async (passwordLookupError, users) => {
+            if (passwordLookupError) {
+                console.error('Failed to verify administrator password for compliance settings:', passwordLookupError);
+                return res.status(500).json({ message: 'Failed to verify administrator password.' });
+            }
+            if (!users.length) return res.status(404).json({ message: 'Administrator profile not found.' });
+
+            let passwordMatches;
+            try {
+                const storedPassword = users[0].password;
+                passwordMatches = typeof storedPassword === 'string' && storedPassword.startsWith('$2')
+                    ? await bcrypt.compare(currentPassword, storedPassword)
+                    : currentPassword === String(storedPassword || '');
+            } catch (passwordError) {
+                console.error('Failed to compare administrator password for compliance settings:', passwordError);
+                return res.status(500).json({ message: 'Failed to verify administrator password.' });
+            }
+            if (!passwordMatches) {
+                return res.status(401).json({ message: 'Incorrect password. Enter your current password to save compliance settings.' });
+            }
+
+            db.query(sql, values, (err) => {
+                if (err) {
+                    console.error('Error saving compliance settings:', err);
+                    return res.status(500).json({ message: 'Failed to save compliance settings.' });
+                }
+                res.json({ message: 'Compliance settings saved.' });
+            });
         }
-        res.json({ message: 'Compliance settings saved.' });
-    });
+    );
 };
 
 // ─── COMPLIANCE SUMMARY (aggregated stats for one scholar profile) ─────────
 exports.getScholarComplianceSummary = (req, res) => {
-    db.query('SELECT scholar_id FROM users WHERE id = ?', [req.params.id], (lookupErr, lookupData) => {
+    db.query('SELECT scholar_id, year_level FROM users WHERE id = ?', [req.params.id], (lookupErr, lookupData) => {
         if (lookupErr)          return res.status(500).json({ error: 'Error resolving scholar' });
         if (!lookupData.length) return res.status(404).json({ error: 'Scholar not found' });
 
@@ -1080,7 +1243,7 @@ exports.getScholarComplianceSummary = (req, res) => {
 
         // Report submissions
         db.query(
-            'SELECT id, status, submitted_at FROM submissions WHERE scholar_id = ? ORDER BY submitted_at DESC',
+            'SELECT id, submission_type, status, submitted_at FROM submissions WHERE scholar_id = ? ORDER BY submitted_at DESC',
             [scholarId],
             (subErr, subData) => {
                 if (subErr) return res.status(500).json({ error: 'Error fetching submissions' });
@@ -1098,25 +1261,26 @@ exports.getScholarComplianceSummary = (req, res) => {
                     (svcErr, svcData) => {
                         if (svcErr) return res.status(500).json({ error: 'Error fetching service data' });
 
-                        const totalHours   = svcData.reduce((sum, s) => sum + (parseFloat(s.hours) || 0), 0);
-                        const requiredHours = 32;
-                        const svcProgress  = Math.min(100, Math.round((totalHours / requiredHours) * 100));
-
                         // Attendance
                         db.query(
-                            'SELECT status FROM duty_attendance WHERE scholar_id = ?',
+                            `SELECT status, is_makeup, check_out_at
+                             FROM duty_attendance
+                             WHERE scholar_id = ?
+                               AND (COALESCE(is_makeup, 0) = 0 OR check_out_at IS NOT NULL)`,
                             [scholarId],
                             (attErr, attData) => {
                                 if (attErr) return res.status(500).json({ error: 'Error fetching attendance' });
 
                                 const present = attData.filter(a => a.status === 'present').length;
-                                const absent  = attData.filter(a => a.status === 'absent' || a.status === 'excused').length;
+                                const absent  = attData.filter(a => a.status === 'absent').length;
+                                const late    = attData.filter(a => a.status === 'late').length;
+                                const excused = attData.filter(a => a.status === 'excused').length;
                                 const total   = attData.length;
-                                const attRate = total > 0 ? Math.round((present / total) * 100) : 0;
+                                const attRate = total > 0 ? Math.round((present / total) * 100) : null;
 
                                 // Academic (grades)
                                 db.query(
-                                    'SELECT semester, academic_year, units, grade FROM grades WHERE scholar_id = ?',
+                                    'SELECT semester, academic_year, units, grade, grade_scale, verification_status FROM grades WHERE scholar_id = ?',
                                     [scholarId],
                                     (gErr, gData) => {
                                         if (gErr) return res.status(500).json({ error: 'Error fetching grades' });
@@ -1124,25 +1288,65 @@ exports.getScholarComplianceSummary = (req, res) => {
                                         const semMap = {};
                                         gData.forEach(row => {
                                             const key = `${row.semester}|${row.academic_year}`;
-                                            if (!semMap[key]) semMap[key] = { totalUnits: 0, weightedSum: 0 };
-                                            semMap[key].totalUnits  += row.units;
-                                            semMap[key].weightedSum += row.units * parseFloat(row.grade);
+                                            if (!semMap[key]) semMap[key] = {
+                                                totalUnits: 0,
+                                                weightedSum: 0,
+                                                gradeScale: row.grade_scale || resolveGradeScale(lookupData[0].year_level),
+                                                reviewStatuses: [],
+                                            };
+                                            semMap[key].reviewStatuses.push(String(row.verification_status || 'pending').toLowerCase());
+                                            const units = Number(row.units) || 0;
+                                            const grade = Number(row.grade);
+                                            if (!Number.isFinite(grade)) return;
+                                            semMap[key].totalUnits += units;
+                                            semMap[key].weightedSum += units * grade;
                                         });
-                                        const semStats = Object.values(semMap).map(s => s.weightedSum / s.totalUnits);
-                                        const passedSems = semStats.filter(g => g <= 3.00).length;
-                                        const totalSems  = semStats.length;
+                                        const semStats = Object.values(semMap).map(s => ({
+                                            grade: s.totalUnits > 0 ? s.weightedSum / s.totalUnits : null,
+                                            gradeScale: s.gradeScale,
+                                            verificationStatus: s.reviewStatuses.includes('rejected')
+                                                ? 'rejected'
+                                                : s.reviewStatuses.every(status => status === 'approved') ? 'approved' : 'pending',
+                                        })).filter(s => s.grade !== null);
+                                        const passedSems = semStats.filter(s =>
+                                            s.verificationStatus === 'approved'
+                                            && (s.gradeScale === 'college' ? s.grade <= 3.00 : s.grade >= 75)
+                                        ).length;
+                                        const totalSems = semStats.length;
 
-                                        res.json({
-                                            report_submissions: {
-                                                approved: approvedSubs, pending: pendingSubs, rejected: rejectedSubs,
-                                                total: subData.length, items: subData,
-                                            },
-                                            community_service: {
-                                                total_hours: totalHours, required_hours: requiredHours,
-                                                progress: svcProgress, items: svcData,
-                                            },
-                                            attendance: { present, absent, total, rate: attRate },
-                                            academic: { passed_sems: passedSems, total_sems: totalSems },
+                                        calculateCurrentCompliance(scholarId, (scoreErr, _scoreValue, _minimum, score) => {
+                                            if (scoreErr) return res.status(500).json({ error: 'Error calculating scholar compliance' });
+                                            const officialServiceHours = Number(score?.stats?.total_service_hours || 0);
+                                            const overallCompliance = score?.overallCompliance ?? null;
+                                            const riskThresholds = getComplianceRiskThresholds(score?.minComplianceNum);
+                                            const riskLevel = overallCompliance === null
+                                                ? null
+                                                : getComplianceRiskTier(overallCompliance, score?.minComplianceNum);
+
+                                            res.json({
+                                                overall_compliance: overallCompliance,
+                                                risk_score: score?.riskScore ?? null,
+                                                risk_level: riskLevel,
+                                                risk_thresholds: {
+                                                    low_risk_min_compliance: riskThresholds.lowRiskMinCompliance,
+                                                },
+                                                compliance_points: score ? {
+                                                    deductions: score.deductions || {},
+                                                    bonuses: score.bonuses || {},
+                                                    total_deduction: score.totalDeduction ?? null,
+                                                    total_bonus_points: score.totalBonusPoints ?? 0,
+                                                    minimum_compliance: score.minComplianceNum ?? null,
+                                                } : null,
+                                                report_submissions: {
+                                                    approved: approvedSubs, pending: pendingSubs, rejected: rejectedSubs,
+                                                    total: subData.length, items: subData,
+                                                },
+                                                community_service: {
+                                                    total_hours: officialServiceHours, items: svcData,
+                                                },
+                                                attendance: { present, absent, late, excused, total, rate: attRate },
+                                                academic: { passed_sems: passedSems, total_sems: totalSems },
+                                            });
                                         });
                                     }
                                 );
@@ -1274,7 +1478,7 @@ exports.reviewCompliance = (req, res) => {
 // Uses the same compliance-credit formula as the flagged scholar and scholar profile views.
 exports.getComplianceSummary = (req, res) => {
     const scholarSql = `
-        SELECT id, scholar_id, full_name, email, year_level, status
+        SELECT id, scholar_id, full_name, email, year_level, status, created_at
         FROM users
         WHERE role = 'scholar' AND status = 'active'
     `;
@@ -1295,9 +1499,12 @@ exports.getComplianceSummary = (req, res) => {
                 AVG(quality_score) AS avg_quality,
                 MAX(submitted_at) AS last_submission,
                 SUM(CASE WHEN service_hours IS NOT NULL THEN service_hours ELSE 0 END) AS total_service_hours,
-                SUM(CASE WHEN sentiment_label LIKE '%Negative%' THEN 1 ELSE 0 END) AS negative_letters,
                 SUM(CASE WHEN submission_type = 'letter' AND submitted_at <= DATE_SUB(LAST_DAY(submitted_at), INTERVAL 7 DAY) THEN 1 ELSE 0 END) AS early_submissions,
-                GROUP_CONCAT(DISTINCT DATE_FORMAT(submitted_at, '%Y-%m') ORDER BY DATE_FORMAT(submitted_at, '%Y-%m') SEPARATOR ',') AS early_submission_months
+                GROUP_CONCAT(DISTINCT CASE
+                    WHEN submission_type = 'letter' AND submitted_at <= DATE_SUB(LAST_DAY(submitted_at), INTERVAL 7 DAY)
+                    THEN DATE_FORMAT(submitted_at, '%Y-%m')
+                END ORDER BY DATE_FORMAT(submitted_at, '%Y-%m') SEPARATOR ',') AS early_submission_months,
+                SUM(CASE WHEN sentiment_label LIKE '%Negative%' THEN 1 ELSE 0 END) AS negative_letters
             FROM submissions
             WHERE scholar_id IN (${placeholders})
             GROUP BY scholar_id
@@ -1307,12 +1514,16 @@ exports.getComplianceSummary = (req, res) => {
             SELECT
                 scholar_id,
                 COUNT(*) AS total_duties,
-                SUM(CASE WHEN status = 'present' THEN 1 ELSE 0 END) AS present,
-                SUM(CASE WHEN status = 'absent' THEN 1 ELSE 0 END) AS absent
-            FROM duty_attendance
-            WHERE scholar_id IN (${placeholders})
-              AND (COALESCE(is_makeup, 0) = 0 OR check_out_at IS NOT NULL)
-            GROUP BY scholar_id
+                SUM(CASE WHEN da.status = 'present' THEN 1 ELSE 0 END) AS present,
+                SUM(CASE WHEN da.status = 'late' THEN 1 ELSE 0 END) AS late,
+                SUM(CASE WHEN da.status = 'absent' THEN 1 ELSE 0 END) AS absent,
+                GROUP_CONCAT(DISTINCT DATE_FORMAT(COALESCE(d.duty_date, da.marked_at), '%Y-%m') ORDER BY DATE_FORMAT(COALESCE(d.duty_date, da.marked_at), '%Y-%m') SEPARATOR ',') AS duty_months,
+                GROUP_CONCAT(DISTINCT CASE WHEN COALESCE(da.status, '') <> 'present' THEN DATE_FORMAT(COALESCE(d.duty_date, da.marked_at), '%Y-%m') END ORDER BY DATE_FORMAT(COALESCE(d.duty_date, da.marked_at), '%Y-%m') SEPARATOR ',') AS imperfect_duty_months
+            FROM duty_attendance da
+            LEFT JOIN duties d ON d.id = da.duty_id
+            WHERE da.scholar_id IN (${placeholders})
+              AND (COALESCE(da.is_makeup, 0) = 0 OR da.check_out_at IS NOT NULL)
+            GROUP BY da.scholar_id
         `;
 
         getComplianceSettings((settingsErr, settings) => {
@@ -1341,10 +1552,11 @@ exports.getComplianceSummary = (req, res) => {
                                 att,
                                 settings,
                                 overdueTaskCount: overdueTasksByScholar[scholar.scholar_id] || 0,
+                                accountCreatedAt: scholar.created_at,
                                 today,
                             });
                             const overallCompliance = Number(score?.overallCompliance ?? 0);
-                            const riskStatus = overallCompliance >= 70 ? 'low' : overallCompliance >= 50 ? 'medium' : 'high';
+                            const riskStatus = getComplianceRiskTier(overallCompliance, score?.minComplianceNum);
 
                             return {
                                 id: scholar.id,

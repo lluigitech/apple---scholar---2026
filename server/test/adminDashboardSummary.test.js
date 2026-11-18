@@ -158,7 +158,7 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
     { id: 99, action: 'submission_reviewed', module: 'Submissions', result: 'success', actor_name: 'Admin' },
   ]);
   const userSummaryQuery = captured.find((query) => query.sql.includes('COUNT(*) AS total,\n      COALESCE(SUM(CASE WHEN role'));
-  assert.match(userSummaryQuery.sql, /role = 'scholar' AND COALESCE\(status, ''\) = 'archived'/);
+  assert.match(userSummaryQuery.sql, /WHERE COALESCE\(status, ''\) <> 'archived'/);
   const recentUsersQuery = captured.find((query) => query.sql.includes('SELECT id, full_name, email, role, created_at'));
   assert.deepEqual(recentUsersQuery.values, [5]);
   const activityQuery = captured.find((query) => query.sql.includes('FROM audit_logs'));

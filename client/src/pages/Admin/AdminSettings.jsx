@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
-  Bell, CalendarCheck, Check, ChevronRight, ClipboardCheck, Database, Eye, FileText, Globe, GraduationCap, Info, Lock, Mail, MessageSquare, Monitor, RefreshCw,
+  Bell, Check, Database, FileText, Lock, Mail, MessageSquare, Monitor, RefreshCw,
   RotateCcw, Rows3, Rows4, Save, Send, Settings, ShieldCheck, SlidersHorizontal, StretchHorizontal, User, UserCog, Clock, Calendar, X, KeyRound,
 } from 'lucide-react';
 import ComplianceManager from './SettingsComponent/ComplianceManager';
@@ -18,7 +18,6 @@ const API = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
 const DEFAULT_SETTINGS = {
   displayName: 'System Administrator',
   email: 'admin@applescholar.org',
-  language: 'English (Philippines)',
   timezone: '(GMT+8) Manila, Philippines',
   dateFormat: 'MMMM DD, YYYY',
   tableDensity: 'comfortable',
@@ -32,7 +31,7 @@ const DEFAULT_SETTINGS = {
   backupTime: '23:59',
   backupTimezone: 'Asia/Manila',
   backupFullRetention: '4',
-  sessionTimeout: '30',
+  sessionTimeout: '20',
   requireReauth: true,
   securityAlerts: true,
   logAdminActivity: true,
@@ -45,7 +44,7 @@ const display = { fontFamily: "'Playfair Display', Georgia, serif" };
 const TABS = [
   ['general', 'General', Settings],
   ['notifications', 'Notifications', Bell],
-  ['compliance', 'Compliance', ShieldCheck],
+  ['compliance', 'Risk & Flagging', ShieldCheck],
   ['backup', 'Backup & Recovery', Database],
   ['security', 'Security Audit', FileText],
 ];
@@ -54,26 +53,9 @@ const DENSITIES = [
   ['compact', 'Compact', 'Tighter spacing', Rows4],
   ['condensed', 'Condensed', 'Minimal spacing', StretchHorizontal],
 ];
-const LANGUAGES = ['English (Philippines)', 'English (US)', 'Filipino'];
 const TIMEZONES = ['(GMT+8) Manila, Philippines', '(GMT+0) UTC', '(GMT+9) Tokyo, Japan', '(GMT-5) New York, USA'];
 const DATE_FORMATS = [['MMMM DD, YYYY', 'October 28, 2026 (MMMM DD, YYYY)'], ['DD/MM/YYYY', '28/10/2026 (DD/MM/YYYY)'], ['YYYY-MM-DD', '2026-10-28 (YYYY-MM-DD)']];
-const TIMEOUTS = [['15', '15 minutes'], ['30', '30 minutes'], ['60', '1 hour'], ['120', '2 hours']];
-
-// Privacy & Data Protection flags are loaded and saved through the admin privacy settings API (GET/PUT /admin/privacy).
-const PRIVACY_ITEMS = [
-  { key: 'roleBasedAccess', icon: UserCog, title: 'Role-Based Access Control', description: "Restrict scholar information according to the user's assigned role." },
-  { key: 'documentProtection', icon: FileText, title: 'Scholar Document Protection', description: 'Limit access to uploaded scholar documents to authorized users.' },
-  { key: 'accessLogging', icon: Eye, title: 'Sensitive Data Access Logging', description: 'Record access to protected scholar information for auditing.' },
-  { key: 'privacyMonitoring', icon: Bell, title: 'Privacy Monitoring', description: 'Record denied access attempts for review in Security Audit Logs.' },
-];
-
-// Informational only — describes the role separation already enforced by the backend. Not editable.
-const ACCESS_MODEL = [
-  { role: 'ADMIN', icon: ShieldCheck, tint: c.primary, text: 'Full existing administrator access.', excludes: null },
-  { role: 'OFFICER', icon: ClipboardCheck, tint: '#A9784E', text: 'Letter checking, review, validation, approval, and related letter workflow only.', excludes: 'Attendance management' },
-  { role: 'STAFF', icon: CalendarCheck, tint: c.success, text: 'Attendance viewing, recording, updating, and monitoring only.', excludes: 'Letter checking, evaluation, and validation' },
-  { role: 'SCHOLAR', icon: GraduationCap, tint: '#7A6A58', text: 'Own profile, records, submissions, and authorized documents only.', excludes: "Other scholars' information" },
-];
+const TIMEOUTS = [['3', '3 minutes'], ['5', '5 minutes'], ['10', '10 minutes'], ['15', '15 minutes'], ['20', '20 minutes']];
 
 const card = { background: c.surface, border: `1px solid ${c.border}`, borderRadius: 18, padding: 20, boxShadow: '0 1px 2px rgba(74,23,48,0.05)', minWidth: 0 };
 const inputStyle = { ...body, width: '100%', minHeight: 40, padding: '9px 12px', border: `1px solid ${c.border}`, borderRadius: 11, background: '#fff', color: c.ink, fontSize: '0.82rem', outline: 'none' };
@@ -138,38 +120,6 @@ const Row = ({ icon, title, description, last, children }) => (
     </div>
     {children}
   </div>
-);
-
-// Privacy row: on small screens the status + toggle drop below the text instead of squeezing it.
-const PrivacyRow = ({ icon, title, description, last, children }) => (
-  <div
-    className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-    style={{ padding: '11px 0', borderBottom: last ? 0 : `1px solid ${c.border}` }}
-  >
-    <div className="flex items-start gap-3 min-w-0">
-      <IconBadge icon={icon} size={32} />
-      <div className="min-w-0">
-        <p style={{ ...body, fontSize: '0.82rem', fontWeight: 700, color: c.ink }}>{title}</p>
-        <p style={{ ...body, fontSize: '0.72rem', color: c.muted, marginTop: 2 }}>{description}</p>
-      </div>
-    </div>
-    <div className="flex items-center gap-3 flex-shrink-0 pl-11 sm:pl-0">{children}</div>
-  </div>
-);
-
-const PrivacyStatus = ({ enabled }) => (
-  <span
-    className="inline-flex items-center gap-1.5 whitespace-nowrap"
-    style={{
-      ...body, fontSize: '0.72rem', fontWeight: 600, borderRadius: 999, padding: '4px 10px',
-      color: enabled ? c.success : c.muted,
-      background: enabled ? '#EAF3EB' : '#F1ECE3',
-      border: `1px solid ${enabled ? '#CFE5D5' : c.border}`,
-    }}
-  >
-    {enabled && <Check size={12} aria-hidden="true" />}
-    {enabled ? 'Enabled' : 'Disabled'}
-  </span>
 );
 
 const OutlineButton = ({ onClick, children, icon: Icon, full, disabled }) => (
@@ -317,13 +267,18 @@ const AdminSettings = () => {
   const [initialState] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      const settings = {
+        ...DEFAULT_SETTINGS,
+        ...(stored && typeof stored === 'object' ? stored : {}),
+        displayName: localStorage.getItem('name') || DEFAULT_SETTINGS.displayName,
+        email: localStorage.getItem('email') || DEFAULT_SETTINGS.email,
+      };
+      delete settings.language;
+      if (!TIMEOUTS.some(([value]) => value === String(settings.sessionTimeout))) {
+        settings.sessionTimeout = DEFAULT_SETTINGS.sessionTimeout;
+      }
       return {
-        settings: {
-          ...DEFAULT_SETTINGS,
-          ...(stored && typeof stored === 'object' ? stored : {}),
-          displayName: localStorage.getItem('name') || DEFAULT_SETTINGS.displayName,
-          email: localStorage.getItem('email') || DEFAULT_SETTINGS.email,
-        },
+        settings,
         error: '',
       };
     } catch (loadError) {
@@ -343,12 +298,6 @@ const AdminSettings = () => {
   const [actionLoading, setActionLoading] = useState('');
   const [confirmKind, setConfirmKind] = useState(null); // 'save' | 'defaults' | null
   const [confirmError, setConfirmError] = useState('');
-  const [privacySettings, setPrivacySettings] = useState(null);
-  const [savedPrivacySettings, setSavedPrivacySettings] = useState(null);
-  const [privacyLoading, setPrivacyLoading] = useState(true);
-  const [privacySaving, setPrivacySaving] = useState(false);
-  const [privacyError, setPrivacyError] = useState('');
-  const [privacySaved, setPrivacySaved] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -379,41 +328,7 @@ const AdminSettings = () => {
     return () => { mounted = false; };
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setPrivacyError('Sign in with an administrator account to load privacy settings.');
-      setPrivacyLoading(false);
-      return () => { mounted = false; };
-    }
-    axios.get(`${API}/admin/privacy`, {
-      headers: { Authorization: `Bearer ${token}` },
-    }).then(({ data }) => {
-      if (!mounted) return;
-      setPrivacySettings(data);
-      setSavedPrivacySettings(data);
-      setPrivacyError('');
-    }).catch((loadError) => {
-      if (!mounted) return;
-      console.error('Failed to load privacy settings:', loadError);
-      const status = loadError.response?.status;
-      setPrivacyError(status === 401
-        ? 'Your login session has expired. Sign in again to load privacy settings.'
-        : status === 403
-          ? 'Only administrators can view privacy settings.'
-          : loadError.response?.data?.error || 'Privacy settings are unavailable. Check that the privacy migration has been run.');
-    }).finally(() => {
-      if (mounted) setPrivacyLoading(false);
-    });
-    return () => { mounted = false; };
-  }, []);
-
   const dirty = useMemo(() => JSON.stringify(settings) !== JSON.stringify(savedSettings), [settings, savedSettings]);
-  const privacyDirty = useMemo(
-    () => JSON.stringify(privacySettings) !== JSON.stringify(savedPrivacySettings),
-    [privacySettings, savedPrivacySettings]
-  );
 
   const update = (key, value) => { setSettings((s) => ({ ...s, [key]: value })); setSaved(false); };
   const setDensity = (value) => {
@@ -429,7 +344,6 @@ const AdminSettings = () => {
     displayName: values.displayName,
     email: values.email,
     preferences: {
-      language: values.language,
       timezone: values.timezone,
       dateFormat: values.dateFormat,
       tableDensity: values.tableDensity,
@@ -460,33 +374,6 @@ const AdminSettings = () => {
     setSettings(next);
     setSavedSettings(next);
     window.dispatchEvent(new Event('admin-settings-updated'));
-  };
-
-  const savePrivacySettings = async () => {
-    if (!privacySettings) return;
-    setPrivacySaving(true);
-    setPrivacyError('');
-    setPrivacySaved(false);
-    try {
-      const token = localStorage.getItem('token');
-      const { data } = await axios.put(`${API}/admin/privacy`, privacySettings, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setPrivacySettings(data);
-      setSavedPrivacySettings(data);
-      setPrivacySaved(true);
-      window.setTimeout(() => setPrivacySaved(false), 2500);
-    } catch (saveError) {
-      console.error('Failed to save privacy settings:', saveError);
-      const status = saveError.response?.status;
-      setPrivacyError(status === 401
-        ? 'Your login session has expired. Sign in again to save privacy settings.'
-        : status === 403
-          ? 'Only administrators can change privacy settings.'
-          : saveError.response?.data?.error || 'Unable to save privacy settings.');
-    } finally {
-      setPrivacySaving(false);
-    }
   };
 
   const saveSettings = async (password) => {
@@ -578,8 +465,6 @@ const AdminSettings = () => {
     );
   };
 
-  const privacySaveDisabled = !privacySettings || privacySaving || !privacyDirty;
-
   return (
     <div className="px-4 sm:px-6 lg:px-8" style={{ background: c.bg, ...body, minHeight: '100%', overflowX: 'hidden' }}>
       <div className="w-full">
@@ -613,8 +498,9 @@ const AdminSettings = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <TextInput icon={User} label="Display Name" value={settings.displayName} onChange={(v) => update('displayName', v)} />
                   <TextInput icon={Mail} label="Email Address" type="email" value={settings.email} onChange={(v) => update('email', v)} />
-                  <TextInput icon={ShieldCheck} label="Role" value="Administrator" onChange={() => {}} disabled readOnly />
-                  <SelectInput icon={Globe} label="Language & locale" value={settings.language} onChange={(v) => update('language', v)} options={LANGUAGES} />
+                  <div className="sm:col-span-2">
+                    <TextInput icon={ShieldCheck} label="Role" value="Administrator" onChange={() => {}} disabled readOnly />
+                  </div>
                 </div>
                 <div className="flex items-center justify-between gap-3 flex-wrap" style={{ marginTop: 14, paddingTop: 14, borderTop: `1px solid ${c.border}` }}>
                   <div className="flex items-start gap-3 min-w-0">
@@ -692,109 +578,6 @@ const AdminSettings = () => {
                 <Row icon={FileText} title="Log admin activities" description="Keep a log of administrator actions." last><Toggle label="Log admin activities" checked={settings.logAdminActivity} onChange={(v) => update('logAdminActivity', v)} /></Row>
               </section>
             </div>
-
-            {/* Privacy & Data Protection */}
-            <section style={{ ...card, marginTop: 16 }} aria-labelledby="privacy-protection-title">
-              <div className="flex items-start gap-3" style={{ marginBottom: 14 }}>
-                <IconBadge icon={ShieldCheck} />
-                <div className="min-w-0">
-                  <h2 id="privacy-protection-title" style={{ ...display, fontSize: '1.08rem', fontWeight: 700, color: c.ink, lineHeight: 1.25 }}>Privacy &amp; Data Protection</h2>
-                  <p style={{ ...body, fontSize: '0.75rem', color: c.muted, marginTop: 2 }}>Control how sensitive scholar information is accessed and protected.</p>
-                </div>
-              </div>
-
-              {/* Privacy controls */}
-              <div>
-                {PRIVACY_ITEMS.map((item, index) => (
-                  <PrivacyRow key={item.key} icon={item.icon} title={item.title} description={item.description} last={index === PRIVACY_ITEMS.length - 1}>
-                    {privacyLoading ? (
-                      <span style={{ ...body, fontSize: '0.72rem', color: c.muted }}>Loading…</span>
-                    ) : privacySettings ? (
-                      <>
-                        <PrivacyStatus enabled={Boolean(privacySettings[item.key])} />
-                        <Toggle
-                          label={item.title}
-                          checked={Boolean(privacySettings[item.key])}
-                          disabled={privacySaving}
-                          onChange={(enabled) => {
-                            setPrivacySettings((current) => ({ ...current, [item.key]: enabled }));
-                            setPrivacySaved(false);
-                          }}
-                        />
-                      </>
-                    ) : (
-                      <span style={{ ...body, fontSize: '0.72rem', fontWeight: 600, color: '#A24A4A' }}>Unavailable</span>
-                    )}
-                  </PrivacyRow>
-                ))}
-              </div>
-              {privacyError && <p role="alert" style={{ ...body, color: '#A24A4A', background: '#FBEAE8', border: '1px solid #E8C5C1', borderRadius: 10, padding: '9px 12px', marginTop: 12, fontSize: '0.76rem' }}>{privacyError}</p>}
-
-              {/* One shared link to the audit logs, instead of a chevron on every row */}
-              <div className="flex" style={{ marginTop: 12 }}>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('security')}
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto"
-                  style={{ ...body, minHeight: 36, padding: '7px 14px', border: `1px solid ${c.primary}`, borderRadius: 10, background: 'transparent', color: c.primary, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}
-                >
-                  <FileText size={14} aria-hidden="true" /> View Security Audit Logs <ChevronRight size={14} aria-hidden="true" />
-                </button>
-              </div>
-
-              {/* Access Model — informational only */}
-              <div style={{ marginTop: 16, border: `1px solid ${c.border}`, borderRadius: 14, background: '#fff', padding: 14 }}>
-                <h3 style={{ ...display, fontSize: '0.98rem', fontWeight: 700, color: c.ink }}>Access Model</h3>
-                <p style={{ ...body, fontSize: '0.74rem', color: c.muted, marginTop: 2 }}>Access to scholar information is limited by role and responsibility.</p>
-                <ul className="grid grid-cols-1 md:grid-cols-2 gap-2.5" style={{ marginTop: 12, listStyle: 'none', padding: 0 }}>
-                  {ACCESS_MODEL.map(({ role, icon: RoleIcon, tint, text, excludes }) => (
-                    <li key={role} style={{ border: `1px solid ${c.border}`, borderRadius: 12, background: c.surface, padding: '10px 12px', minWidth: 0 }}>
-                      <span
-                        className="inline-flex items-center gap-1.5"
-                        style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.08em', color: tint, background: `${tint}14`, border: `1px solid ${tint}30`, borderRadius: 999, padding: '3px 10px' }}
-                      >
-                        <RoleIcon size={12} aria-hidden="true" /> {role}
-                      </span>
-                      <p style={{ ...body, fontSize: '0.75rem', color: c.ink, marginTop: 8, lineHeight: 1.5 }}>{text}</p>
-                      {excludes && (
-                        <p style={{ ...body, fontSize: '0.7rem', color: c.muted, marginTop: 4, lineHeight: 1.45 }}>
-                          <span style={{ fontWeight: 600 }}>Not included:</span> {excludes}
-                        </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              {/* Protected Scholar Information */}
-              <div className="flex items-start gap-3" style={{ marginTop: 14, background: `${c.primary}08`, border: `1px solid ${c.primary}1f`, borderRadius: 12, padding: '12px 14px' }}>
-                <Info size={17} style={{ color: c.primary, flexShrink: 0, marginTop: 2 }} aria-hidden="true" />
-                <div className="min-w-0">
-                  <p style={{ ...body, fontSize: '0.8rem', fontWeight: 700, color: c.primary }}>Protected Scholar Information</p>
-                  <p style={{ ...body, fontSize: '0.74rem', color: c.muted, marginTop: 3, lineHeight: 1.55 }}>
-                    Apple Scholar contains personal information, academic records, attendance records, scholarship records, service hours, correspondence, and uploaded documents.
-                  </p>
-                  <p style={{ ...body, fontSize: '0.74rem', color: c.muted, marginTop: 2, lineHeight: 1.55 }}>
-                    Access is restricted according to each user&apos;s assigned role and responsibility.
-                  </p>
-                </div>
-              </div>
-
-              {/* Save privacy settings */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3" style={{ marginTop: 14 }}>
-                {privacySaved && <span role="status" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: c.success }}>Privacy settings saved.</span>}
-                <button
-                  type="button"
-                  onClick={savePrivacySettings}
-                  disabled={privacySaveDisabled}
-                  className="flex items-center justify-center gap-2 w-full sm:w-auto"
-                  style={{ minHeight: 40, padding: '9px 18px', border: 0, borderRadius: 11, background: c.primary, color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: privacySaving ? 'wait' : privacySaveDisabled ? 'not-allowed' : 'pointer', opacity: privacySaveDisabled ? 0.55 : 1 }}
-                >
-                  {privacySaving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                  {privacySaving ? 'Saving…' : 'Save Privacy Settings'}
-                </button>
-              </div>
-            </section>
 
             {/* Administrator Actions */}
             <section style={{ ...card, marginTop: 16 }}>

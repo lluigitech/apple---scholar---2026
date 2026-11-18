@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
     Archive, Download, Eye, RotateCcw, Trash2, Search, ShieldCheck, FileText,
-    Clock3, AlertTriangle, GraduationCap, Info, RefreshCw, X, Database,
+    Clock3, AlertTriangle, GraduationCap, Info, X, Database, Users,
 } from 'lucide-react';
 import { formatAdminDate } from '../../../utils/adminPreferences';
 import AdminPageHeader from '../../../components/Admin/AdminPageHeader';
@@ -13,9 +13,11 @@ const API = `${API_ORIGIN}/api`;
 /* ════════════════════════════════════════════════════════════════
    SCHOLAR ARCHIVE API
    ════════════════════════════════════════════════════════════════ */
-const SCHOLAR_API = {
-    list: `${API}/admin/archive/scholars`,
+const ARCHIVE_API = {
+    list: `${API}/admin/archive/users`,
     restore: (id) => ({ url: `${API}/admin/users/${id}/restore` }),
+};
+const SCHOLAR_API = {
     detail: null,
     complianceSummary: `${API}/admin/reports/compliance-summary`,
 };
@@ -25,16 +27,17 @@ const pick = (obj, keys) => {
     for (const k of keys) if (obj?.[k] !== undefined && obj?.[k] !== null && obj?.[k] !== '') return obj[k];
     return null;
 };
-const isArchivedScholar = (u) => {
-    if ((u.role || '').toLowerCase() !== 'scholar') return false;
+const isArchivedUser = (u) => {
+    if (!['admin', 'scholar', 'staff', 'officer'].includes(String(u.role || '').toLowerCase())) return false;
     if (u.is_archived === true || u.is_archived === 1 || u.archived === true || u.archived === 1) return true;
     return ['archived'].includes(String(u.status || u.lifecycle_status || '').toLowerCase());
 };
-const normalizeScholar = (u) => {
+const normalizeArchivedUser = (u) => {
     const archivedAt = pick(u, ['archived_at', 'archivedAt', 'date_archived']);
     const retention = pick(u, ['retention_until', 'retentionUntil']) || (archivedAt ? addYears(archivedAt, RETENTION_YEARS) : null);
     return {
         id: u.id,
+        role: String(u.role || '').toLowerCase(),
         name: pick(u, ['full_name', 'name', 'scholar_name']) || [u.first_name, u.last_name].filter(Boolean).join(' ') || null,
         email: pick(u, ['email']),
         scholarId: pick(u, ['scholar_id', 'scholarId', 'student_id']),
@@ -299,14 +302,15 @@ const FilterField = ({ label, children, style }) => (
 export default function ArchiveManagement() {
     const role = (localStorage.getItem('role') || '').toLowerCase();
 
-    const [tab, setTab] = useState('scholars'); // 'scholars' | 'documents'
+    const [tab, setTab] = useState('users'); // 'users' | 'documents'
     const [error, setError] = useState('');
     const [message, setMessage] = useState('');
 
-    /* scholars */
-    const [scholars, setScholars] = useState([]);
-    const [scholarsLoading, setScholarsLoading] = useState(true);
+    /* archived users */
+    const [archivedUsers, setArchivedUsers] = useState([]);
+    const [usersLoading, setUsersLoading] = useState(true);
     const [sSearch, setSSearch] = useState('');
+    const [sRole, setSRole] = useState('');
     const [sYear, setSYear] = useState('');
     const [sStatus, setSStatus] = useState('');
     const [sArchYear, setSArchYear] = useState('');
@@ -367,16 +371,16 @@ export default function ArchiveManagement() {
         }
     };
 
-    const loadScholars = useCallback(async () => {
-        setScholarsLoading(true);
+    const loadArchivedUsers = useCallback(async () => {
+        setUsersLoading(true);
         try {
-            const res = await axios.get(SCHOLAR_API.list, auth());
+            const res = await axios.get(ARCHIVE_API.list, auth());
             const list = Array.isArray(res.data) ? res.data : res.data?.users || [];
-            setScholars(list.filter(isArchivedScholar).map(normalizeScholar));
+            setArchivedUsers(list.filter(isArchivedUser).map(normalizeArchivedUser));
         } catch (e) {
-            setError(e.response?.data?.error || 'Unable to load archived scholars.');
+            setError(e.response?.data?.error || 'Unable to load archived users.');
         } finally {
-            setScholarsLoading(false);
+            setUsersLoading(false);
         }
     }, []);
 
@@ -418,12 +422,10 @@ export default function ArchiveManagement() {
         }
     }, []);
 
-    useEffect(() => { loadScholars(); loadCompliance(); loadArchivedDocsForKpis(); }, [loadScholars, loadCompliance, loadArchivedDocsForKpis]);
+    useEffect(() => { loadArchivedUsers(); loadCompliance(); loadArchivedDocsForKpis(); }, [loadArchivedUsers, loadCompliance, loadArchivedDocsForKpis]);
     useEffect(() => { loadDocs(); }, [loadDocs]);
-    useEffect(() => { setSPage(1); }, [sSearch, sYear, sStatus, sArchYear, sCompliance]);
+    useEffect(() => { setSPage(1); }, [sSearch, sRole, sYear, sStatus, sArchYear, sCompliance]);
     useEffect(() => { setDPage(1); }, [docState, dSearch, category, year, dMonth, dRetention]);
-
-    const refresh = () => { setError(''); setMessage(''); loadScholars(); loadCompliance(); loadDocs(); loadArchivedDocsForKpis(); };
 
     /* ── document actions (same endpoints as before) ── */
     const mutateDoc = async (action, id) => {
@@ -445,12 +447,12 @@ export default function ArchiveManagement() {
         }
     };
 
-    /* ── scholar actions ── */
+    /* ── archived user actions ── */
     const openView = async (s) => {
         setViewing(s); setViewData(null); setViewDocs([]);
 
         // Documents: read-only, via the EXISTING document endpoint (no new API).
-        // Scholar archiving does not touch document rows, so look at both states.
+        // User archiving does not touch document rows, so look at both states.
         setViewDocsLoading(true);
         try {
             const term = s.scholarId || s.name || '';
@@ -480,13 +482,13 @@ export default function ArchiveManagement() {
     const confirmRestore = async () => {
         setRestoreBusy(true); setError(''); setMessage('');
         try {
-            const { method = 'put', url, data = {} } = SCHOLAR_API.restore(restoring.id);
+            const { method = 'put', url, data = {} } = ARCHIVE_API.restore(restoring.id);
             const res = await axios({ method, url, data, ...auth() });
-            setMessage(res.data?.message || 'Scholar restored to the active registry.');
+            setMessage(res.data?.message || 'User restored to the active registry.');
             setRestoring(null);
-            loadScholars();
+            loadArchivedUsers();
         } catch (e) {
-            setError(e.response?.data?.error || 'Unable to restore this scholar.');
+            setError(e.response?.data?.error || 'Unable to restore this user.');
             setRestoring(null);
         } finally {
             setRestoreBusy(false);
@@ -496,41 +498,42 @@ export default function ArchiveManagement() {
     /* ── derived: KPIs from real loaded data only ── */
     const kpis = useMemo(() => {
         const states = [
-            ...scholars.map((s) => retentionState(s.retentionUntil)),
+            ...archivedUsers.map((s) => retentionState(s.retentionUntil)),
             ...archivedDocsAll.map((d) => retentionState(d.retention_until)),
         ];
         return {
-            scholars: scholars.length,
+            users: archivedUsers.length,
             documents: archivedDocsAll.length,
             retained: states.filter((s) => s === 'ok' || s === 'expiring').length,
             expiring: states.filter((s) => s === 'expiring').length,
         };
-    }, [scholars, archivedDocsAll]);
+    }, [archivedUsers, archivedDocsAll]);
 
-    const yearLevels = useMemo(() => [...new Set(scholars.map((s) => s.yearLevel).filter(Boolean))].sort(), [scholars]);
+    const yearLevels = useMemo(() => [...new Set(archivedUsers.map((s) => s.yearLevel).filter(Boolean))].sort(), [archivedUsers]);
 
-    const archivedYears = useMemo(() => [...new Set(scholars.map((s) => (s.archivedAt ? new Date(s.archivedAt).getFullYear() : null)).filter((y) => y && !Number.isNaN(y)))].sort((a, b) => b - a), [scholars]);
+    const archivedYears = useMemo(() => [...new Set(archivedUsers.map((s) => (s.archivedAt ? new Date(s.archivedAt).getFullYear() : null)).filter((y) => y && !Number.isNaN(y)))].sort((a, b) => b - a), [archivedUsers]);
 
     /* Attach a compliance status to each archived scholar by Scholar ID.
        No match / no numeric completionRate => compliance stays null (never guessed). */
-    const scholarRows = useMemo(() => {
+    const userRows = useMemo(() => {
         const byId = new Map();
         complianceRows.forEach((item) => {
             const key = summaryScholarKey(item);
             if (key !== null) byId.set(key, item);
         });
-        return scholars.map((s) => {
-            const item = s.scholarId !== null && s.scholarId !== undefined ? byId.get(String(s.scholarId)) : undefined;
+        return archivedUsers.map((s) => {
+            const item = s.role === 'scholar' && s.scholarId !== null && s.scholarId !== undefined ? byId.get(String(s.scholarId)) : undefined;
             return { ...s, compliance: item ? complianceFromRate(item.completionRate) : null };
         });
-    }, [scholars, complianceRows]);
+    }, [archivedUsers, complianceRows]);
 
-    // The filter is offered only when real compliance data reaches at least one archived scholar.
-    const complianceAvailable = useMemo(() => scholarRows.some((s) => s.compliance), [scholarRows]);
+    // The filter is offered only when real compliance data reaches an archived scholar.
+    const complianceAvailable = useMemo(() => userRows.some((s) => s.role === 'scholar' && s.compliance), [userRows]);
 
-    const filteredScholars = useMemo(() => {
+    const filteredUsers = useMemo(() => {
         const q = sSearch.trim().toLowerCase();
-        return scholarRows.filter((s) => {
+        return userRows.filter((s) => {
+            if (sRole && s.role !== sRole) return false;
             if (sYear && s.yearLevel !== sYear) return false;
             if (sArchYear && String(s.archivedAt ? new Date(s.archivedAt).getFullYear() : '') !== sArchYear) return false;
             if (sStatus) {
@@ -539,20 +542,21 @@ export default function ArchiveManagement() {
                 if (sStatus === 'expiring' && st !== 'expiring') return false;
                 if (sStatus === 'expired' && st !== 'expired') return false;
             }
+            if (sCompliance && s.role !== 'scholar') return false;
             if (complianceAvailable && sCompliance) {
                 if (sCompliance === 'none' ? s.compliance !== null : s.compliance !== sCompliance) return false;
             }
             if (!q) return true;
-            return [s.name, s.email, s.scholarId, s.yearLevel].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
+            return [s.name, s.email, s.role, s.scholarId, s.yearLevel].filter(Boolean).some((v) => String(v).toLowerCase().includes(q));
         });
-    }, [scholarRows, sSearch, sYear, sStatus, sArchYear, sCompliance, complianceAvailable]);
+    }, [userRows, sSearch, sRole, sYear, sStatus, sArchYear, sCompliance, complianceAvailable]);
 
     const paginate = (list, page) => {
         const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
         const start = (Math.min(page, pages) - 1) * PAGE_SIZE;
         return { items: list.slice(start, start + PAGE_SIZE), pages, from: list.length ? start + 1 : 0, to: Math.min(start + PAGE_SIZE, list.length) };
     };
-    const sPaged = paginate(filteredScholars, sPage);
+    const sPaged = paginate(filteredUsers, sPage);
     // Document type options come from the real archived documents (not typed free-form).
     const docCategories = useMemo(() => [...new Set(archivedDocsAll.map((d) => d.category).filter(Boolean))].sort(), [archivedDocsAll]);
     // Month / retention are applied on the loaded rows; search, type and year still go to the server as before.
@@ -571,8 +575,8 @@ export default function ArchiveManagement() {
     }), [docs, dMonth, dRetention]);
     const dPaged = paginate(filteredDocs, dPage);
     const hasDocFilters = dSearch || category || year || dMonth || dRetention;
-    const hasScholarFilters = sSearch || sYear || sStatus || sArchYear || (complianceAvailable && sCompliance);
-    const showComplianceNote = !scholarsLoading && !complianceLoading && scholars.length > 0 && !complianceAvailable;
+    const hasUserFilters = sSearch || sRole || sYear || sStatus || sArchYear || (complianceAvailable && sCompliance);
+    const showComplianceNote = !usersLoading && !complianceLoading && archivedUsers.some((user) => user.role === 'scholar') && !complianceAvailable;
 
     const RetentionCell = ({ until }) => {
         const st = retentionState(until);
@@ -592,11 +596,11 @@ export default function ArchiveManagement() {
     const thStyle = { ...body, fontSize: '0.66rem', fontWeight: 700, color: MUTED, letterSpacing: '0.08em', textTransform: 'uppercase', padding: '12px 16px', borderBottom: `1px solid ${BORDER}`, background: BG, whiteSpace: 'nowrap' };
     const tdStyle = { padding: '12px 16px', verticalAlign: 'middle' };
 
-    const scholarHeaders = ['#', 'Scholar', 'Scholar ID', 'Year Level', ...(complianceAvailable ? ['Compliance'] : []), 'Archived Date', 'Retention Until', 'Status', 'Action'];
+    const userHeaders = ['#', 'User', 'Role', 'Account ID', 'Year Level', ...(complianceAvailable ? ['Compliance'] : []), 'Archived Date', 'Retention Until', 'Status', 'Action'];
 
     const tabBtn = (key, label, Icon) => (
-        <button key={key} onClick={() => setTab(key)} className="seg-tab flex items-center gap-2" role="tab" aria-selected={tab === key}
-            style={{ ...body, fontSize: '0.84rem', fontWeight: 600, padding: '10px 20px', borderRadius: '12px 12px 0 0', cursor: 'pointer',
+        <button key={key} onClick={() => setTab(key)} className="seg-tab flex flex-1 items-center justify-center gap-2" role="tab" aria-selected={tab === key}
+            style={{ ...body, fontSize: '0.9rem', fontWeight: 600, padding: '12px 20px', borderRadius: '12px 12px 0 0', cursor: 'pointer',
                 border: `1px solid ${tab === key ? PRIMARY : BORDER}`, borderBottom: 'none',
                 background: tab === key ? PRIMARY : SURFACE, color: tab === key ? '#fff' : PRIMARY }}>
             <Icon size={15} />{label}
@@ -633,22 +637,17 @@ export default function ArchiveManagement() {
                     title="Archive Management"
                     description="Manage historical scholar records and retained documents."
                     className="mb-5"
-                    actions={
-                        <button onClick={refresh} className="act-btn" style={{ ...body, display: 'inline-flex', alignItems: 'center', gap: 8, height: 40, padding: '0 16px', borderRadius: 12, fontSize: '0.82rem', fontWeight: 600, color: PRIMARY, background: SURFACE, border: `1px solid ${PRIMARY}`, cursor: 'pointer' }}>
-                            <RefreshCw size={14} />Refresh
-                        </button>
-                    }
                 />
 
                 {/* KPIs */}
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" style={{ marginBottom: 16 }}>
-                    {scholarsLoading ? Array.from({ length: 4 }).map((_, i) => (
+                    {usersLoading ? Array.from({ length: 4 }).map((_, i) => (
                         <div key={i} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: '16px 20px', minHeight: 92 }} className="flex items-center gap-4">
                             <Skeleton style={{ width: 44, height: 44, borderRadius: '50%' }} />
                             <div style={{ flex: 1 }}><Skeleton style={{ width: '60%', height: 11 }} /><Skeleton style={{ width: '35%', height: 24, marginTop: 8 }} /></div>
                         </div>
                     )) : (<>
-                        <KpiCard label="Archived Scholars" value={kpis.scholars} sub="Scholar records archived" icon={GraduationCap} color={PRIMARY} tint={PRIMARY_TINT} valueColor={PRIMARY} />
+                        <KpiCard label="Archived Users" value={kpis.users} sub="Accounts across all roles" icon={Users} color={PRIMARY} tint={PRIMARY_TINT} valueColor={PRIMARY} />
                         <KpiCard label="Archived Documents" value={kpis.documents} sub="Submission records archived" icon={FileText} color={BRONZE} tint={BRONZE_TINT} />
                         <KpiCard label="Retained Records" value={kpis.retained} sub="Within retention period" icon={Database} color={SUCCESS} tint={SUCCESS_TINT} />
                         <KpiCard label="Expiring Soon" value={kpis.expiring} sub="Records within 6 months" icon={Clock3} color={WARNING} tint={WARNING_TINT} valueColor={WARNING} />
@@ -663,7 +662,7 @@ export default function ArchiveManagement() {
                     <div className="flex-1" style={{ minWidth: 260 }}>
                         <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK }}>Retention Policy</h2>
                         <p style={{ ...body, fontSize: '0.83rem', lineHeight: 1.55, color: MUTED, marginTop: 2 }}>
-                            All archived scholar records and documents are retained for {RETENTION_YEARS} years from the date of archive.
+                            All archived user accounts and documents are retained for {RETENTION_YEARS} years from the date of archive.
                         </p>
                         <p style={{ ...body, fontSize: '0.83rem', lineHeight: 1.55, color: MUTED }}>
                             After {RETENTION_YEARS} years, records become eligible for disposal review according to the organization's policy.
@@ -681,27 +680,36 @@ export default function ArchiveManagement() {
                 {message && <Banner tone="success">{message}</Banner>}
 
                 {/* Tabs */}
-                <div className="flex gap-1.5" role="tablist">
-                    {tabBtn('scholars', 'Archived Scholars', GraduationCap)}
+                <div className="flex w-full gap-1.5" role="tablist">
+                    {tabBtn('users', 'Archived Users', Users)}
                     {tabBtn('documents', 'Archived Documents', FileText)}
                 </div>
 
                 <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: `0 ${RADIUS}px ${RADIUS}px ${RADIUS}px`, boxShadow: SHADOW, overflow: 'hidden', marginBottom: 32 }}>
 
-                    {/* ═════════ ARCHIVED SCHOLARS ═════════ */}
-                    {tab === 'scholars' && (<>
+                    {/* ═════════ ARCHIVED USERS ═════════ */}
+                    {tab === 'users' && (<>
                         <div style={{ padding: '20px 22px 16px' }}>
-                            <h2 style={{ ...display, fontSize: '1.25rem', fontWeight: 700, color: INK }}>Archived Scholars</h2>
-                            <p style={{ ...body, fontSize: '0.84rem', color: MUTED, marginTop: 2 }}>Historical scholar records retained after scholarship completion.</p>
+                            <h2 style={{ ...display, fontSize: '1.25rem', fontWeight: 700, color: INK }}>Archived Users</h2>
+                            <p style={{ ...body, fontSize: '0.84rem', color: MUTED, marginTop: 2 }}>Archived accounts for administrators, officers, staff, and scholars.</p>
                         </div>
                         <div className="flex flex-wrap items-end gap-3" style={toolbarBand}>
-                            <FilterField label="Search" style={{ flex: '1 1 260px', minWidth: 220 }}>
+                            <FilterField label="Search" style={{ flex: '1 1 240px', minWidth: 200 }}>
                                 <div className="relative">
                                     <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: MUTED }} />
                                     <input className="exec-input" style={{ ...fieldStyle, height: 42, paddingLeft: 36 }} type="text"
-                                        placeholder="Name, ID, or email…" aria-label="Search archived scholars"
+                                        placeholder="Name, ID, email, or role…" aria-label="Search archived users"
                                         value={sSearch} onChange={(e) => setSSearch(e.target.value)} />
                                 </div>
+                            </FilterField>
+                            <FilterField label="Role" style={{ flex: '0 1 160px', minWidth: 140 }}>
+                                <select className="exec-input filter-select" style={{ ...fieldStyle, height: 42 }} value={sRole} onChange={(e) => setSRole(e.target.value)} aria-label="User role">
+                                    <option value="">All Roles</option>
+                                    <option value="admin">Admin</option>
+                                    <option value="officer">Officer</option>
+                                    <option value="staff">Staff</option>
+                                    <option value="scholar">Scholar</option>
+                                </select>
                             </FilterField>
                             <FilterField label="Year level" style={{ flex: '0 1 160px', minWidth: 140 }}>
                                 <select className="exec-input filter-select" style={{ ...fieldStyle, height: 42 }} value={sYear} onChange={(e) => setSYear(e.target.value)} aria-label="Year level">
@@ -734,32 +742,32 @@ export default function ArchiveManagement() {
                                     {archivedYears.map((y) => <option key={y} value={String(y)}>{y}</option>)}
                                 </select>
                             </FilterField>
-                            <button className="act-btn" disabled={!hasScholarFilters}
-                                onClick={() => { setSSearch(''); setSYear(''); setSStatus(''); setSArchYear(''); setSCompliance(''); }}
-                                style={{ ...body, display: 'inline-flex', alignItems: 'center', gap: 6, height: 42, padding: '0 18px', borderRadius: 12, fontSize: '0.82rem', fontWeight: 600, color: PRIMARY, background: SURFACE, border: `1px solid ${PRIMARY}`, cursor: hasScholarFilters ? 'pointer' : 'default', opacity: hasScholarFilters ? 1 : 0.5 }}>
+                            <button className="act-btn" disabled={!hasUserFilters}
+                                onClick={() => { setSSearch(''); setSRole(''); setSYear(''); setSStatus(''); setSArchYear(''); setSCompliance(''); }}
+                                style={{ ...body, display: 'inline-flex', alignItems: 'center', gap: 6, height: 42, padding: '0 18px', borderRadius: 12, fontSize: '0.82rem', fontWeight: 600, color: PRIMARY, background: SURFACE, border: `1px solid ${PRIMARY}`, cursor: hasUserFilters ? 'pointer' : 'default', opacity: hasUserFilters ? 1 : 0.5 }}>
                                 Reset Filters
                             </button>
                         </div>
                         {showComplianceNote && (
                             <p style={{ ...body, fontSize: '0.76rem', color: MUTED, padding: '10px 22px 0' }}>
-                                Compliance Status filter is unavailable: the compliance summary returned no rows matching these archived scholars.
+                                Compliance Status filter is unavailable: no archived scholar has a matching compliance summary.
                             </p>
                         )}
 
-                        {scholarsLoading ? <TableSkeleton /> : !filteredScholars.length ? (
+                        {usersLoading ? <TableSkeleton /> : !filteredUsers.length ? (
                             <EmptyState
-                                title={hasScholarFilters ? 'No matching scholars' : 'No archived scholars'}
-                                text={hasScholarFilters ? 'Try adjusting your search or filters.' : 'There are currently no scholars in the archive.'}
-                                action={!hasScholarFilters && (
+                                title={hasUserFilters ? 'No matching users' : 'No archived users'}
+                                text={hasUserFilters ? 'Try adjusting your search or filters.' : 'There are currently no accounts in the archive.'}
+                                action={!hasUserFilters && (
                                     <a href="/admin/users" className="act-btn" style={{ ...body, display: 'inline-flex', alignItems: 'center', height: 36, padding: '0 16px', borderRadius: 10, fontSize: '0.8rem', fontWeight: 600, color: '#fff', background: PRIMARY, border: `1px solid ${PRIMARY}` }}>
-                                        View Active Scholars
+                                        View Active Users
                                     </a>
                                 )} />
                         ) : (<>
                             <div className="desktop-only exec-table-scroll overflow-x-auto">
                                 <table className="w-full text-left" style={{ borderCollapse: 'collapse', minWidth: complianceAvailable ? 1020 : 900 }}>
                                     <thead><tr style={{ background: BG }}>
-                                        {scholarHeaders.map((h) => <th key={h} style={thStyle}>{h}</th>)}
+                                        {userHeaders.map((h) => <th key={h} style={thStyle}>{h}</th>)}
                                     </tr></thead>
                                     <tbody>
                                         {sPaged.items.map((s, idx) => (
@@ -774,6 +782,7 @@ export default function ArchiveManagement() {
                                                         </div>
                                                     </div>
                                                 </td>
+                                                <td style={{ ...tdStyle, ...body, fontSize: '0.8rem', color: INK, textTransform: 'capitalize' }}>{s.role}</td>
                                                 <td style={{ ...tdStyle, ...mono, fontSize: '0.78rem', color: INK }}>{s.scholarId || '—'}</td>
                                                 <td style={{ ...tdStyle, ...body, fontSize: '0.83rem', color: INK }}>{s.yearLevel || '—'}</td>
                                                 {complianceAvailable && <td style={tdStyle}><CompliancePill status={s.compliance} /></td>}
@@ -782,8 +791,8 @@ export default function ArchiveManagement() {
                                                 <td style={tdStyle}><Pill color={PRIMARY} tint={PRIMARY_TINT} dot>Archived</Pill></td>
                                                 <td style={tdStyle}>
                                                     <div className="flex items-center gap-2">
-                                                        <ActionBtn icon={Eye} label="View" onClick={() => openView(s)} />
-                                                        <ActionBtn icon={RotateCcw} title="Restore scholar" onClick={() => setRestoring(s)} />
+                                                        {s.role === 'scholar' && <ActionBtn icon={Eye} label="View" onClick={() => openView(s)} />}
+                                                        <ActionBtn icon={RotateCcw} title="Restore user" onClick={() => setRestoring(s)} />
                                                     </div>
                                                 </td>
                                             </tr>
@@ -806,22 +815,23 @@ export default function ArchiveManagement() {
                                             <Pill color={PRIMARY} tint={PRIMARY_TINT} dot>Archived</Pill>
                                         </div>
                                         <div className="grid grid-cols-2 gap-3 mt-3">
-                                            <Field label="Scholar ID"><span style={mono}>{s.scholarId}</span></Field>
+                                            <Field label="Role">{s.role}</Field>
+                                            <Field label="Account ID"><span style={mono}>{s.scholarId}</span></Field>
                                             <Field label="Year Level">{s.yearLevel}</Field>
-                                            {complianceAvailable && <Field label="Compliance">{s.compliance ? <CompliancePill status={s.compliance} /> : null}</Field>}
+                                            {s.role === 'scholar' && complianceAvailable && <Field label="Compliance">{s.compliance ? <CompliancePill status={s.compliance} /> : null}</Field>}
                                             <Field label="Archived">{formatDate(s.archivedAt)}</Field>
                                             <Field label="Retention Until">{formatDate(s.retentionUntil)}</Field>
                                         </div>
                                         <div className="flex gap-2 mt-3 pt-3" style={{ borderTop: `1px solid ${BORDER}` }}>
-                                            <ActionBtn icon={Eye} label="View" onClick={() => openView(s)} />
+                                            {s.role === 'scholar' && <ActionBtn icon={Eye} label="View" onClick={() => openView(s)} />}
                                             <ActionBtn icon={RotateCcw} label="Restore" onClick={() => setRestoring(s)} />
                                         </div>
                                     </div>
                                 ))}
                             </div>
 
-                            <Pagination page={Math.min(sPage, sPaged.pages)} pages={sPaged.pages} total={filteredScholars.length}
-                                shown={{ from: sPaged.from, to: sPaged.to }} noun="archived scholars" onChange={setSPage} />
+                            <Pagination page={Math.min(sPage, sPaged.pages)} pages={sPaged.pages} total={filteredUsers.length}
+                                shown={{ from: sPaged.from, to: sPaged.to }} noun="archived users" onChange={setSPage} />
                         </>)}
                     </>)}
 
@@ -964,21 +974,21 @@ export default function ArchiveManagement() {
 
             {/* Restore confirmation */}
             {restoring && (
-                <Modal title="Restore scholar?" onClose={() => !restoreBusy && setRestoring(null)}
+                <Modal title="Restore user?" onClose={() => !restoreBusy && setRestoring(null)}
                     footer={<>
                         <button className="act-btn" onClick={() => setRestoring(null)} disabled={restoreBusy}
                             style={{ ...body, height: 38, padding: '0 16px', borderRadius: 10, fontSize: '0.82rem', fontWeight: 600, color: INK, background: SURFACE, border: `1px solid ${BORDER}`, cursor: 'pointer' }}>Cancel</button>
                         <button onClick={confirmRestore} disabled={restoreBusy}
                             style={{ ...body, height: 38, padding: '0 16px', borderRadius: 10, fontSize: '0.82rem', fontWeight: 600, color: '#fff', background: PRIMARY, border: `1px solid ${PRIMARY}`, cursor: 'pointer', opacity: restoreBusy ? 0.7 : 1 }}>
-                            {restoreBusy ? 'Restoring…' : 'Restore Scholar'}
+                            {restoreBusy ? 'Restoring…' : 'Restore User'}
                         </button>
                     </>}>
                     <div className="flex flex-col items-center text-center">
                         <Avatar name={restoring.name} size={52} />
                         <p style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color: INK, marginTop: 12 }}>{restoring.name || 'This scholar'}</p>
-                        <p style={{ ...body, fontSize: '0.8rem', color: MUTED }}>{restoring.email}</p>
+                        <p style={{ ...body, fontSize: '0.8rem', color: MUTED }}>{restoring.email} · {restoring.role}</p>
                         <p className="mt-4" style={{ ...body, fontSize: '0.86rem', lineHeight: 1.6, color: INK }}>
-                            This scholar will return to the active scholar registry and appear again in User Management.
+                            This account will return to the active user registry and be able to sign in again.
                         </p>
                         <p className="mt-2" style={{ ...body, fontSize: '0.8rem', lineHeight: 1.6, color: MUTED }}>
                             No account is recreated and no historical records are removed.

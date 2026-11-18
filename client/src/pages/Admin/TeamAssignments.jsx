@@ -2,7 +2,7 @@ import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
-  Check, Filter, Loader2, Pencil, Plus, Search,
+  Check, ChevronLeft, ChevronRight, Filter, Loader2, Pencil, Plus, Search,
   Trash2, Users, X, Folder, ShieldCheck,
   Layers, GraduationCap, ChevronDown,
 } from 'lucide-react';
@@ -42,6 +42,7 @@ const YEAR_LEVELS = [
   '1st Year College', '2nd Year College', '3rd Year College',
   '4th Year College', '5th Year College',
 ];
+const SCHOLARS_PER_PAGE = 10;
 
 // ── Shared bits ──────────────────────────────────────────────
 const Alert = ({ type = 'error', children }) => {
@@ -94,7 +95,7 @@ const KpiCard = ({ icon: Icon, label, value, loading }) => (
 
 // Segmented control
 const SegmentedTabs = ({ tab, setTab }) => (
-  <div className="inline-flex gap-1 shrink-0" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 5 }}>
+  <div className="flex w-full gap-1" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 5 }}>
     {[
       { id: 'officers', label: 'Officers' },
       { id: 'staff', label: 'Staff' },
@@ -102,9 +103,9 @@ const SegmentedTabs = ({ tab, setTab }) => (
       const activeState = tab === t.id;
       return (
         <button key={t.id} onClick={() => setTab(t.id)}
-          className="rounded-xl px-5 transition-colors"
+          className="flex-1 rounded-xl px-5 transition-colors"
           style={{
-            ...body, fontSize: '0.8rem', fontWeight: 600, height: 40,
+            ...body, fontSize: '0.9rem', fontWeight: 600, height: 44,
             color: activeState ? '#fff' : MUTED,
             background: activeState ? PRIMARY : 'transparent',
             border: 'none',
@@ -369,6 +370,7 @@ const StaffPanel = ({ onStats }) => {
   const [groupName, setGroupName] = useState('');
   const [scholarSearch, setScholarSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState('');
+  const [scholarPage, setScholarPage] = useState(1);
   const [editing, setEditing] = useState(false);
   const [groupEditingId, setGroupEditingId] = useState(null);
   const [groupDraftName, setGroupDraftName] = useState('');
@@ -417,6 +419,10 @@ const StaffPanel = ({ onStats }) => {
     return (!query || s.full_name?.toLowerCase().includes(query) || s.scholar_id?.toLowerCase().includes(query))
       && (!groupFilter || (groupFilter === 'unassigned' ? !s.group_id : String(s.group_id) === groupFilter));
   });
+  const scholarPageCount = Math.max(1, Math.ceil(visibleScholars.length / SCHOLARS_PER_PAGE));
+  const currentScholarPage = Math.min(scholarPage, scholarPageCount);
+  const scholarPageStart = (currentScholarPage - 1) * SCHOLARS_PER_PAGE;
+  const paginatedScholars = visibleScholars.slice(scholarPageStart, scholarPageStart + SCHOLARS_PER_PAGE);
   const selectStaff = (person) => { setSelectedId(person.id); setSelectedGroups(person.assigned_groups?.map(group => group.id) || []); setEditing(false); setMessage(''); };
   const toggle = (id) => setSelectedGroups(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   const save = async () => {
@@ -578,12 +584,12 @@ const StaffPanel = ({ onStats }) => {
           <div className="mb-4 flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
               <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: MUTED }} />
-              <input value={scholarSearch} onChange={e => setScholarSearch(e.target.value)} placeholder="Search scholar or ID"
+              <input value={scholarSearch} onChange={e => { setScholarSearch(e.target.value); setScholarPage(1); }} placeholder="Search scholar or ID"
                 className="w-full rounded-xl py-2.5 pl-9 pr-3 text-xs outline-none" style={inputStyle} />
             </div>
             <div className="relative sm:w-52">
               <Filter size={13} className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: MUTED }} />
-              <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)}
+              <select value={groupFilter} onChange={e => { setGroupFilter(e.target.value); setScholarPage(1); }}
                 className="w-full appearance-none rounded-xl py-2.5 pl-9 pr-8 text-xs" style={inputStyle}>
                 <option value="">All groups</option>
                 <option value="unassigned">Unfiled</option>
@@ -603,7 +609,7 @@ const StaffPanel = ({ onStats }) => {
               ))
             ) : visibleScholars.length === 0 ? (
               <p className="text-center py-8" style={{ ...body, fontSize: '0.82rem', color: MUTED }}>No scholars match your search.</p>
-            ) : visibleScholars.map((scholar) => (
+            ) : paginatedScholars.map((scholar) => (
               <div key={scholar.scholar_id} className="gs-scholar-row flex flex-wrap items-center justify-between gap-3 rounded-xl p-3 transition-colors"
                 style={{ border: `1px solid ${BORDER}` }}>
                 <div className="flex items-center gap-3 min-w-0">
@@ -636,6 +642,40 @@ const StaffPanel = ({ onStats }) => {
               </div>
             ))}
           </div>
+          {!loading && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3" style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12 }}>
+              <span style={{ ...body, fontSize: '0.72rem', color: MUTED }}>
+                Showing {visibleScholars.length === 0 ? 0 : `${scholarPageStart + 1}–${Math.min(scholarPageStart + SCHOLARS_PER_PAGE, visibleScholars.length)}`} of {visibleScholars.length} scholars
+              </span>
+              {scholarPageCount > 1 && (
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    aria-label="Previous scholar page"
+                    onClick={() => setScholarPage(Math.max(1, currentScholarPage - 1))}
+                    disabled={currentScholarPage === 1}
+                    className="inline-flex items-center gap-1 rounded-lg disabled:opacity-40"
+                    style={{ ...body, height: 32, padding: '0 9px', border: `1px solid ${BORDER}`, background: '#fff', color: INK, fontSize: '0.72rem', cursor: currentScholarPage === 1 ? 'default' : 'pointer' }}
+                  >
+                    <ChevronLeft size={13} /> Previous
+                  </button>
+                  <span style={{ ...body, fontSize: '0.72rem', fontWeight: 600, color: INK, whiteSpace: 'nowrap' }}>
+                    Page {currentScholarPage} of {scholarPageCount}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Next scholar page"
+                    onClick={() => setScholarPage(Math.min(scholarPageCount, currentScholarPage + 1))}
+                    disabled={currentScholarPage === scholarPageCount}
+                    className="inline-flex items-center gap-1 rounded-lg disabled:opacity-40"
+                    style={{ ...body, height: 32, padding: '0 9px', border: `1px solid ${BORDER}`, background: '#fff', color: INK, fontSize: '0.72rem', cursor: currentScholarPage === scholarPageCount ? 'default' : 'pointer' }}
+                  >
+                    Next <ChevronRight size={13} />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </Card>
 
         <Card icon={Folder} title="Scholar groups">

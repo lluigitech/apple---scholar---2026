@@ -534,18 +534,19 @@ const initializeDatabase = () => {
 
     // Keep compliance threshold settings compatible with older databases.
     ensureColumns(db, 'compliance_settings', {
-        min_compliance: 'DECIMAL(5,2) NOT NULL DEFAULT 70.00',
-        allowed_missed: 'INT NOT NULL DEFAULT 2',
+        min_compliance: 'DECIMAL(5,2) NOT NULL DEFAULT 50.00',
+        allowed_missed: 'INT NOT NULL DEFAULT 0',
         required_hours: 'INT NOT NULL DEFAULT 30',
-        missed_submission_deduction: 'INT NOT NULL DEFAULT 2',
-        service_hour_shortfall_deduction: 'INT NOT NULL DEFAULT 1',
-        absent_duty_deduction: 'INT NOT NULL DEFAULT 2',
-        late_submission_deduction: 'INT NOT NULL DEFAULT 1',
+        missed_submission_deduction: 'INT NOT NULL DEFAULT 5',
+        service_hour_shortfall_deduction: 'INT NOT NULL DEFAULT 2',
+        late_duty_deduction: 'INT NOT NULL DEFAULT 2',
+        absent_duty_deduction: 'INT NOT NULL DEFAULT 10',
+        late_submission_deduction: 'INT NOT NULL DEFAULT 10',
         negative_letter_deduction: 'INT NOT NULL DEFAULT 1',
-        quality_drop_deduction: 'DECIMAL(4,2) NOT NULL DEFAULT 0.50',
+        quality_drop_deduction: 'DECIMAL(4,2) NOT NULL DEFAULT 5.00',
         extra_service_bonus: 'INT NOT NULL DEFAULT 2',
         good_maintenance_bonus: 'INT NOT NULL DEFAULT 5',
-        missed_submission_grace_count: 'INT NOT NULL DEFAULT 2',
+        missed_submission_grace_count: 'INT NOT NULL DEFAULT 0',
         late_submission_grace_count: 'INT NOT NULL DEFAULT 2',
         recovery_enabled: 'TINYINT(1) NOT NULL DEFAULT 1',
         early_submission_bonus: 'DECIMAL(4,2) NOT NULL DEFAULT 0.50',
@@ -553,13 +554,45 @@ const initializeDatabase = () => {
         consecutive_early_bonus: 'DECIMAL(4,2) NOT NULL DEFAULT 1.00',
         perfect_attendance_bonus: 'DECIMAL(4,2) NOT NULL DEFAULT 0.50',
         monthly_recovery_cap: 'DECIMAL(4,2) NOT NULL DEFAULT 2.00',
+        policy_version: 'INT NOT NULL DEFAULT 1',
     }).then(() => {
             console.log('✅ compliance_settings fields ensured');
             db.query(
                 'INSERT INTO compliance_settings (id) VALUES (1) ON DUPLICATE KEY UPDATE id = id',
                 (seedErr) => {
                     if (seedErr) console.error('Failed to seed compliance settings:', seedErr.message);
-                    else console.log('✅ compliance settings defaults ensured');
+                    else {
+                        console.log('✅ compliance settings defaults ensured');
+                        db.query(`
+                            UPDATE compliance_settings
+                            SET
+                                absent_duty_deduction = CASE
+                                    WHEN absent_duty_deduction = 2 THEN 10
+                                    ELSE absent_duty_deduction
+                                END,
+                                quality_drop_deduction = CASE
+                                    WHEN quality_drop_deduction = 0.50 THEN 5.00
+                                    ELSE quality_drop_deduction
+                                END,
+                                late_submission_deduction = CASE
+                                    WHEN policy_version < 5 AND late_submission_deduction IN (1, 5, 10, 50) THEN 10
+                                    ELSE late_submission_deduction
+                                END,
+                                min_compliance = CASE
+                                    WHEN policy_version < 5 AND min_compliance = 70.00 THEN 50.00
+                                    ELSE min_compliance
+                                END,
+                                missed_submission_deduction = CASE
+                                    WHEN policy_version < 6 AND missed_submission_deduction IN (2, 10) THEN 5
+                                    ELSE missed_submission_deduction
+                                END,
+                                policy_version = 8
+                            WHERE id = 1 AND policy_version < 8
+                        `, (policyErr) => {
+                            if (policyErr) console.error('Failed to update compliance penalty policy:', policyErr.message);
+                            else console.log('✅ compliance penalty policy updated');
+                        });
+                    }
                 }
             );
     }).catch((migrationError) => {
@@ -630,10 +663,11 @@ const initializeDatabase = () => {
 
     ensureColumns(db, 'duty_attendance', {
         check_out_at: 'DATETIME DEFAULT NULL',
+        marked_by_id: 'INT DEFAULT NULL',
     }).then(() => ensureIndexes(db, 'duty_attendance', {
         idx_duty_attendance_scholar_id: ['scholar_id'],
     })).then(() => {
-        console.log('✅ duty_attendance check-out field and scholar_id index ensured');
+        console.log('✅ duty_attendance metadata and scholar_id index ensured');
     }).catch((migrationError) => {
         console.error('Failed to ensure duty_attendance schema:', migrationError.message);
     });

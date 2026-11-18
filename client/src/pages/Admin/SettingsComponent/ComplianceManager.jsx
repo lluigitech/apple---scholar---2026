@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import {
-    Save, AlertTriangle, Percent, Clock3, ToggleLeft, ToggleRight, ListChecks, RotateCcw, CheckCircle2,
-    FileText, UserX, CalendarClock, BarChart3, RefreshCw, Gift, Send, Users, Trophy,
+    Save, AlertTriangle, Hash, ListChecks, RotateCcw, CheckCircle2,
+    FileText, UserX, CalendarClock, BarChart3, Lock,
 } from 'lucide-react';
 import AdminPageHeader from '../../../components/Admin/AdminPageHeader';
 
@@ -19,48 +19,36 @@ const SUCCESS_TINT = 'rgba(107,143,113,.12)';
 const WARNING = '#C08A3E';
 const DANGER = '#A24A4A';
 const DANGER_TINT = 'rgba(162,74,74,.12)';
+const BRONZE = '#A9784E';
 const RADIUS = 16;
 
 const display = { fontFamily: "'Playfair Display', Georgia, 'Times New Roman', serif" };
 const body = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
 
 const SETTING_FIELDS = [
-    { key: 'missed_submission_deduction', label: 'Overdue compliance task', hint: 'Deduction for each task still missing after grace allowances', icon: FileText },
-    { key: 'service_hour_shortfall_deduction', label: 'Service hour shortfall', hint: 'Deduction per missing hour', icon: Clock3 },
-    { key: 'absent_duty_deduction', label: 'Absent duty', hint: 'Deduction per missed duty', icon: UserX },
-    { key: 'late_submission_deduction', label: 'Late submission', hint: 'Deduction per overdue month', icon: CalendarClock },
-    { key: 'quality_drop_deduction', label: 'Quality drop', hint: 'Deduction per bucket below 70%', icon: BarChart3 },
-];
-
-const RECOVERY_GRACE_FIELDS = [
-    { key: 'missed_submission_grace_count', label: 'Overdue Task Grace', hint: 'Additional overdue tasks allowed before penalty' },
-    { key: 'late_submission_grace_count', label: 'Late Submission Grace', hint: 'Late periods allowed before penalty' },
+    { key: 'missed_submission_deduction', label: 'Overdue required document', hint: 'Deduct points for each Admin-assigned document not submitted by its deadline. Late submissions are not accepted.', icon: FileText },
+    { key: 'late_duty_deduction', label: 'Late to duty', hint: 'Deduct points each time staff records a scholar as late for duty attendance', icon: CalendarClock },
+    { key: 'absent_duty_deduction', label: 'Duty marked absent', hint: 'Flags and deducts points for each duty attendance recorded as absent', icon: UserX },
+    { key: 'late_submission_deduction', label: 'No submission for a long time', hint: 'If no submission is recorded for more than 30 days after the last submission or account creation, deduct points. Deduct the same amount every additional 30 days, up to twice the configured amount.', icon: CalendarClock },
+    { key: 'quality_drop_deduction', label: 'Low average submission quality', hint: 'Flags and deducts points for each 10-point band below a 50% average quality score', icon: BarChart3 },
 ];
 
 const RECOVERY_BONUS_FIELDS = [
-    { key: 'early_submission_bonus', label: 'Early submission', hint: 'Bonus for early monthly report', icon: Send },
-    { key: 'service_hours_completion_bonus', label: 'Service hours met', hint: 'Bonus for completing required hours', icon: Clock3 },
-    { key: 'consecutive_early_bonus', label: 'Consecutive early', hint: 'Bonus for multiple early reports', icon: BarChart3 },
-    { key: 'perfect_attendance_bonus', label: 'Perfect attendance', hint: 'Bonus for perfect attendance', icon: Users },
-    { key: 'monthly_recovery_cap', label: 'Monthly recovery cap', hint: 'Maximum bonus points per month', icon: Trophy },
+    { key: 'early_submission_bonus', label: 'Early letter submission', hint: 'Award points when a monthly letter is submitted at least 7 days before month-end.', icon: FileText },
+    { key: 'consecutive_early_bonus', label: 'Consecutive early submissions', hint: 'Award points for each additional consecutive month with an early letter.', icon: CalendarClock },
+    { key: 'perfect_attendance_bonus', label: 'Perfect duty attendance', hint: 'Award points when all recorded duty attendance is present.', icon: CheckCircle2 },
 ];
 
 const DEFAULT_SETTINGS = {
-    min_compliance: '70',
-    allowed_missed: '2',
-    required_hours: '30',
-    missed_submission_deduction: '2',
-    service_hour_shortfall_deduction: '1',
-    absent_duty_deduction: '2',
-    late_submission_deduction: '1',
-    quality_drop_deduction: '0.5',
-    extra_service_bonus: '2',
+    min_compliance: '50',
+    missed_submission_deduction: '5',
+    late_duty_deduction: '2',
+    absent_duty_deduction: '10',
+    late_submission_deduction: '10',
+    quality_drop_deduction: '5',
     good_maintenance_bonus: '5',
-    missed_submission_grace_count: '2',
-    late_submission_grace_count: '2',
     recovery_enabled: true,
     early_submission_bonus: '0.50',
-    service_hours_completion_bonus: '2.00',
     consecutive_early_bonus: '1.00',
     perfect_attendance_bonus: '0.50',
     monthly_recovery_cap: '2.00',
@@ -101,10 +89,10 @@ const CardHeader = ({ icon, title, subtitle, right }) => (
 // Input with a unit label inside the box. `variant="field"` = full width, `variant="row"` = compact right-aligned cell.
 const UnitInput = ({ id, value, onChange, unit, min, max, step, disabled, text, variant = 'row', ariaLabel }) => (
     <div
-        className="unit-box flex items-stretch overflow-hidden"
+        className={`unit-box ${variant === 'row' ? 'unit-row' : ''} flex items-stretch overflow-hidden`}
         style={{
             border: `1px solid ${BORDER}`, borderRadius: 10, background: disabled ? BG : '#fff',
-            width: variant === 'row' ? 'clamp(120px, 34vw, 150px)' : '100%', opacity: disabled ? 0.6 : 1,
+            width: variant === 'row' ? undefined : '100%', opacity: disabled ? 0.6 : 1,
         }}
     >
         <input
@@ -135,31 +123,124 @@ const UnitInput = ({ id, value, onChange, unit, min, max, step, disabled, text, 
 );
 
 const RuleRow = ({ icon, label, hint, children }) => (
-    <div className="rule-row flex items-center justify-between gap-3" style={{ padding: '12px 4px' }}>
-        <div className="flex items-center gap-3 min-w-0">
+    <div className="rule-row flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ padding: '14px 4px' }}>
+        <div className="flex items-start sm:items-center gap-3 min-w-0">
             <IconBadge icon={icon} size={34} />
             <div className="min-w-0">
                 <p style={{ ...body, fontSize: '0.86rem', fontWeight: 600, color: INK }}>{label}</p>
-                <p style={{ ...body, fontSize: '0.75rem', color: MUTED, marginTop: 1 }}>{hint}</p>
+                <p style={{ ...body, fontSize: '0.75rem', color: MUTED, marginTop: 1, lineHeight: 1.5 }}>{hint}</p>
             </div>
         </div>
-        <div className="shrink-0">{children}</div>
+        <div className="w-full sm:w-auto sm:shrink-0">{children}</div>
+    </div>
+);
+
+const Switch = ({ checked, onChange, label }) => (
+    <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={() => onChange(!checked)}
+        className="shrink-0"
+        style={{ width: 44, height: 26, borderRadius: 999, border: 'none', padding: 3, cursor: 'pointer', background: checked ? PRIMARY : '#D9CBB8', transition: 'background .2s ease' }}
+    >
+        <span style={{ display: 'block', width: 20, height: 20, borderRadius: '50%', background: '#fff', transform: checked ? 'translateX(18px)' : 'translateX(0)', transition: 'transform .2s ease' }} />
+    </button>
+);
+
+const RiskBar = ({ minimum }) => {
+    const parsedMinimum = parseFloat(minimum);
+    const score = Number.isFinite(parsedMinimum) ? Math.max(0, Math.min(100, parsedMinimum)) : 50;
+    const scoreLabel = score.toFixed(2);
+    return (
+        <div>
+            <div
+                role="img"
+                aria-label={`High risk below ${scoreLabel} points, medium risk at or above ${scoreLabel} points`}
+                className="flex overflow-hidden"
+                style={{ height: 10, borderRadius: 999 }}
+            >
+                <span style={{ width: `${score}%`, background: DANGER }} />
+                <span style={{ flex: 1, background: WARNING }} />
+            </div>
+            <div className="flex justify-between gap-3 mt-1.5" style={{ ...body, fontSize: '0.72rem', color: MUTED }}>
+                <span>High risk · below {scoreLabel} points</span>
+                <span>Medium risk · {scoreLabel} points and above</span>
+            </div>
+        </div>
+    );
+};
+
+const PasswordConfirmDialog = ({ password, onPasswordChange, busy, error, onCancel, onConfirm }) => (
+    <div
+        className="fixed inset-0 flex items-center justify-center p-4"
+        style={{ background: 'rgba(36,21,18,0.45)', zIndex: 60 }}
+        onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onCancel(); }}
+    >
+        <form
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="compliance-password-title"
+            className="w-full"
+            onSubmit={onConfirm}
+            style={{ maxWidth: 420, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 22, boxShadow: '0 12px 32px rgba(74,23,48,0.2)' }}
+        >
+            <div className="flex items-start gap-3">
+                <IconBadge icon={Lock} />
+                <div className="min-w-0">
+                    <h2 id="compliance-password-title" style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: INK }}>Confirm your password</h2>
+                    <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 3 }}>Enter your current password to save compliance settings.</p>
+                </div>
+            </div>
+            <label htmlFor="compliance-current-password" style={{ ...labelStyle, marginTop: 16 }}>Current password</label>
+            <input
+                id="compliance-current-password"
+                type="password"
+                autoComplete="current-password"
+                autoFocus
+                required
+                value={password}
+                onChange={(e) => onPasswordChange(e.target.value)}
+                style={{ ...body, width: '100%', minHeight: 40, padding: '9px 12px', border: `1px solid ${BORDER}`, borderRadius: 10, background: '#fff', color: INK, fontSize: '0.84rem' }}
+            />
+            {error && <p role="alert" style={{ ...body, color: DANGER, background: DANGER_TINT, borderRadius: 10, padding: '8px 12px', marginTop: 12, fontSize: '0.78rem' }}>{error}</p>}
+            <div className="flex justify-end gap-2" style={{ marginTop: 18 }}>
+                <button
+                    type="button"
+                    onClick={onCancel}
+                    disabled={busy}
+                    style={{ ...body, minHeight: 40, padding: '9px 16px', border: `1px solid ${BORDER}`, borderRadius: 10, background: SURFACE, color: PRIMARY, fontSize: '0.8rem', fontWeight: 600, cursor: busy ? 'wait' : 'pointer' }}
+                >
+                    Cancel
+                </button>
+                <button
+                    type="submit"
+                    disabled={busy || !password}
+                    style={{ ...body, minHeight: 40, padding: '9px 18px', border: 0, borderRadius: 10, background: PRIMARY, color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy || !password ? 0.6 : 1 }}
+                >
+                    {busy ? 'Confirming…' : 'Confirm & Save'}
+                </button>
+            </div>
+        </form>
     </div>
 );
 
 // `embedded` = rendered inside the Settings page, which already shows the page header and tabs.
 const ComplianceManager = ({ embedded = false }) => {
     const [minCompliance, setMinCompliance] = useState(DEFAULT_SETTINGS.min_compliance);
-    const [allowedMissed, setAllowedMissed] = useState(DEFAULT_SETTINGS.allowed_missed);
-    const [requiredHours, setRequiredHours] = useState(DEFAULT_SETTINGS.required_hours);
     const [settings, setSettings] = useState(DEFAULT_SETTINGS);
     const [saving, setSaving] = useState(false);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [saved, setSaved] = useState(false);
     const [dirty, setDirty] = useState(false);
+    const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+    const [currentPassword, setCurrentPassword] = useState('');
+    const [passwordError, setPasswordError] = useState('');
 
     const snapshotRef = useRef(null);
+    const pendingPayloadRef = useRef(null);
 
     const RAW_API = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     const API = RAW_API.replace(/\/+$/, '').replace(/\/api$/, '') + '/api';
@@ -174,29 +255,25 @@ const ComplianceManager = ({ embedded = false }) => {
                 if (!mounted) return;
 
                 const nextMin = String(res.data.min_compliance ?? DEFAULT_SETTINGS.min_compliance);
-                const nextMissed = String(res.data.allowed_missed ?? DEFAULT_SETTINGS.allowed_missed);
-                const nextHours = String(res.data.required_hours ?? DEFAULT_SETTINGS.required_hours);
                 const nextSettings = {
                     missed_submission_deduction: String(res.data.missed_submission_deduction ?? DEFAULT_SETTINGS.missed_submission_deduction),
-                    service_hour_shortfall_deduction: String(res.data.service_hour_shortfall_deduction ?? DEFAULT_SETTINGS.service_hour_shortfall_deduction),
+                    late_duty_deduction: String(res.data.late_duty_deduction ?? DEFAULT_SETTINGS.late_duty_deduction),
                     absent_duty_deduction: String(res.data.absent_duty_deduction ?? DEFAULT_SETTINGS.absent_duty_deduction),
                     late_submission_deduction: String(res.data.late_submission_deduction ?? DEFAULT_SETTINGS.late_submission_deduction),
                     quality_drop_deduction: String(res.data.quality_drop_deduction ?? DEFAULT_SETTINGS.quality_drop_deduction),
-                    missed_submission_grace_count: String(res.data.missed_submission_grace_count ?? DEFAULT_SETTINGS.missed_submission_grace_count),
-                    late_submission_grace_count: String(res.data.late_submission_grace_count ?? DEFAULT_SETTINGS.late_submission_grace_count),
-                    recovery_enabled: res.data.recovery_enabled !== undefined ? Boolean(res.data.recovery_enabled) : DEFAULT_SETTINGS.recovery_enabled,
+                    recovery_enabled: res.data.recovery_enabled === undefined
+                        ? DEFAULT_SETTINGS.recovery_enabled
+                        : res.data.recovery_enabled === true || res.data.recovery_enabled === 1
+                            || res.data.recovery_enabled === '1' || res.data.recovery_enabled === 'true',
                     early_submission_bonus: String(res.data.early_submission_bonus ?? DEFAULT_SETTINGS.early_submission_bonus),
-                    service_hours_completion_bonus: String(res.data.service_hours_completion_bonus ?? DEFAULT_SETTINGS.service_hours_completion_bonus),
                     consecutive_early_bonus: String(res.data.consecutive_early_bonus ?? DEFAULT_SETTINGS.consecutive_early_bonus),
                     perfect_attendance_bonus: String(res.data.perfect_attendance_bonus ?? DEFAULT_SETTINGS.perfect_attendance_bonus),
                     monthly_recovery_cap: String(res.data.monthly_recovery_cap ?? DEFAULT_SETTINGS.monthly_recovery_cap),
                 };
 
                 setMinCompliance(nextMin);
-                setAllowedMissed(nextMissed);
-                setRequiredHours(nextHours);
                 setSettings(nextSettings);
-                snapshotRef.current = { min: nextMin, missed: nextMissed, hours: nextHours, settings: nextSettings };
+                snapshotRef.current = { min: nextMin, settings: nextSettings };
                 setDirty(false);
             } catch (e) {
                 console.error('Failed to load compliance settings', e);
@@ -217,128 +294,137 @@ const ComplianceManager = ({ embedded = false }) => {
     };
 
     const handleMinComplianceChange = (v) => { setMinCompliance(v); markDirty(); };
-    const handleAllowedMissedChange = (v) => { setAllowedMissed(v); markDirty(); };
-    const handleRequiredHoursChange = (v) => { setRequiredHours(v); markDirty(); };
-
     const handleReset = () => {
         if (!snapshotRef.current) return;
         setMinCompliance(snapshotRef.current.min);
-        setAllowedMissed(snapshotRef.current.missed);
-        setRequiredHours(snapshotRef.current.hours);
         setSettings(snapshotRef.current.settings);
         setError('');
         setDirty(false);
     };
 
-    const handleSave = async () => {
+    const buildSavePayload = () => {
+        setError('');
+
+        const parsedCompliance = parseFloat(minCompliance);
+        if (Number.isNaN(parsedCompliance) || parsedCompliance < 0 || parsedCompliance > 100) {
+            setError('Minimum overall compliance must be a number between 0 and 100.');
+            return null;
+        }
+
+        const parsedSettings = {};
+        for (const field of SETTING_FIELDS) {
+            const rawValue = settings[field.key];
+            const value = field.key === 'quality_drop_deduction'
+                ? parseFloat(rawValue)
+                : parseInt(rawValue, 10);
+            const maxValue = 1000;
+
+            if (Number.isNaN(value) || value < 0 || value > maxValue) {
+                setError(`${field.label} must be a non-negative number.`);
+                return null;
+            }
+            parsedSettings[field.key] = value;
+        }
+
+        parsedSettings.good_maintenance_bonus = parseInt(settings.good_maintenance_bonus ?? DEFAULT_SETTINGS.good_maintenance_bonus, 10);
+        const parsedRecoverySettings = {
+            recovery_enabled: Boolean(settings.recovery_enabled),
+            early_submission_bonus: parseFloat(settings.early_submission_bonus),
+            consecutive_early_bonus: parseFloat(settings.consecutive_early_bonus),
+            perfect_attendance_bonus: parseFloat(settings.perfect_attendance_bonus),
+            monthly_recovery_cap: parseFloat(settings.monthly_recovery_cap),
+        };
+        const invalidRecoverySetting = Object.entries(parsedRecoverySettings)
+            .filter(([key]) => key !== 'recovery_enabled')
+            .find(([, value]) => Number.isNaN(value) || value < 0 || value > 99.99);
+        if (invalidRecoverySetting) {
+            setError(`${invalidRecoverySetting[0]} must be between 0 and 99.99 points.`);
+            return null;
+        }
+
+        return {
+            min_compliance: parsedCompliance.toFixed(2),
+            allowed_missed: 0,
+            ...parsedSettings,
+            ...parsedRecoverySettings,
+        };
+    };
+
+    const handleSave = () => {
+        const payload = buildSavePayload();
+        if (!payload) return;
+
+        pendingPayloadRef.current = payload;
+        setCurrentPassword('');
+        setPasswordError('');
+        setPasswordDialogOpen(true);
+    };
+
+    const handleConfirmSave = async (event) => {
+        event.preventDefault();
+        if (!currentPassword || !pendingPayloadRef.current) return;
+
         setSaving(true);
         setError('');
         setSaved(false);
 
         try {
-            const parsedCompliance = parseFloat(minCompliance);
-            if (Number.isNaN(parsedCompliance) || parsedCompliance < 0 || parsedCompliance > 100) {
-                setError('Minimum overall compliance must be a number between 0 and 100.');
-                return;
-            }
-
-            const parsedMissed = parseInt(allowedMissed, 10);
-            if (Number.isNaN(parsedMissed) || parsedMissed < 0 || parsedMissed > 100) {
-                setError('Max missed submissions must be an integer between 0 and 100.');
-                return;
-            }
-
-            const parsedHours = parseInt(requiredHours, 10);
-            if (Number.isNaN(parsedHours) || parsedHours < 0 || parsedHours > 10000) {
-                setError('Required service hours must be an integer between 0 and 10000.');
-                return;
-            }
-
-            const parsedSettings = {};
-            for (const field of SETTING_FIELDS) {
-                const rawValue = settings[field.key];
-                const value = field.key === 'quality_drop_deduction'
-                    ? parseFloat(rawValue)
-                    : parseInt(rawValue, 10);
-
-                if (Number.isNaN(value) || value < 0 || value > 1000) {
-                    setError(`${field.label} must be a non-negative number.`);
-                    return;
-                }
-                parsedSettings[field.key] = value;
-            }
-
-            parsedSettings.extra_service_bonus = parseInt(settings.extra_service_bonus ?? DEFAULT_SETTINGS.extra_service_bonus, 10);
-            parsedSettings.good_maintenance_bonus = parseInt(settings.good_maintenance_bonus ?? DEFAULT_SETTINGS.good_maintenance_bonus, 10);
-
-            const parsedRecoverySettings = {
-                missed_submission_grace_count: parseInt(settings.missed_submission_grace_count, 10),
-                late_submission_grace_count: parseInt(settings.late_submission_grace_count, 10),
-                recovery_enabled: Boolean(settings.recovery_enabled),
-                early_submission_bonus: parseFloat(settings.early_submission_bonus),
-                service_hours_completion_bonus: parseFloat(settings.service_hours_completion_bonus),
-                consecutive_early_bonus: parseFloat(settings.consecutive_early_bonus),
-                perfect_attendance_bonus: parseFloat(settings.perfect_attendance_bonus),
-                monthly_recovery_cap: parseFloat(settings.monthly_recovery_cap),
-            };
-
-            if (Number.isNaN(parsedRecoverySettings.missed_submission_grace_count) || parsedRecoverySettings.missed_submission_grace_count < 0 || parsedRecoverySettings.missed_submission_grace_count > 100) {
-                setError('Missed Submission Grace Count must be a non-negative integer.');
-                return;
-            }
-            if (Number.isNaN(parsedRecoverySettings.late_submission_grace_count) || parsedRecoverySettings.late_submission_grace_count < 0 || parsedRecoverySettings.late_submission_grace_count > 100) {
-                setError('Late Submission Grace Count must be a non-negative integer.');
-                return;
-            }
-            for (const key of ['early_submission_bonus', 'service_hours_completion_bonus', 'consecutive_early_bonus', 'perfect_attendance_bonus', 'monthly_recovery_cap']) {
-                const value = parsedRecoverySettings[key];
-                if (Number.isNaN(value) || value < 0 || value > 100) {
-                    setError(`${key.replace(/_/g, ' ')} must be a non-negative number.`);
-                    return;
-                }
-            }
-
             const token = localStorage.getItem('token');
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
-
             await axios.post(`${API}/admin/compliance-settings`, {
-                min_compliance: parsedCompliance.toFixed(2),
-                allowed_missed: parsedMissed,
-                required_hours: parsedHours,
-                ...parsedSettings,
-                ...parsedRecoverySettings,
+                ...pendingPayloadRef.current,
+                currentPassword,
             }, { headers });
 
-            snapshotRef.current = { min: minCompliance, missed: allowedMissed, hours: requiredHours, settings };
+            snapshotRef.current = { min: minCompliance, settings };
             setDirty(false);
             setSaved(true);
             setTimeout(() => setSaved(false), 2500);
+            setPasswordDialogOpen(false);
+            pendingPayloadRef.current = null;
+            setCurrentPassword('');
         } catch (e) {
-            console.error('Failed to save compliance settings', e);
-            if (e.response && (e.response.status === 401 || e.response.status === 403)) {
-                setError('Unauthorized. Please sign in as an admin.');
+            console.error('Failed to save compliance settings:', e.response?.data?.message || e.message || 'Request failed');
+            if (e.response?.status === 401) {
+                setCurrentPassword('');
+                setPasswordError(e.response.data?.message || 'Incorrect password. Please try again.');
+            } else if (e.response?.status === 403) {
+                setPasswordError(e.response.data?.message || 'Only administrators can save compliance settings.');
             } else if (e.response && e.response.data && e.response.data.message) {
                 setError(e.response.data.message);
+                setPasswordDialogOpen(false);
+                setCurrentPassword('');
+                pendingPayloadRef.current = null;
             } else {
                 setError('Failed to save settings.');
+                setPasswordDialogOpen(false);
+                setCurrentPassword('');
+                pendingPayloadRef.current = null;
             }
         } finally {
             setSaving(false);
         }
     };
 
-    const activeRuleCount = SETTING_FIELDS.length + RECOVERY_GRACE_FIELDS.length + RECOVERY_BONUS_FIELDS.length;
+    const cancelPasswordConfirmation = () => {
+        setPasswordDialogOpen(false);
+        setCurrentPassword('');
+        setPasswordError('');
+        pendingPayloadRef.current = null;
+    };
+
+    const activeRuleCount = SETTING_FIELDS.length + (settings.recovery_enabled ? RECOVERY_BONUS_FIELDS.length + 1 : 0);
     const minScoreNumber = parseFloat(minCompliance);
-    const minScoreLabel = Number.isNaN(minScoreNumber) ? `${minCompliance}%` : `${minScoreNumber.toFixed(2)}%`;
+    const minScoreLabel = Number.isNaN(minScoreNumber) ? `${minCompliance} points` : `${minScoreNumber.toFixed(2)} points`;
+    const riskBandExplanation = `Medium risk is at or above ${minScoreLabel}; high risk is below ${minScoreLabel}.`;
+    const parsedLateDeduction = parseFloat(settings.late_submission_deduction);
+    const lateDeductionPoints = Number.isFinite(parsedLateDeduction) ? Math.max(0, parsedLateDeduction) : 10;
+    const latePenaltyMaximum = lateDeductionPoints * 2;
 
     const kpiCards = [
-        { key: 'min', label: 'Minimum Score', value: minScoreLabel, icon: Percent },
-        { key: 'hours', label: 'Required Service Hours', value: `${requiredHours} hrs`, icon: Clock3 },
-        { key: 'recovery', label: 'Recovery Status', value: settings.recovery_enabled ? 'On' : 'Off', icon: settings.recovery_enabled ? ToggleRight : ToggleLeft },
+        { key: 'min', label: 'Minimum Score', value: minScoreLabel, icon: Hash },
         { key: 'rules', label: 'Active Policy Rules', value: activeRuleCount, icon: ListChecks },
     ];
-
-    const recoveryOff = !settings.recovery_enabled;
 
     return (
         <section className="min-h-full" style={{ background: embedded ? 'transparent' : BG }}>
@@ -346,6 +432,8 @@ const ComplianceManager = ({ embedded = false }) => {
                 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Inter:wght@400;500;600;700&display=swap');
 
                 .unit-box:focus-within { border-color: ${PRIMARY} !important; box-shadow: 0 0 0 3px ${PRIMARY_TINT}; }
+                .unit-row { width: 100%; }
+                @media (min-width: 640px) { .unit-row { width: 150px; } }
 
                 .skeleton-pulse { animation: exec-pulse 1.4s ease-in-out infinite; }
                 @keyframes exec-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
@@ -364,7 +452,7 @@ const ComplianceManager = ({ embedded = false }) => {
                 {!embedded && (
                     <AdminPageHeader
                         title="Compliance Settings"
-                        description="Configure scholar compliance thresholds, policy rules, and recovery settings."
+                        description="Configure scholar compliance thresholds, penalty rules, and recovery points."
                     />
                 )}
                 {error && (
@@ -380,10 +468,10 @@ const ComplianceManager = ({ embedded = false }) => {
                     </div>
                 )}
 
-                {/* ── 1. KPI cards ── */}
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" style={{ marginBottom: 20 }}>
+                {/* ── 1. Summary cards ── */}
+                <div className="grid gap-4 grid-cols-1 sm:grid-cols-2" style={{ marginBottom: 20 }}>
                     {loading ? (
-                        Array.from({ length: 4 }).map((_, i) => (
+                        Array.from({ length: kpiCards.length }).map((_, i) => (
                             <div key={i} className="flex items-center gap-4" style={{ ...cardStyle, padding: '16px 20px' }}>
                                 <Skeleton style={{ width: 44, height: 44, borderRadius: '50%' }} />
                                 <div style={{ flex: 1 }}>
@@ -419,111 +507,116 @@ const ComplianceManager = ({ embedded = false }) => {
                 ) : (
                     <div className="flex flex-col gap-5">
 
-                        {/* ── 2. Core Compliance Requirements ── */}
+                        {/* ── 2. Core requirement + risk bar ── */}
                         <div style={{ ...cardStyle, padding: 20 }}>
-                            <CardHeader icon={FileText} title="Core Compliance Requirements" subtitle="Set the main compliance thresholds for all scholars." />
-                            <div className="grid gap-5 sm:grid-cols-3" style={{ marginTop: 18 }}>
+                            <CardHeader icon={FileText} title="Core Compliance Requirement" subtitle="The score below which a scholar is treated as high risk." />
+                            <div className="grid gap-5 md:grid-cols-[minmax(0,260px)_1fr] items-center" style={{ marginTop: 18 }}>
                                 <div>
-                                    <label htmlFor="min-compliance" style={labelStyle}>Minimum Compliance</label>
-                                    <UnitInput id="min-compliance" variant="field" value={minCompliance} onChange={handleMinComplianceChange} unit="%" min="0" max="100" step="0.01" />
-                                    <p style={helperStyle}>Minimum overall compliance score</p>
+                                    <label htmlFor="min-compliance" style={labelStyle}>Minimum Compliance Score</label>
+                                    <UnitInput id="min-compliance" variant="field" value={minCompliance} onChange={handleMinComplianceChange} unit="points" min="0" max="100" step="0.01" />
+                                    <p style={helperStyle}>Minimum overall compliance points</p>
                                 </div>
-                                <div>
-                                    <label htmlFor="allowed-missed" style={labelStyle}>Max Missed Submissions</label>
-                                    <UnitInput id="allowed-missed" variant="field" value={allowedMissed} onChange={handleAllowedMissedChange} min="0" max="100" />
-                                    <p style={helperStyle}>Overdue tasks allowed before penalty</p>
-                                </div>
-                                <div>
-                                    <label htmlFor="required-hours" style={labelStyle}>Required Service Hours</label>
-                                    <UnitInput id="required-hours" variant="field" value={requiredHours} onChange={handleRequiredHoursChange} unit="hrs" min="0" max="10000" />
-                                    <p style={helperStyle}>Total service hours per period</p>
-                                </div>
+                                <RiskBar minimum={minCompliance} />
                             </div>
                         </div>
 
-                        {/* ── 3. Penalty Rules ── */}
+                        {/* ── 3. Flagging rules ── */}
                         <div style={{ ...cardStyle, padding: 20 }}>
-                            <CardHeader icon={AlertTriangle} title="Penalty Rules" subtitle="The overdue-task deduction applies to each missed Monthly Report, Report Card/Grades, COR Upload, or Other Documents task after grace allowances." />
+                            <CardHeader icon={AlertTriangle} title="Flagging Rules" subtitle={`A score below ${minScoreLabel} sets high risk; active issues may also trigger a separate review flag.`} />
+                            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" style={{ marginTop: 16 }}>
+                                {[
+                                    { n: '01', title: 'Score starts at 100', text: 'Penalties lower it. Eligible maintenance credit may offset deductions.' },
+                                    { n: '02', title: 'Overdue tasks deduct points', text: 'An overdue task does not create a flag by itself.' },
+                                    { n: '03', title: `Below ${minScoreLabel} is flagged`, text: 'Other active compliance issues may also be flagged for review.' },
+                                    { n: '04', title: 'Negative sentiment review', text: 'Flag after negative letters in 5 different months or 3 consecutive months within the account year. This does not deduct compliance points.' },
+                                ].map((step) => (
+                                    <div key={step.n} style={{ background: BG, borderRadius: 12, padding: '14px 16px' }}>
+                                        <span style={{ ...display, fontSize: '1.5rem', fontWeight: 600, color: BRONZE, lineHeight: 1 }}>{step.n}</span>
+                                        <p style={{ ...body, fontSize: '0.84rem', fontWeight: 600, color: INK, marginTop: 8 }}>{step.title}</p>
+                                        <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 3, lineHeight: 1.5 }}>{step.text}</p>
+                                    </div>
+                                ))}
+                            </div>
+                            <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 12, lineHeight: 1.55 }}>
+                                {riskBandExplanation} The score determines risk level; an active flag can still appear in the Medium Risk group.
+                                Overdue tasks, late or absent duty attendance, prolonged gaps between submissions, and low submission quality affect the score. Their settings are in Penalty Rules below. Negative sentiment can trigger a separate review flag, but it does not affect the score.
+                            </p>
+                        </div>
+
+                        {/* ── 4. Penalty Rules ── */}
+                        <div style={{ ...cardStyle, padding: 20 }}>
+                            <CardHeader icon={AlertTriangle} title="Penalty Rules" subtitle="Points are deducted for policy violations. Admin-assigned documents are not accepted after their deadline." />
                             <div style={{ marginTop: 14 }}>
-                                {SETTING_FIELDS.map(({ key, label, hint, icon }) => (
+                                {SETTING_FIELDS.map(({ key, label, hint, icon, unit }) => {
+                                    const ruleHint = key === 'late_submission_deduction'
+                                        ? `If no submission is recorded for more than 30 days after the last submission or account creation, deduct ${lateDeductionPoints} points. Deduct another ${lateDeductionPoints} points every additional 30 days, up to ${latePenaltyMaximum} points total.`
+                                        : key === 'missed_submission_deduction'
+                                            ? `Deduct ${settings.missed_submission_deduction} points for each Admin-assigned document not submitted by its deadline. Late submissions are not accepted.`
+                                            : hint;
+                                    return (
+                                        <RuleRow key={key} icon={icon} label={label} hint={ruleHint}>
+                                            <UnitInput
+                                                ariaLabel={`${label} ${unit || 'points'}`}
+                                                value={settings[key]}
+                                                onChange={(v) => handleSettingChange(key, v)}
+                                                unit={unit || 'points'}
+                                                min="0" max="1000"
+                                                step={key === 'quality_drop_deduction' ? '0.1' : '1'}
+                                            />
+                                        </RuleRow>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* ── 5. Recovery Points ── */}
+                        <div style={{ ...cardStyle, padding: 20 }}>
+                            <CardHeader icon={Hash} title="Recovery Points" subtitle="Configure optional bonus points that can offset compliance deductions." />
+                            <div className="flex items-center justify-between gap-4" style={{ marginTop: 18, padding: '12px 4px', borderBottom: `1px solid ${BORDER}` }}>
+                                <div className="min-w-0">
+                                    <p style={{ ...body, fontSize: '0.86rem', fontWeight: 600, color: INK }}>Enable recovery points</p>
+                                    <p style={{ ...body, fontSize: '0.75rem', color: MUTED, marginTop: 2 }}>Award the bonuses below when scholars meet the listed conditions.</p>
+                                </div>
+                                <Switch
+                                    checked={settings.recovery_enabled}
+                                    onChange={(value) => handleSettingChange('recovery_enabled', value)}
+                                    label="Enable recovery points"
+                                />
+                            </div>
+                            <div style={{ marginTop: 4, opacity: settings.recovery_enabled ? 1 : 0.55 }}>
+                                {RECOVERY_BONUS_FIELDS.map(({ key, label, hint, icon }) => (
                                     <RuleRow key={key} icon={icon} label={label} hint={hint}>
                                         <UnitInput
                                             ariaLabel={`${label} points`}
                                             value={settings[key]}
                                             onChange={(v) => handleSettingChange(key, v)}
                                             unit="points"
-                                            min="0" max="1000"
-                                            step={key === 'quality_drop_deduction' ? '0.1' : '1'}
+                                            min="0"
+                                            max="99.99"
+                                            step="0.01"
+                                            disabled={!settings.recovery_enabled}
                                         />
                                     </RuleRow>
                                 ))}
+                                <RuleRow
+                                    icon={ListChecks}
+                                    label="Recovery points cap"
+                                    hint="Maximum recovery bonus earned per scholar, per calendar month. Earned monthly points accumulate in the current compliance score."
+                                >
+                                    <UnitInput
+                                        ariaLabel="Recovery points cap"
+                                        value={settings.monthly_recovery_cap}
+                                        onChange={(value) => handleSettingChange('monthly_recovery_cap', value)}
+                                        unit="points"
+                                        min="0"
+                                        max="99.99"
+                                        step="0.01"
+                                        disabled={!settings.recovery_enabled}
+                                    />
+                                </RuleRow>
                             </div>
                         </div>
 
-                        {/* ── 4. Recovery System + Recovery Bonuses ── */}
-                        <div className="grid gap-5 lg:grid-cols-2 items-start">
-
-                            <div style={{ ...cardStyle, padding: 20 }}>
-                                <CardHeader icon={RefreshCw} title="Recovery System" subtitle="Configure recovery settings and grace allowances." />
-
-                                <div className="flex items-center justify-between gap-4" style={{ marginTop: 16, padding: '12px 14px', background: BG, borderRadius: 12 }}>
-                                    <div>
-                                        <p style={{ ...body, fontSize: '0.86rem', fontWeight: 600, color: INK }}>Enable Recovery System</p>
-                                        <p style={{ ...body, fontSize: '0.75rem', color: MUTED, marginTop: 1 }}>Allow scholars to recover from deductions.</p>
-                                    </div>
-                                    <label className="inline-flex items-center gap-2.5 cursor-pointer select-none shrink-0">
-                                        <span style={{ ...body, fontSize: '0.74rem', fontWeight: 700, color: settings.recovery_enabled ? SUCCESS : MUTED }}>
-                                            {settings.recovery_enabled ? 'On' : 'Off'}
-                                        </span>
-                                        <span className="relative inline-block" style={{ width: 40, height: 22 }}>
-                                            <input
-                                                type="checkbox"
-                                                role="switch"
-                                                aria-label="Enable recovery system"
-                                                checked={settings.recovery_enabled}
-                                                onChange={(e) => handleSettingChange('recovery_enabled', e.target.checked)}
-                                                className="absolute inset-0 opacity-0 cursor-pointer z-10"
-                                            />
-                                            <span className="absolute inset-0 rounded-full transition-colors" style={{ background: settings.recovery_enabled ? PRIMARY : BORDER }} />
-                                            <span className="absolute rounded-full bg-white transition-transform" style={{ width: 18, height: 18, top: 2, left: 2, transform: settings.recovery_enabled ? 'translateX(18px)' : 'translateX(0)', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
-                                        </span>
-                                    </label>
-                                </div>
-
-                                <div className="grid gap-4 sm:grid-cols-3" style={{ marginTop: 18, opacity: recoveryOff ? 0.55 : 1, transition: 'opacity 200ms ease' }}>
-                                    {RECOVERY_GRACE_FIELDS.map(({ key, label, hint }) => (
-                                        <div key={key}>
-                                            <label htmlFor={`rec-${key}`} style={labelStyle}>{label}</label>
-                                            <UnitInput id={`rec-${key}`} variant="field" value={settings[key]} onChange={(v) => handleSettingChange(key, v)} disabled={recoveryOff} min="0" max="100" />
-                                            <p style={helperStyle}>{hint}</p>
-                                        </div>
-                                    ))}
-                                    <div>
-                                        <label htmlFor="rec-cap" style={labelStyle}>Monthly Recovery Cap</label>
-                                        <UnitInput id="rec-cap" variant="field" text value={settings.monthly_recovery_cap} onChange={(v) => handleSettingChange('monthly_recovery_cap', v)} unit="points" disabled={recoveryOff} />
-                                        <p style={helperStyle}>Maximum recovery points per month</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div style={{ ...cardStyle, padding: 20, opacity: recoveryOff ? 0.75 : 1, transition: 'opacity 200ms ease' }}>
-                                <CardHeader icon={Gift} title="Recovery Bonuses" subtitle="Points awarded for good performance and recovery." />
-                                <div style={{ marginTop: 14 }}>
-                                    {RECOVERY_BONUS_FIELDS.map(({ key, label, hint, icon }) => (
-                                        <RuleRow key={key} icon={icon} label={label} hint={hint}>
-                                            <UnitInput
-                                                ariaLabel={`${label} points`}
-                                                text
-                                                value={settings[key]}
-                                                onChange={(v) => handleSettingChange(key, v)}
-                                                unit="points"
-                                                disabled={recoveryOff}
-                                            />
-                                        </RuleRow>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
                     </div>
                 )}
             </div>
@@ -581,6 +674,16 @@ const ComplianceManager = ({ embedded = false }) => {
                     </div>
                 </div>
             </div>
+            {passwordDialogOpen && (
+                <PasswordConfirmDialog
+                    password={currentPassword}
+                    onPasswordChange={(value) => { setCurrentPassword(value); setPasswordError(''); }}
+                    busy={saving}
+                    error={passwordError}
+                    onCancel={cancelPasswordConfirmation}
+                    onConfirm={handleConfirmSave}
+                />
+            )}
         </section>
     );
 };

@@ -1,8 +1,6 @@
 const db = require('../config/db');
 
 const SETTINGS_COLUMNS = {
-    roleBasedAccess: 'role_based_access',
-    documentProtection: 'document_protection',
     accessLogging: 'access_logging',
     privacyMonitoring: 'privacy_monitoring',
 };
@@ -54,7 +52,7 @@ exports.updateSettings = async (req, res) => {
         await new Promise((resolve, reject) => {
             connection.query(
                 `UPDATE privacy_settings
-                 SET role_based_access = ?, document_protection = ?, access_logging = ?, privacy_monitoring = ?, updated_by = ?
+                 SET access_logging = ?, privacy_monitoring = ?, updated_by = ?
                  WHERE id = 1`,
                 values,
                 (err) => (err ? reject(err) : resolve())

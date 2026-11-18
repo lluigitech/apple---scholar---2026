@@ -109,16 +109,14 @@ export default function AttendanceReportsTab({
   loading,
   error,
   filters,
-  setFilters,
+  yearLevel,
+  setYearLevel,
   onFetch,
   onExport,
   onExportPdf,
 }) {
-  const handleFilterChange = (key, value) => setFilters(prev => ({ ...prev, [key]: value }));
-
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
-  const [yearFilter, setYearFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [view, setView] = useState('table');
   const [page, setPage] = useState(1);
@@ -133,21 +131,18 @@ export default function AttendanceReportsTab({
     return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
   }, [data]);
 
-  // Year level only filters if the API sends it on attendance records.
-  const hasYearData = useMemo(() => data.some(r => yearLevelOf(r)), [data]);
-
   // Existing record-level filters (month, group, search) + year level.
   const filteredData = useMemo(() => {
     const term = search.trim().toLowerCase();
     return data.filter(r => {
       if (filters.month && monthKeyOf(dateValueOf(r)) !== filters.month) return false;
       if (groupFilter !== 'all' && r.group_name !== groupFilter) return false;
-      if (yearFilter !== 'all' && formatYearLevelLabel(yearLevelOf(r)) !== formatYearLevelLabel(yearFilter)) return false;
+      if (yearLevel !== 'all' && formatYearLevelLabel(yearLevelOf(r)) !== formatYearLevelLabel(yearLevel)) return false;
       if (!term) return true;
       const haystack = `${r.scholar || ''} ${r.scholar_id || ''} ${r.group_name || ''} ${r.assigned_staff || ''}`.toLowerCase();
       return haystack.includes(term);
     });
-  }, [data, search, groupFilter, yearFilter, filters.month]);
+  }, [data, search, groupFilter, yearLevel, filters.month]);
 
   // One row per attendance record. The status filter applies to records.
   const visibleRecords = useMemo(() => {
@@ -155,7 +150,7 @@ export default function AttendanceReportsTab({
     return [...list].sort((x, y) => sortStamp(y) - sortStamp(x) || String(x.scholar || '').localeCompare(String(y.scholar || '')));
   }, [filteredData, statusFilter]);
 
-  useEffect(() => { setPage(1); }, [search, groupFilter, yearFilter, statusFilter, filters.month, data.length]);
+  useEffect(() => { setPage(1); }, [search, groupFilter, yearLevel, statusFilter, filters.month, data.length]);
 
   const totalPages = Math.max(1, Math.ceil(visibleRecords.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
@@ -168,8 +163,8 @@ export default function AttendanceReportsTab({
     onFetch();
   }, [filters.month, onFetch]);
 
-  const hasActiveFilters = Boolean(search || groupFilter !== 'all' || yearFilter !== 'all' || statusFilter !== 'all');
-  const resetFilters = () => { setSearch(''); setGroupFilter('all'); setYearFilter('all'); setStatusFilter('all'); };
+  const hasActiveFilters = Boolean(search || groupFilter !== 'all' || yearLevel !== 'all' || statusFilter !== 'all');
+  const resetFilters = () => { setSearch(''); setGroupFilter('all'); setYearLevel('all'); setStatusFilter('all'); };
 
   // Calendar view data: per-day present / late / absent counts.
   const calendar = useMemo(() => {
@@ -216,11 +211,7 @@ export default function AttendanceReportsTab({
     <div className="flex flex-col gap-4">
 
       {/* ── Filter bar ── */}
-      <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1fr_1fr_1.4fr_auto] items-end" style={surfaceCard}>
-        <div>
-          <label style={labelStyle}>Month</label>
-          <input type="month" value={filters.month} onChange={e => handleFilterChange('month', e.target.value)} style={fieldStyle} onFocus={focus} onBlur={blur} />
-        </div>
+      <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.4fr_auto] items-end" style={surfaceCard}>
         <div>
           <label style={labelStyle}>Assigned Group</label>
           <select value={groupFilter} onChange={e => setGroupFilter(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }} onFocus={focus} onBlur={blur}>
@@ -228,24 +219,6 @@ export default function AttendanceReportsTab({
             {availableGroups.map(([groupName, staffName]) => (
               <option key={groupName} value={groupName}>{groupName} · {staffName}</option>
             ))}
-          </select>
-        </div>
-        <div>
-          <label style={labelStyle}>Year Level</label>
-          <select
-            value={yearFilter}
-            onChange={e => setYearFilter(e.target.value)}
-            disabled={!hasYearData}
-            title={hasYearData ? undefined : 'Year level is not included in the attendance data'}
-            style={{ ...fieldStyle, cursor: hasYearData ? 'pointer' : 'not-allowed', opacity: hasYearData ? 1 : 0.6 }}
-            onFocus={focus}
-            onBlur={blur}
-          >
-            <option value="all">All Year Levels</option>
-            <option value="1st Year College">1st Year College</option>
-            <option value="2nd Year College">2nd Year College</option>
-            <option value="3rd Year College">3rd Year College</option>
-            <option value="4th Year College">4th Year College</option>
           </select>
         </div>
         <div>

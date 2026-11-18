@@ -231,7 +231,7 @@ exports.bulkMarkAttendance = (req, res) => {
                         if (permissionErr) return res.status(500).json({ error: 'Error checking make-up permissions' });
 
                         const makeupScholarIds = new Set(permissionRows.map(row => row.scholar_id));
-                        const placeholders = newRecords.map(() => '(?, ?, ?, ?, NOW(), NULL, ?)').join(', ');
+                        const placeholders = newRecords.map(() => '(?, ?, ?, ?, NOW(), NULL, ?, ?)').join(', ');
                         const flatValues = [];
                         newRecords.forEach(record => {
                             const isMakeup = makeupScholarIds.has(record.scholar_id);
@@ -240,12 +240,13 @@ exports.bulkMarkAttendance = (req, res) => {
                                 record.scholar_id,
                                 record.status,
                                 record.method || 'manual',
-                                isMakeup ? 1 : 0
+                                isMakeup ? 1 : 0,
+                                req.user?.id || null
                             );
                         });
                         const insertSql = `
                             INSERT INTO duty_attendance
-                                (duty_id, scholar_id, status, method, marked_at, check_out_at, is_makeup)
+                                (duty_id, scholar_id, status, method, marked_at, check_out_at, is_makeup, marked_by_id)
                             VALUES ${placeholders}
                         `;
                         db.query(insertSql, flatValues, (insertErr) => {
@@ -439,7 +440,8 @@ exports.deleteDuty = (req, res) => {
 // ─── MARK SINGLE ATTENDANCE (QR) ─────────────────────────────
 exports.markAttendance = (req, res) => {
     const { id } = req.params;
-    const { scholar_id, status, method, marked_by } = req.body;
+    const { scholar_id, status, method } = req.body;
+    const markedById = req.user?.id || null;
 
     db.query("SELECT status FROM duties WHERE id = ? LIMIT 1", [id], (dutyErr, dutyRows) => {
         if (dutyErr) return res.status(500).json({ error: 'Error checking duty status' });
@@ -456,8 +458,8 @@ exports.markAttendance = (req, res) => {
 
             if (existing.length > 0) {
                 db.query(
-                    "UPDATE duty_attendance SET status=?, method=? WHERE duty_id=? AND scholar_id=?",
-                    [status, method || 'manual', id, scholar_id],
+                    "UPDATE duty_attendance SET status=?, method=?, marked_by_id=? WHERE duty_id=? AND scholar_id=?",
+                    [status, method || 'manual', markedById, id, scholar_id],
                     (err) => {
                         if (err) return res.status(500).json({ error: 'Error updating attendance' });
 
@@ -493,8 +495,8 @@ exports.markAttendance = (req, res) => {
                 );
             } else {
                 db.query(
-                    "INSERT INTO duty_attendance (duty_id, scholar_id, status, method) VALUES (?, ?, ?, ?)",
-                    [id, scholar_id, status, method || 'manual'],
+                    "INSERT INTO duty_attendance (duty_id, scholar_id, status, method, marked_by_id) VALUES (?, ?, ?, ?, ?)",
+                    [id, scholar_id, status, method || 'manual', markedById],
                     (err) => {
                         if (err) return res.status(500).json({ error: 'Error marking attendance' });
 
@@ -570,8 +572,8 @@ exports.bulkSaveAttendance = (req, res) => {
 
                 if (existing.length > 0) {
                     db.query(
-                        "UPDATE duty_attendance SET status=?, method=? WHERE duty_id=? AND scholar_id=?",
-                        [status, method || 'manual', id, scholar_id],
+                        "UPDATE duty_attendance SET status=?, method=?, marked_by_id=? WHERE duty_id=? AND scholar_id=?",
+                        [status, method || 'manual', req.user?.id || null, id, scholar_id],
                         (err) => {
                             if (err) errors++; else {
                                 if (status === 'late') {
@@ -587,8 +589,8 @@ exports.bulkSaveAttendance = (req, res) => {
                     );
                 } else {
                     db.query(
-                        "INSERT INTO duty_attendance (duty_id, scholar_id, status, method) VALUES (?, ?, ?, ?)",
-                        [id, scholar_id, status, method || 'manual'],
+                        "INSERT INTO duty_attendance (duty_id, scholar_id, status, method, marked_by_id) VALUES (?, ?, ?, ?, ?)",
+                        [id, scholar_id, status, method || 'manual', req.user?.id || null],
                         (err) => {
                             if (err) errors++; else {
                                 if (status === 'late') {

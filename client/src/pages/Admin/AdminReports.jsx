@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
-import ComplianceSummaryTab from '../../components/Admin/Reports/ComplianceSummaryTab';
 import MonthlyReportsTab from '../../components/Admin/Reports/MonthlyReportsTab';
 import AttendanceReportsTab from '../../components/Admin/Reports/AttendanceReportsTab';
 import AdminReportDetail from '../../components/Admin/Reports/AdminReportDetail';
 import { formatYearLevelLabel } from '../../utils/yearLevelLabels';
-import { formatAdminDateTime } from '../../utils/adminPreferences';
-import { buildSummaryRows, currentPeriodLabel, monthPeriodLabel, downloadReportSummaryPdf } from '../../utils/reportPdfExport';
+import { formatAdminDateTime, formatAdminMonth } from '../../utils/adminPreferences';
+import { monthPeriodLabel, downloadReportSummaryPdf } from '../../utils/reportPdfExport';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
 // ── Design tokens — "Apple Scholar Executive" system ──
@@ -14,7 +13,6 @@ const BG = '#F7F4EE';
 const SURFACE = '#FFFDF9';
 const BORDER = '#E5D8CA';
 const PRIMARY = '#6D2140';
-const BRONZE = '#A9784E';
 const INK = '#241512';
 const MUTED = '#8A7A68';
 const SUCCESS = '#6B8F71';
@@ -67,7 +65,6 @@ const downloadCSV = (filename, rows) => {
 // ── Icons (inline, stroke-based) ──
 const svgBase = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round', strokeLinejoin: 'round', viewBox: '0 0 24 24' };
 const Icon = {
-  Shield: (p) => (<svg width="18" height="18" {...svgBase} {...p}><path d="M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3z" /></svg>),
   Users: (p) => (
     <svg width="18" height="18" {...svgBase} {...p}>
       <circle cx="9" cy="8" r="3.2" /><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" />
@@ -93,7 +90,6 @@ const Icon = {
 
 const tabItems = [
   { key: 'monthly-reports', label: 'Compliance Reports', sub: 'All requirements and document submissions', icon: Icon.FileText },
-  { key: 'compliance', label: 'Compliance Summary', sub: 'Review scholar compliance status', icon: Icon.Shield },
   { key: 'attendance', label: 'Attendance Reports', sub: 'Attendance and participation records', icon: Icon.Users },
 ];
 
@@ -101,45 +97,58 @@ const tabItems = [
 // Presentational pieces (UI-only — no data logic lives here)
 // ---------------------------------------------------------------------------
 
-const KPICard = ({ icon: IconEl, label, value, helper, accent }) => (
-  <div style={{ ...surfaceCard, padding: '0.9rem 1.15rem', display: 'flex', alignItems: 'center', gap: 14 }}>
-    <div
-      style={{
-        width: 44, height: 44, flexShrink: 0, borderRadius: '50%', background: `${accent}1f`, color: accent,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-    >
-      <IconEl width={20} height={20} />
-    </div>
-    <div style={{ minWidth: 0 }}>
-      <div style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: INK }}>{label}</div>
-      <div style={{ ...display, fontSize: '1.7rem', color: PRIMARY, lineHeight: 1.15, fontWeight: 600 }}>{value}</div>
-      {helper && (
-        <div style={{ ...body, fontSize: '0.78rem', color: MUTED, display: 'flex', alignItems: 'center', gap: 6 }}>
-          {helper.dot && <span style={{ width: 8, height: 8, borderRadius: '50%', background: accent }} />}
-          {helper.text}
-        </div>
-      )}
-    </div>
+const YEAR_LEVEL_OPTIONS = ['1st Year College', '2nd Year College', '3rd Year College', '4th Year College'];
+
+const numeric = { ...display, fontVariantNumeric: 'lining-nums tabular-nums', fontFeatureSettings: '"lnum" 1, "tnum" 1' };
+
+const controlStyle = {
+  ...body, padding: '0 12px', fontWeight: 500,
+  background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 10,
+  color: INK, outline: 'none', cursor: 'pointer', maxWidth: '100%', minWidth: 0,
+};
+const controlClass = 'h-10 sm:h-9 flex-1 sm:flex-none sm:min-w-[150px] text-base sm:text-[0.8rem]';
+
+const KpiStrip = ({ children }) => (
+  <div
+    className="grid grid-cols-2 xl:grid-cols-4 gap-px overflow-hidden"
+    style={{ background: BORDER, border: `1px solid ${BORDER}`, borderRadius: RADIUS, boxShadow: surfaceCard.boxShadow }}
+  >
+    {children}
   </div>
 );
 
-const KPISkeleton = () => (
-  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-5">
-    {Array.from({ length: 4 }).map((_, i) => (
-      <div key={i} style={{ ...surfaceCard, padding: '1.1rem 1.35rem', display: 'flex', gap: 16, alignItems: 'center' }}>
-        <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#EFE3D4' }} />
-        <div>
-          <div style={{ height: 10, width: 90, borderRadius: 8, background: '#EFE3D4' }} />
-          <div style={{ height: 24, width: 56, borderRadius: 8, background: '#EFE3D4', marginTop: 8 }} />
-        </div>
+const KpiCell = ({ icon: IconEl, label, value, helper, accent }) => (
+  <div className="min-w-0 p-4 sm:p-5" style={{ background: SURFACE }}>
+    <div className="flex items-center gap-2" style={{ ...body, fontSize: '0.84rem', fontWeight: 500, color: MUTED }}>
+      <IconEl width={16} height={16} style={{ color: accent, flexShrink: 0 }} />
+      <span className="truncate">{label}</span>
+    </div>
+    <div style={{ ...numeric, fontSize: 'clamp(1.8rem, 3vw, 2.3rem)', fontWeight: 600, color: INK, lineHeight: 1.1, marginTop: 10 }}>
+      {value}
+    </div>
+    {helper && (
+      <div className="flex items-start gap-1.5" style={{ ...body, fontSize: '0.8rem', lineHeight: 1.35, color: MUTED, marginTop: 6 }}>
+        {helper.dot && <span className="flex-shrink-0 rounded-full" style={{ width: 7, height: 7, background: accent, marginTop: 5 }} />}
+        <span className="min-w-0 break-words">{helper.text}</span>
+      </div>
+    )}
+  </div>
+);
+
+const KpiSkeleton = () => (
+  <KpiStrip>
+    {[0, 1, 2, 3].map((i) => (
+      <div key={i} className="p-4 sm:p-5" style={{ background: SURFACE }}>
+        <div className="animate-pulse" style={{ height: 11, width: 96, borderRadius: 8, background: '#EFE3D4' }} />
+        <div className="animate-pulse" style={{ height: 30, width: 64, borderRadius: 8, background: '#EFE3D4', marginTop: 14 }} />
+        <div className="animate-pulse" style={{ height: 10, width: 120, borderRadius: 8, background: '#EFE3D4', marginTop: 12 }} />
       </div>
     ))}
-  </div>
+  </KpiStrip>
 );
 
-const ModuleSelector = ({ activeTab, onSelect }) => (
-  <div className="grid gap-3 md:grid-cols-3">
+const ModuleTabs = ({ activeTab, onSelect }) => (
+  <div role="tablist" aria-label="Report type" className="flex w-full sm:w-auto">
     {tabItems.map((tab) => {
       const active = tab.key === activeTab;
       const TabIcon = tab.icon;
@@ -147,45 +156,21 @@ const ModuleSelector = ({ activeTab, onSelect }) => (
         <button
           key={tab.key}
           type="button"
+          role="tab"
+          aria-selected={active}
+          title={tab.sub}
           onClick={() => onSelect(tab.key)}
-          aria-pressed={active}
+          className="flex-1 sm:flex-none inline-flex items-center justify-center gap-2 whitespace-nowrap px-3 sm:px-4"
           style={{
-            ...surfaceCard,
-            textAlign: 'left',
-            padding: '0.95rem 1.1rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 14,
-            background: active ? PRIMARY : SURFACE,
-            border: `1px solid ${active ? PRIMARY : BORDER}`,
-            transition: 'background 0.15s ease, border-color 0.15s ease',
+            ...body, height: 46, fontSize: '0.92rem', fontWeight: active ? 700 : 500,
+            color: active ? PRIMARY : MUTED, background: 'none', border: 'none', cursor: 'pointer',
+            borderBottom: `3px solid ${active ? PRIMARY : 'transparent'}`, marginBottom: -1,
+            transition: 'color 0.15s ease, border-color 0.15s ease',
           }}
         >
-          <div
-            style={{
-              width: 46, height: 46, flexShrink: 0, borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: active ? 'rgba(255,255,255,0.16)' : `${PRIMARY}0f`,
-              color: active ? '#fff' : PRIMARY,
-            }}
-          >
-            <TabIcon width={22} height={22} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: active ? '#fff' : INK }}>{tab.label}</div>
-            <div style={{ ...body, fontSize: '0.78rem', color: active ? '#EBD9E0' : MUTED, marginTop: 3 }}>{tab.sub}</div>
-          </div>
-          <div
-            style={{
-              width: 30, height: 30, flexShrink: 0, borderRadius: '50%',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              background: active ? '#fff' : `${PRIMARY}0f`,
-              color: PRIMARY,
-            }}
-          >
-            <Icon.Chevron />
-          </div>
+          <TabIcon width={17} height={17} />
+          <span className="sm:hidden">{tab.label.replace(' Reports', '')}</span>
+          <span className="hidden sm:inline">{tab.label}</span>
         </button>
       );
     })}
@@ -207,15 +192,36 @@ export default function AdminReports() {
   const [selectedReport, setSelectedReport] = useState(null);
   const [monthlyFilterMonth, setMonthlyFilterMonth] = useState(new Date().toISOString().slice(0, 7));
   const [monthlyFilterYearLevel, setMonthlyFilterYearLevel] = useState('');
+  const monthlyPeriodOptions = useMemo(() => {
+    const options = [];
+    const now = new Date();
+    for (let offset = 0; offset < 12; offset += 1) {
+      const date = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      const value = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+      options.push({ value, label: formatAdminMonth(date) });
+    }
+    if (monthlyFilterMonth && !options.some(option => option.value === monthlyFilterMonth)) {
+      options.push({
+        value: monthlyFilterMonth,
+        label: formatAdminMonth(new Date(`${monthlyFilterMonth}-01T00:00:00`)),
+      });
+    }
+    return options;
+  }, [monthlyFilterMonth]);
 
   const [attendanceData, setAttendanceData] = useState([]);
   const [attendanceLoading, setAttendanceLoading] = useState(false);
   const [attendanceError, setAttendanceError] = useState('');
   const [attendanceFetched, setAttendanceFetched] = useState(false);
+  const [attendanceYearLevel, setAttendanceYearLevel] = useState('all');
   const [attendanceFilters, setAttendanceFilters] = useState({
     month: `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`,
     status: 'all',
   });
+  const attendanceHasYearLevel = useMemo(
+    () => attendanceData.some(record => record.year_level || record.yearLevel || record.year),
+    [attendanceData]
+  );
 
   const fetchCompliance = async () => {
     setComplianceLoading(true);
@@ -320,24 +326,21 @@ export default function AdminReports() {
 
   const exportAdminPdf = async (displayedRows) => {
     try {
-      const sourceRows = activeTab === 'attendance' ? (displayedRows || attendanceData) : complianceRows;
-      const rows = activeTab === 'attendance'
-        ? sourceRows.map(row => ({
-          scholarName: row.scholar,
-          studentId: row.scholar_id,
-          groupName: row.group_name,
-          assignedStaff: row.assigned_staff,
-          duty: row.duty,
-          attendanceDate: row.date || row.duty_date,
-          attendanceTime: row.marked_at,
-          attendanceStatus: row.status,
-        }))
-        : buildSummaryRows(sourceRows, row => Number(row.completionRate) >= 100);
+      const rows = (displayedRows || attendanceData).map(row => ({
+        scholarName: row.scholar,
+        studentId: row.scholar_id,
+        groupName: row.group_name,
+        assignedStaff: row.assigned_staff,
+        duty: row.duty,
+        attendanceDate: row.date || row.duty_date,
+        attendanceTime: row.marked_at,
+        attendanceStatus: row.status,
+      }));
       await downloadReportSummaryPdf({
         role: 'admin',
-        reportTitle: activeTab === 'attendance' ? 'Attendance Reports' : 'Compliance Summary',
-        reportType: activeTab === 'attendance' ? 'Attendance Reports' : 'Compliance Summary',
-        periodLabel: activeTab === 'attendance' ? monthPeriodLabel(attendanceFilters.month) : currentPeriodLabel(),
+        reportTitle: 'Attendance Reports',
+        reportType: 'Attendance Reports',
+        periodLabel: monthPeriodLabel(attendanceFilters.month),
         rows,
       });
     } catch (err) {
@@ -347,7 +350,7 @@ export default function AdminReports() {
   };
 
   useEffect(() => {
-    if ((activeTab === 'compliance' || activeTab === 'monthly-reports') && !complianceFetched) fetchCompliance();
+    if (activeTab === 'monthly-reports' && !complianceFetched) fetchCompliance();
   }, [activeTab, complianceFetched]);
 
   useEffect(() => {
@@ -375,10 +378,55 @@ export default function AdminReports() {
     return () => window.removeEventListener('admin-refresh-reports', applyRefreshedReports);
   }, []);
 
-  const filteredMonthly = useMemo(
-    () => (statusFilter === 'all' ? reports : reports.filter(report => normalizeReportStatus(report.status) === statusFilter)),
-    [reports, statusFilter]
-  );
+  const filteredMonthly = useMemo(() => {
+    if (statusFilter !== 'not-submitted') return reports;
+    if (!complianceFetched || !monthlyFilterMonth || monthlyLoading || monthlyError) return [];
+
+    const hasYearLevel = complianceRows.some(row => row.year || row.yearLevel || row.year_level);
+    const registry = monthlyFilterYearLevel
+      ? hasYearLevel
+        ? complianceRows.filter(
+          row => formatYearLevelLabel(row.year || row.yearLevel || row.year_level) === formatYearLevelLabel(monthlyFilterYearLevel)
+        )
+        : []
+      : complianceRows;
+    const submittedIdentifiers = new Set(
+      reports.flatMap(report => [
+        report.userId,
+        report.user_id,
+        report.scholar_id,
+        report.studentId,
+        report.student_id,
+        report.scholarName,
+      ]).map(value => String(value || '').trim().toLowerCase()).filter(Boolean)
+    );
+
+    return registry
+      .filter(scholar => {
+        const identifiers = [
+          scholar.id,
+          scholar.userId,
+          scholar.user_id,
+          scholar.studentId,
+          scholar.scholar_id,
+          scholar.name,
+          scholar.scholarName,
+          scholar.full_name,
+        ].map(value => String(value || '').trim().toLowerCase()).filter(Boolean);
+        return !identifiers.some(identifier => submittedIdentifiers.has(identifier));
+      })
+      .map((scholar, index) => ({
+        id: `not-submitted-${scholar.id || scholar.studentId || index}`,
+        userId: scholar.id,
+        scholar_id: scholar.studentId || scholar.scholar_id,
+        scholarName: scholar.name || scholar.scholarName || scholar.full_name || 'Unknown Scholar',
+        studentId: scholar.studentId || scholar.scholar_id,
+        year: scholar.year || scholar.yearLevel || scholar.year_level,
+        periodLabel: monthPeriodLabel(monthlyFilterMonth),
+        status: 'not-submitted',
+        isMissing: true,
+      }));
+  }, [statusFilter, reports, complianceRows, complianceFetched, monthlyFilterMonth, monthlyFilterYearLevel, monthlyLoading, monthlyError]);
 
   const monthlyCounts = useMemo(() => {
     const counts = { all: reports.length, accepted: 0, 'medium-risk': 0, 'high-risk': 0 };
@@ -417,7 +465,7 @@ export default function AdminReports() {
         }
       }
 
-      // "Not submitted" only makes sense for one specific month.
+      // Submission metrics only make sense for one specific month.
       const canCompute = registryKnown && Boolean(monthlyFilterMonth);
       const notSubmitted = canCompute ? Math.max(0, registry.length - submittedKeys.size) : null;
       const rate = canCompute && registry.length > 0
@@ -427,7 +475,7 @@ export default function AdminReports() {
 
       return [
         { key: 'total', icon: Icon.FileText, label: 'Total Submissions', value: total, helper: { text: 'Across all requirements' }, accent: PRIMARY },
-        { key: 'approved', icon: Icon.Check, label: 'Accepted', value: monthlyCounts.accepted, helper: { text: 'Scholars with accepted submissions', dot: true }, accent: SUCCESS },
+        { key: 'submitted', icon: Icon.Check, label: 'Submitted', value: canCompute ? submittedKeys.size : '—', helper: { text: canCompute ? 'Scholars with submissions' : hint, dot: canCompute }, accent: SUCCESS },
         {
           key: 'not-submitted', icon: Icon.Alert, label: 'Not Submitted',
           value: notSubmitted ?? '—',
@@ -440,21 +488,6 @@ export default function AdminReports() {
           helper: { text: canCompute ? `${submittedKeys.size} of ${registry.length} scholars` : hint },
           accent: WARNING,
         },
-      ];
-    }
-
-    if (activeTab === 'compliance') {
-      const riskCounts = complianceRows.reduce((counts, row) => {
-        const risk = row.riskStatus || 'low';
-        counts[risk] = (counts[risk] || 0) + 1;
-        return counts;
-      }, { low: 0, medium: 0, high: 0 });
-      const total = complianceRows.length;
-      return [
-        { key: 'scholars', icon: Icon.Users, label: 'Total Scholars', value: total, helper: { text: 'Compliance registry' }, accent: PRIMARY },
-        { key: 'low', icon: Icon.Check, label: 'Low Risk', value: riskCounts.low, helper: { text: pct(riskCounts.low, total), dot: true }, accent: SUCCESS },
-        { key: 'medium', icon: Icon.Clock, label: 'Medium Risk', value: riskCounts.medium, helper: { text: pct(riskCounts.medium, total), dot: true }, accent: WARNING },
-        { key: 'high', icon: Icon.Alert, label: 'High Risk', value: riskCounts.high, helper: { text: pct(riskCounts.high, total), dot: true }, accent: DANGER },
       ];
     }
 
@@ -475,42 +508,67 @@ export default function AdminReports() {
 
   return (
     <div className="min-h-screen w-full" style={{ background: BG, color: INK }}>
-      <div className="w-full px-4 sm:px-6 lg:px-8">
-
+      <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pb-10 flex flex-col gap-5">
         <AdminPageHeader
           title="System Reports"
           description="Review scholar compliance submissions, compliance status, and attendance records in one place."
-          className="mb-6"
+          className="mb-1"
         />
 
-        {/* ── 2. Module switcher ── */}
-        <div className="mb-4">
-          <ModuleSelector activeTab={activeTab} onSelect={setActiveTab} />
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2" style={{ borderBottom: `1px solid ${BORDER}` }}>
+          <ModuleTabs activeTab={activeTab} onSelect={setActiveTab} />
+          <div className="flex items-center gap-2 pb-2 w-full sm:w-auto">
+            {activeTab === 'monthly-reports' ? (
+              <>
+                <select value={monthlyFilterMonth} onChange={(e) => setMonthlyFilterMonth(e.target.value)} aria-label="Filter by month or period" className={controlClass} style={controlStyle}>
+                  <option value="">All periods</option>
+                  {monthlyPeriodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+                <select value={monthlyFilterYearLevel} onChange={(e) => setMonthlyFilterYearLevel(e.target.value)} aria-label="Filter by year level" className={controlClass} style={controlStyle}>
+                  <option value="">All year levels</option>
+                  {YEAR_LEVEL_OPTIONS.map((level) => <option key={level} value={level}>{level}</option>)}
+                </select>
+              </>
+            ) : (
+              <>
+                <input type="month" value={attendanceFilters.month} onChange={(e) => setAttendanceFilters((previous) => ({ ...previous, month: e.target.value }))} aria-label="Filter attendance by month" className={controlClass} style={controlStyle} />
+                <select
+                  value={attendanceYearLevel}
+                  onChange={(e) => setAttendanceYearLevel(e.target.value)}
+                  aria-label="Filter attendance by year level"
+                  disabled={!attendanceHasYearLevel}
+                  title={attendanceHasYearLevel ? undefined : 'Year level is not included in the attendance data'}
+                  className={controlClass}
+                  style={{ ...controlStyle, cursor: attendanceHasYearLevel ? 'pointer' : 'not-allowed', opacity: attendanceHasYearLevel ? 1 : 0.55 }}
+                >
+                  <option value="all">All year levels</option>
+                  {YEAR_LEVEL_OPTIONS.map((level) => <option key={level} value={level}>{level}</option>)}
+                </select>
+              </>
+            )}
+          </div>
         </div>
 
-        {/* ── 3. Lightweight status counters ── */}
-        {anyLoading && reports.length === 0 && attendanceData.length === 0 && complianceRows.length === 0 ? (
-          <KPISkeleton />
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4 mb-5">
-            {kpis.map((kpi) => (
-              <KPICard key={kpi.key} icon={kpi.icon} label={kpi.label} value={kpi.value} helper={kpi.helper} accent={kpi.accent} />
-            ))}
+        {activeTab === 'monthly-reports' && complianceError && (
+          <div role="alert" className="flex flex-wrap items-center justify-between gap-3" style={{ ...body, padding: '12px 14px', border: `1px solid ${DANGER}55`, borderRadius: 12, background: `${DANGER}0D`, color: DANGER, fontSize: '0.85rem' }}>
+            <span>{complianceError}</span>
+            <button type="button" onClick={fetchCompliance} style={{ ...body, padding: '7px 14px', border: `1px solid ${DANGER}`, borderRadius: 8, background: '#fff', color: DANGER, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer' }}>
+              Retry
+            </button>
           </div>
         )}
 
-        {/* ── 4. Active module content (filters + table live in the tab components) ── */}
-        <div style={{ marginBottom: 24 }}>
-          {activeTab === 'compliance' && (
-            <ComplianceSummaryTab
-              rows={complianceRows}
-              loading={complianceLoading}
-              error={complianceError}
-              onRefresh={fetchCompliance}
-              onGenerate={exportAdminPdf}
-            />
-          )}
+        {anyLoading && reports.length === 0 && attendanceData.length === 0 && complianceRows.length === 0 ? (
+          <KpiSkeleton />
+        ) : (
+          <KpiStrip>
+            {kpis.map((kpi) => (
+              <KpiCell key={kpi.key} icon={kpi.icon} label={kpi.label} value={kpi.value} helper={kpi.helper} accent={kpi.accent} />
+            ))}
+          </KpiStrip>
+        )}
 
+        <div className="max-w-full overflow-x-auto">
           {activeTab === 'monthly-reports' && (
             <MonthlyReportsTab
               filteredReports={filteredMonthly}
@@ -519,21 +577,19 @@ export default function AdminReports() {
               statusFilter={statusFilter}
               setStatusFilter={setStatusFilter}
               month={monthlyFilterMonth}
-              setMonth={setMonthlyFilterMonth}
               yearLevel={monthlyFilterYearLevel}
-              setYearLevel={setMonthlyFilterYearLevel}
               onRefresh={fetchMonthlyReports}
               onSelectReport={setSelectedReport}
             />
           )}
-
           {activeTab === 'attendance' && (
             <AttendanceReportsTab
               data={attendanceData}
               loading={attendanceLoading}
               error={attendanceError}
               filters={attendanceFilters}
-              setFilters={setAttendanceFilters}
+              yearLevel={attendanceYearLevel}
+              setYearLevel={setAttendanceYearLevel}
               onFetch={fetchAttendanceReports}
               onExport={exportAttendanceCSV}
               onExportPdf={exportAdminPdf}
@@ -541,23 +597,12 @@ export default function AdminReports() {
           )}
         </div>
 
-        {/* Footer branding */}
-        <div className="flex items-center gap-4 justify-center mt-9 mb-4">
-          <span style={{ flex: 1, height: 1, background: BORDER, maxWidth: 240 }} />
-          <div className="flex items-center gap-2.5 flex-shrink-0" style={{ color: BRONZE }}>
-            <Icon.Crest style={{ width: 24, height: 24 }} />
-            <div style={{ lineHeight: 1.3 }}>
-              <div style={{ ...display, fontSize: '0.88rem', fontWeight: 700, color: INK }}>Apple Scholar Foundation</div>
-              <div style={{ ...body, fontSize: '0.7rem', color: MUTED }}>Empowering scholars. Building futures.</div>
-            </div>
-          </div>
-          <span style={{ flex: 1, height: 1, background: BORDER, maxWidth: 240 }} />
-        </div>
+        <p className="text-center" style={{ ...body, fontSize: '0.78rem', color: MUTED, paddingTop: 8 }}>
+          Apple Scholar Foundation. Empowering scholars. Building futures.
+        </p>
       </div>
 
-      {selectedReport && (
-        <AdminReportDetail report={selectedReport} onClose={() => setSelectedReport(null)} />
-      )}
+      {selectedReport && <AdminReportDetail report={selectedReport} onClose={() => setSelectedReport(null)} />}
     </div>
   );
 }

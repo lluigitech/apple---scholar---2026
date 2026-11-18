@@ -7,5 +7,7 @@ const { verifyToken, requireRole } = require('../middleware/authMiddleware');
 router.get('/scholars', verifyToken, requireRole(['admin'], { action: 'VIEW_SCHOLAR', resourceType: 'scholar_risk_summary' }), flaggedController.getFlaggedScholars);
 router.post('/scholars/:scholarId/remind', verifyToken, requireRole(['admin'], { action: 'UPDATE_SCHOLAR', resourceType: 'scholar_risk_summary' }), flaggedController.remindScholar);
 router.post('/scholars/:scholarId/home-visit', verifyToken, requireRole(['admin'], { action: 'UPDATE_SCHOLAR', resourceType: 'scholar_risk_summary' }), flaggedController.logHomeVisit);
+router.get('/scholars/:scholarId/interventions', verifyToken, requireRole(['admin'], { action: 'VIEW_SCHOLAR', resourceType: 'scholar_interventions' }), flaggedController.getInterventions);
+router.post('/scholars/:scholarId/interventions', verifyToken, requireRole(['admin'], { action: 'UPDATE_SCHOLAR', resourceType: 'scholar_interventions' }), flaggedController.logCaseNote);
 
 module.exports = router;

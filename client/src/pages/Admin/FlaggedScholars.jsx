@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
-    AlertTriangle, Mail, TrendingDown, MessageSquare, RefreshCw, UserX, Clock,
+    AlertTriangle, Mail, TrendingDown, MessageSquare, UserX, Clock,
     Flag, Users, Bookmark, Search, Download, MoreVertical, Calendar, Eye,
-    FileText, RotateCcw, Home, X, ChevronLeft, ChevronRight,
+    FileText, Home, X, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
@@ -37,10 +38,10 @@ const fieldStyle = { width: '100%', padding: '9px 12px', border: `1px solid ${BO
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-const riskColor    = (l) => l === 'high' ? DANGER : l === 'medium' ? WARNING : SUCCESS;
+const riskColor    = (l) => l === 'high' ? DANGER : WARNING;
 const sevColor     = (s) => ({ high: DANGER, medium: WARNING, low: MUTED }[s] || MUTED);
 const qualityColor = (q) => q >= 80 ? SUCCESS : q >= 60 ? WARNING : DANGER;
-const riskLabel    = (l) => l === 'high' ? 'High' : l === 'medium' ? 'Medium' : 'Low';
+const riskLabel    = (l) => l === 'high' ? 'High' : 'Medium';
 
 const getRiskBucket = (riskLevel) => {
     if (riskLevel === 'high') return 'high';
@@ -96,17 +97,29 @@ const deriveMetrics = (scholar) => {
     const riskScore = Number.isFinite(Number(scholar.risk_score)) ? Math.round(Number(scholar.risk_score)) : 0;
     const minCompliance = Number.isFinite(Number(s.min_compliance)) ? Number(s.min_compliance) : 70;
     const overallCompliance = Number.isFinite(Number(scholar.overall_compliance))
-        ? Math.round(Number(scholar.overall_compliance))
+        ? Number(Number(scholar.overall_compliance).toFixed(2))
         : Math.max(0, 100 - riskScore);
+    const deductions = scholar.deductions || {};
+    const bonuses = scholar.bonuses || {};
+    const negativeSentimentSpreadMonthThreshold = Number(scholar.negative_sentiment_spread_month_threshold) || 5;
+    const negativeSentimentConsecutiveMonthThreshold = Number(scholar.negative_sentiment_consecutive_month_threshold) || 3;
     return {
         s,
         riskScore,
         minCompliance,
         overallCompliance,
+        totalDeduction: Number.isFinite(Number(scholar.total_deduction))
+            ? Number(scholar.total_deduction)
+            : riskScore,
+        deductions,
+        bonuses,
+        negativeSentimentMonthCount: Number(scholar.negative_sentiment_month_count) || 0,
+        negativeSentimentConsecutiveMonths: Number(scholar.negative_sentiment_consecutive_months) || 0,
+        negativeSentimentSpreadMonthThreshold,
+        negativeSentimentConsecutiveMonthThreshold,
         compliancePct: s.total_submissions > 0 ? Math.round((s.approved / s.total_submissions) * 100) : 0,
         hasGpa: s.gwa !== null && s.gwa !== undefined,
         flags: scholar.flags || [],
-        academicStatus: scholar.academic_status || 'no-record',
         lastSubFormatted: formatDate(s.last_submission),
     };
 };
@@ -118,12 +131,12 @@ const csvCell = (value) => {
 };
 
 const exportCsv = (rows) => {
-    const header = ['Scholar ID', 'Name', 'Email', 'Year Level', 'Risk Level', 'Risk Score', 'Compliance Points', 'Attendance %', 'Negative Letters', 'Last Updated', 'Flags'];
+    const header = ['Scholar ID', 'Name', 'Email', 'Year Level', 'Risk Level', 'Risk Score', 'Compliance Points', 'Attendance %', 'Negative Letters (Account Year)', 'Flags'];
     const lines = rows.map((sch) => {
         const m = deriveMetrics(sch);
         return [
             sch.scholar_id, sch.full_name, sch.email, sch.year_level ?? '', riskLabel(sch.risk_level), m.riskScore,
-            m.overallCompliance, m.s.attendance_rate ?? '', m.s.negative_letters ?? 0, lastUpdatedOf(sch)?.label ?? '',
+            Math.round(m.overallCompliance), m.s.attendance_rate ?? '', m.s.negative_letters ?? 0,
             m.flags.map(f => f.description).join('; '),
         ].map(csvCell).join(',');
     });
@@ -227,17 +240,60 @@ const TABS = [
     { key: 'interventions', label: 'Interventions' },
 ];
 
-const DetailsPanel = ({ scholar, tab, setTab, note, setNote, saved, onSaveNote, onHomeVisit, onAddNote, loggingVisit }) => {
+const DetailsPanel = ({ scholar, tab, setTab, note, setNote, saved, savingNote, interventions, loadingInterventions, interventionError, onSaveNote, onHomeVisit, onAddNote, loggingVisit }) => {
     const [showExplanation, setShowExplanation] = useState(false);
     const [showAllIssues, setShowAllIssues] = useState(false);
 
-    const { s, riskScore, minCompliance, overallCompliance, compliancePct, hasGpa, flags, academicStatus, lastSubFormatted } = deriveMetrics(scholar);
+    const {
+        s, riskScore, minCompliance, overallCompliance, totalDeduction, deductions, bonuses,
+        negativeSentimentMonthCount, negativeSentimentConsecutiveMonths,
+        negativeSentimentSpreadMonthThreshold, negativeSentimentConsecutiveMonthThreshold,
+        compliancePct, hasGpa, flags, lastSubFormatted,
+    } = deriveMetrics(scholar);
     const updated = lastUpdatedOf(scholar);
 
     const attendanceKnown = s.attendance_rate !== null && s.attendance_rate !== undefined && s.total_duties !== 0;
     const submissionsKnown = s.total_submissions > 0;
-    const negShare = submissionsKnown ? Math.round(((s.negative_letters || 0) / s.total_submissions) * 100) : null;
+    const negativeMonthProgress = Math.min(100, Math.round((negativeSentimentMonthCount / negativeSentimentSpreadMonthThreshold) * 100));
+    const negativeStreakProgress = Math.min(100, Math.round((negativeSentimentConsecutiveMonths / negativeSentimentConsecutiveMonthThreshold) * 100));
     const visibleIssues = showAllIssues ? flags : flags.slice(0, 3);
+    const deductionRows = [
+        {
+            label: 'Overdue required tasks',
+            detail: `${deductions.missedSubmission?.penalizedTasks || 0} task${deductions.missedSubmission?.penalizedTasks === 1 ? '' : 's'}`,
+            points: deductions.missedSubmission?.points,
+        },
+        {
+            label: 'Late duty attendance',
+            detail: `${deductions.lateDuty?.lateCount || 0} instance${deductions.lateDuty?.lateCount === 1 ? '' : 's'}`,
+            points: deductions.lateDuty?.points,
+        },
+        {
+            label: 'Absent duty attendance',
+            detail: `${deductions.absentDuty?.absentCount || 0} instance${deductions.absentDuty?.absentCount === 1 ? '' : 's'}`,
+            points: deductions.absentDuty?.points,
+        },
+        {
+            label: 'Late submission gap',
+            detail: deductions.lateSubmission?.daysSinceSubmission == null
+                ? 'No submission history'
+                : `${deductions.lateSubmission.daysSinceSubmission} days since last submission`,
+            points: deductions.lateSubmission?.points,
+        },
+        {
+            label: 'Low submission quality',
+            detail: deductions.qualityDrop?.avgQuality == null
+                ? 'No quality score'
+                : `Average quality ${deductions.qualityDrop.avgQuality}`,
+            points: deductions.qualityDrop?.points,
+        },
+    ].filter(item => Number(item.points) > 0);
+    const bonusRows = [
+        { label: 'Good maintenance bonus', points: deductions.goodMaintenanceBonus?.points },
+        { label: 'Early submission recovery', points: bonuses.earlySubmission },
+        { label: 'Consecutive submission recovery', points: bonuses.consecutiveEarly },
+        { label: 'Perfect attendance recovery', points: bonuses.perfectAttendance },
+    ].filter(item => Number(item.points) > 0);
 
     return (
         <div>
@@ -253,7 +309,9 @@ const DetailsPanel = ({ scholar, tab, setTab, note, setNote, saved, onSaveNote, 
                 </div>
                 <div className="flex flex-col items-end gap-1">
                     <RiskBadge level={scholar.risk_level} />
-                    <p style={{ ...sans, fontSize: '0.8rem', fontWeight: 600, color: INK }}>Score: {riskScore}/100</p>
+                    <p style={{ ...sans, fontSize: '0.8rem', fontWeight: 600, color: INK }}>
+                        Compliance Points: {Math.round(overallCompliance)} points
+                    </p>
                     <p style={{ ...sans, fontSize: '0.66rem', color: MUTED }}>
                         {updated ? `${updated.exact ? 'Last updated' : 'Last submission'}: ${updated.label}` : 'No submission record'}
                     </p>
@@ -298,11 +356,44 @@ const DetailsPanel = ({ scholar, tab, setTab, note, setNote, saved, onSaveNote, 
                                     <IndicatorRow label="Attendance"
                                         valueText={attendanceKnown ? `${s.attendance_rate}%` : 'N/A'}
                                         pct={attendanceKnown ? Number(s.attendance_rate) : null} color={qualityColor(s.attendance_rate)} />
-                                    <IndicatorRow label="Sentiment"
-                                        valueText={submissionsKnown ? `${s.negative_letters || 0}/${s.total_submissions} neg.` : 'N/A'}
-                                        pct={negShare} color={(s.negative_letters || 0) > 0 ? DANGER : SUCCESS} />
+                                    <IndicatorRow label="Neg. months"
+                                        valueText={`${negativeSentimentMonthCount}/${negativeSentimentSpreadMonthThreshold}`}
+                                        pct={negativeMonthProgress} color={negativeSentimentMonthCount > 0 ? DANGER : SUCCESS} />
+                                    <IndicatorRow label="Neg. streak"
+                                        valueText={`${negativeSentimentConsecutiveMonths}/${negativeSentimentConsecutiveMonthThreshold}`}
+                                        pct={negativeStreakProgress} color={negativeSentimentConsecutiveMonths > 0 ? DANGER : SUCCESS} />
                                 </div>
                             </div>
+                        </div>
+
+                        <div style={{ border: `1px solid ${BORDER}`, borderRadius: 14, padding: 14 }}>
+                            <PanelTitle icon={AlertTriangle}>Point Deductions</PanelTitle>
+                            <div className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 mb-3"
+                                style={{ background: `${DANGER}0D`, border: `1px solid ${DANGER}25` }}>
+                                <span style={{ ...sans, fontSize: '0.76rem', fontWeight: 700, color: INK }}>Net deductions after bonuses</span>
+                                <span style={{ ...sans, fontSize: '0.82rem', fontWeight: 700, color: DANGER }}>−{Math.round(totalDeduction)} points</span>
+                            </div>
+                            {deductionRows.length === 0 && bonusRows.length === 0 ? (
+                                <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, fontStyle: 'italic' }}>No compliance point deductions recorded.</p>
+                            ) : (
+                                <div className="flex flex-col gap-2">
+                                    {deductionRows.map(row => (
+                                        <div key={row.label} className="flex items-center justify-between gap-3">
+                                            <div>
+                                                <p style={{ ...sans, fontSize: '0.74rem', fontWeight: 600, color: INK }}>{row.label}</p>
+                                                <p style={{ ...sans, fontSize: '0.67rem', color: MUTED }}>{row.detail}</p>
+                                            </div>
+                                            <span style={{ ...sans, fontSize: '0.74rem', fontWeight: 700, color: DANGER, whiteSpace: 'nowrap' }}>−{Math.round(Number(row.points))} pts</span>
+                                        </div>
+                                    ))}
+                                    {bonusRows.map(row => (
+                                        <div key={row.label} className="flex items-center justify-between gap-3">
+                                            <p style={{ ...sans, fontSize: '0.74rem', color: SUCCESS }}>{row.label}</p>
+                                            <span style={{ ...sans, fontSize: '0.74rem', fontWeight: 700, color: SUCCESS, whiteSpace: 'nowrap' }}>+{Math.round(Number(row.points))} pts</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
                         {showExplanation && (
@@ -355,8 +446,7 @@ const DetailsPanel = ({ scholar, tab, setTab, note, setNote, saved, onSaveNote, 
                         <div style={{ border: `1px solid ${BORDER}`, borderRadius: 14, overflow: 'hidden' }}>
                             {[
                                 { label: 'GPA', value: hasGpa ? Number(s.gwa).toFixed(2) : 'No grades', color: INK },
-                                { label: 'Academic Status', value: academicStatus.replace('-', ' '), color: INK, capitalize: true },
-                                { label: 'Compliance Points', value: `${overallCompliance} / ${minCompliance.toFixed(2)} minimum`, color: overallCompliance < minCompliance ? DANGER : SUCCESS },
+                                { label: 'Compliance Points', value: `${Math.round(overallCompliance)} points / ${Math.round(minCompliance)} points minimum`, color: overallCompliance < minCompliance ? DANGER : SUCCESS },
                                 { label: 'Last Submission', value: lastSubFormatted || 'No record', color: s.days_since_submission > 30 || !lastSubFormatted ? DANGER : INK },
                             ].map((row, i) => (
                                 <div key={row.label} className="flex items-center justify-between gap-3 px-4 py-2.5" style={{ borderTop: i > 0 ? `1px solid ${BORDER}` : 'none' }}>
@@ -370,10 +460,24 @@ const DetailsPanel = ({ scholar, tab, setTab, note, setNote, saved, onSaveNote, 
                                 <p className="flex items-center gap-1.5" style={{ ...sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: PRIMARY }}>
                                     <Calendar size={12} /> Duty Attendance
                                 </p>
-                                <p style={{ ...sans, fontSize: '0.72rem', color: MUTED }}>{s.present}/{s.total_duties} duties attended</p>
+                                <p style={{ ...sans, fontSize: '0.72rem', color: MUTED }}>{s.total_duties || 0} total duties</p>
                             </div>
                             <div className="w-full h-2 rounded-full overflow-hidden" style={{ background: BORDER }}>
                                 <div className="h-full rounded-full" style={{ width: `${Math.min(100, s.attendance_rate || 0)}%`, background: (s.attendance_rate || 0) < 50 ? DANGER : WARNING }} />
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-3">
+                                {[
+                                    { label: 'Present', value: s.present || 0, color: SUCCESS },
+                                    { label: 'Absent', value: s.absent || 0, color: DANGER },
+                                    { label: 'Late', value: s.late || 0, color: WARNING },
+                                    { label: 'Total Duties', value: s.total_duties || 0, color: INK },
+                                ].map((item) => (
+                                    <div key={item.label} className="flex items-center justify-between gap-2 rounded-lg px-3 py-2"
+                                        style={{ background: BG, border: `1px solid ${BORDER}` }}>
+                                        <span style={{ ...sans, fontSize: '0.7rem', color: MUTED }}>{item.label}</span>
+                                        <span style={{ ...sans, fontSize: '0.78rem', fontWeight: 700, color: item.color }}>{item.value}</span>
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>
@@ -386,8 +490,7 @@ const DetailsPanel = ({ scholar, tab, setTab, note, setNote, saved, onSaveNote, 
                                 { label: 'Total Submitted', value: s.total_submissions, color: INK },
                                 { label: 'Approved', value: s.approved, color: SUCCESS },
                                 { label: 'Rejected', value: s.rejected, color: DANGER },
-                                { label: 'Avg Quality', value: `${s.avg_quality}%`, color: qualityColor(s.avg_quality) },
-                                { label: 'Compliance', value: submissionsKnown ? `${compliancePct}%` : 'N/A', color: PRIMARY },
+                                { label: 'Avg Quality', value: submissionsKnown ? `${s.avg_quality}%` : 'N/A', color: submissionsKnown ? qualityColor(s.avg_quality) : MUTED },
                             ].map((row, i) => (
                                 <div key={row.label} className="flex items-center justify-between px-4 py-2.5" style={{ borderTop: i > 0 ? `1px solid ${BORDER}` : 'none' }}>
                                     <p style={{ ...sans, fontSize: '0.76rem', color: MUTED }}>{row.label}</p>
@@ -398,14 +501,18 @@ const DetailsPanel = ({ scholar, tab, setTab, note, setNote, saved, onSaveNote, 
                         {(s.negative_letters || 0) > 0 ? (
                             <div style={{ background: `${DANGER}0d`, border: `1px solid ${DANGER}40`, borderRadius: 14, padding: 14 }}>
                                 <p className="flex items-center gap-1.5 mb-1" style={{ ...sans, fontSize: '0.78rem', fontWeight: 700, color: DANGER }}>
-                                    <TrendingDown size={13} /> {s.negative_letters} Negative Sentiment {s.negative_letters === 1 ? 'Letter' : 'Letters'}
+                                    <TrendingDown size={13} /> {s.negative_letters} Negative Sentiment {s.negative_letters === 1 ? 'Letter' : 'Letters'} This Account Year
                                 </p>
                                 <p style={{ ...sans, fontSize: '0.74rem', fontStyle: 'italic', color: '#8a5a62' }}>
-                                    {s.negative_letters} out of {s.total_submissions} submissions flagged with negative tone by NLP analysis.
+                                    A review flag starts at negative sentiment in {negativeSentimentSpreadMonthThreshold} different months or {negativeSentimentConsecutiveMonthThreshold} consecutive months this account year.
                                 </p>
                             </div>
                         ) : (
-                            <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, fontStyle: 'italic' }}>No negative-sentiment letters recorded.</p>
+                            <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, fontStyle: 'italic' }}>
+                                {submissionsKnown
+                                    ? `No negative-sentiment letters recorded this account year. Review flag starts at ${negativeSentimentSpreadMonthThreshold} different months or ${negativeSentimentConsecutiveMonthThreshold} consecutive months.`
+                                    : 'No submissions to analyze for negative sentiment.'}
+                            </p>
                         )}
                     </div>
                 )}
@@ -425,12 +532,34 @@ const DetailsPanel = ({ scholar, tab, setTab, note, setNote, saved, onSaveNote, 
                             className="w-full outline-none resize-none fs-focus"
                             style={{ ...fieldStyle, borderRadius: 12, padding: 12 }} />
                         <div className="flex gap-2 mt-3 flex-wrap">
-                            <button type="button" onClick={onSaveNote} className="fs-focus" style={filledBtn}>{saved ? '✓ Saved' : 'Save Note'}</button>
-                            <a href={`mailto:${scholar.email}`} className="fs-focus" style={outlineBtn}><Mail size={12} /> Email Scholar</a>
-                            <button type="button" onClick={onHomeVisit} disabled={loggingVisit} className="fs-focus disabled:opacity-60"
-                                style={{ ...outlineBtn, color: PRIMARY, border: `1px solid ${PRIMARY}55` }}>
-                                <Home size={12} /> {loggingVisit ? 'Opening…' : 'Home Visit'}
+                            <button type="button" onClick={onSaveNote} disabled={savingNote || !note.trim()} className="fs-focus disabled:opacity-60" style={filledBtn}>
+                                {savingNote ? 'Saving…' : saved ? '✓ Saved' : 'Save Note'}
                             </button>
+                        </div>
+                        {interventionError && <p role="alert" className="mt-2" style={{ ...sans, fontSize: '0.72rem', color: DANGER }}>{interventionError}</p>}
+                        <div className="mt-5">
+                            <p style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: MUTED, marginBottom: 8 }}>History</p>
+                            {loadingInterventions ? (
+                                <p style={{ ...sans, fontSize: '0.74rem', color: MUTED }}>Loading case history…</p>
+                            ) : interventions.length === 0 ? (
+                                <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, fontStyle: 'italic' }}>No intervention history yet.</p>
+                            ) : (
+                                <ul className="flex flex-col gap-2" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                                    {interventions.map(item => (
+                                        <li key={item.id} className="rounded-lg px-3 py-2" style={{ background: BG, border: `1px solid ${BORDER}` }}>
+                                            <div className="flex items-center justify-between gap-2">
+                                                <span style={{ ...sans, fontSize: '0.7rem', fontWeight: 700, color: PRIMARY }}>
+                                                    {item.type === 'home_visit' ? 'Home Visit' : item.type === 'contact' ? 'Email Contact' : 'Case Note'}
+                                                </span>
+                                                <time style={{ ...sans, fontSize: '0.65rem', color: MUTED }}>
+                                                    {item.created_at ? new Date(item.created_at).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) : ''}
+                                                </time>
+                                            </div>
+                                            {item.note && <p className="mt-1 whitespace-pre-wrap" style={{ ...sans, fontSize: '0.73rem', color: INK }}>{item.note}</p>}
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
                         </div>
                     </div>
                 )}
@@ -514,10 +643,11 @@ const ScholarModal = ({ onClose, titleId, children }) => {
 const PAGE_SIZE = 8;
 
 const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
+    const [searchParams] = useSearchParams();
     const [scholars,   setScholars]   = useState([]);
     const [loading,    setLoading]    = useState(true);
     const [error,      setError]      = useState('');
-    const [riskFilter, setRiskFilter] = useState('all');
+    const [riskFilter, setRiskFilter] = useState(() => searchParams.get('risk') === 'high' ? 'high' : 'all');
     const [searchQuery, setSearchQuery] = useState('');
     const [gradeFilter, setGradeFilter] = useState('all');
     const [page, setPage] = useState(1);
@@ -527,6 +657,10 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
     const [tab, setTab] = useState('overview');
     const [notes, setNotes] = useState({});
     const [savedNoteFor, setSavedNoteFor] = useState(null);
+    const [savingNoteFor, setSavingNoteFor] = useState(null);
+    const [interventionsByScholar, setInterventionsByScholar] = useState({});
+    const [loadingInterventionsFor, setLoadingInterventionsFor] = useState(null);
+    const [interventionError, setInterventionError] = useState('');
     const [loggingVisitFor, setLoggingVisitFor] = useState(null);
     const [menu, setMenu] = useState(null);
 
@@ -555,6 +689,30 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
     useEffect(() => { setPage(1); }, [riskFilter, gradeFilter, searchQuery]);
 
     useEffect(() => {
+        if (!detailId) return undefined;
+        let cancelled = false;
+        const fetchInterventions = async () => {
+            setLoadingInterventionsFor(detailId);
+            setInterventionError('');
+            try {
+                const token = localStorage.getItem('token');
+                const headers = token ? { Authorization: `Bearer ${token}` } : {};
+                const response = await axios.get(`${API}/flagged/scholars/${detailId}/interventions`, { headers });
+                if (!cancelled) {
+                    setInterventionsByScholar(prev => ({ ...prev, [detailId]: response.data }));
+                }
+            } catch (e) {
+                console.error('Failed to load intervention history:', e);
+                if (!cancelled) setInterventionError('Unable to load intervention history. Please try again.');
+            } finally {
+                if (!cancelled) setLoadingInterventionsFor(null);
+            }
+        };
+        fetchInterventions();
+        return () => { cancelled = true; };
+    }, [detailId]);
+
+    useEffect(() => {
         if (!menu) return undefined;
         const onKey = (e) => { if (e.key === 'Escape') setMenu(null); };
         window.addEventListener('keydown', onKey);
@@ -562,9 +720,7 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
     }, [menu]);
 
     const highCount = scholars.filter(s => getRiskBucket(s.risk_level) === 'high').length;
-    const medCount  = scholars.filter(s => getRiskBucket(s.risk_level) === 'medium').length;
     const lowCount  = scholars.filter(s => getRiskBucket(s.risk_level) === 'low').length;
-
     const gradeCounts = scholars.reduce((acc, s) => {
         const value = String(s.year_level ?? 'N/A').trim() || 'N/A';
         acc[value] = (acc[value] || 0) + 1;
@@ -599,14 +755,34 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
     const openDetails = (id) => { setTab('overview'); setDetailId(id); setMenu(null); };
     const closeDetails = useCallback(() => setDetailId(null), []);
 
-    const resetFilters = () => { setSearchQuery(''); setRiskFilter('all'); setGradeFilter('all'); };
-
     const setNoteFor = (id, value) => setNotes(prev => ({ ...prev, [id]: value }));
 
-    const saveNote = (id) => {
-        if (!(notes[id] || '').trim()) return;
-        setSavedNoteFor(id);
-        setTimeout(() => setSavedNoteFor(null), 2000);
+    const saveNote = async (id) => {
+        const note = (notes[id] || '').trim();
+        if (!note) return;
+        setSavingNoteFor(id);
+        setInterventionError('');
+        try {
+            const token = localStorage.getItem('token');
+            const headers = token ? { Authorization: `Bearer ${token}` } : {};
+            const response = await axios.post(
+                `${API}/flagged/scholars/${id}/interventions`,
+                { note },
+                { headers }
+            );
+            setInterventionsByScholar(prev => ({
+                ...prev,
+                [id]: [response.data.intervention, ...(prev[id] || [])],
+            }));
+            setNoteFor(id, '');
+            setSavedNoteFor(id);
+            setTimeout(() => setSavedNoteFor(current => current === id ? null : current), 2000);
+        } catch (e) {
+            console.error('Failed to save case note:', e);
+            setInterventionError('Unable to save case note. Please try again.');
+        } finally {
+            setSavingNoteFor(null);
+        }
     };
 
     const handleHomeVisit = async (scholar) => {
@@ -618,13 +794,21 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
         try {
             const token = localStorage.getItem('token');
             const headers = token ? { Authorization: `Bearer ${token}` } : {};
-            await axios.post(
+            const response = await axios.post(
                 `${API}/flagged/scholars/${scholar.scholar_id}/home-visit`,
                 { note: (notes[scholar.scholar_id] || '').trim() || null },
                 { headers }
             );
+            setInterventionsByScholar(prev => ({
+                ...prev,
+                [scholar.scholar_id]: [response.data.intervention, ...(prev[scholar.scholar_id] || [])],
+            }));
         } catch (e) {
             console.error('Failed to log home visit request:', e);
+            setInterventionError('Unable to log the home visit request. Please try again.');
+            setTab('interventions');
+            setLoggingVisitFor(null);
+            return;
         } finally {
             setLoggingVisitFor(null);
         }
@@ -647,20 +831,16 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
 
     const menuScholar = menu ? scholars.find(s => s.scholar_id === menu.id) : null;
 
-    const todayLabel = new Date().toLocaleDateString('en-PH', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-
     const summary = [
         { title: 'Total Flagged', value: scholars.length, color: PRIMARY, icon: Users, desc: 'Scholars in this list' },
         { title: 'High Risk', value: highCount, color: DANGER, icon: AlertTriangle, desc: 'Requires immediate action' },
-        { title: 'Medium Risk', value: medCount, color: WARNING, icon: Flag, desc: 'Needs close monitoring' },
-        { title: 'Low Risk', value: lowCount, color: SUCCESS, icon: Bookmark, desc: 'No immediate concern' },
+        { title: 'Medium Risk', value: lowCount, color: WARNING, icon: Bookmark, desc: 'Flag recorded; monitor progress' },
     ];
 
     const riskTabs = [
         { key: 'all', label: 'All', count: scholars.length },
         { key: 'high', label: 'High Risk', count: highCount },
-        { key: 'medium', label: 'Medium Risk', count: medCount },
-        { key: 'low', label: 'Low Risk', count: lowCount },
+        { key: 'low', label: 'Medium Risk', count: lowCount },
     ];
 
     return (
@@ -674,16 +854,9 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
 
                 <AdminPageHeader
                     title="Flagged Scholars"
-                    description="Monitor at-risk scholars, review records, and manage interventions."
+                    description="Scholars with active compliance flags or scores below the configured minimum appear here for review."
                     actions={
                         <div className="flex flex-wrap items-center gap-3 flex-shrink-0">
-                        <div className="flex items-center gap-2.5 px-4 py-2.5" style={{ ...cardStyle, borderRadius: 12 }}>
-                            <Calendar size={17} style={{ color: BRONZE }} />
-                            <div>
-                                <p style={{ ...sans, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED }}>Today</p>
-                                <p style={{ ...sans, fontSize: '0.78rem', fontWeight: 600, color: INK }}>{todayLabel}</p>
-                            </div>
-                        </div>
                         <button type="button" className="fs-focus disabled:opacity-60" disabled={loading || filtered.length === 0}
                             onClick={() => exportCsv(filtered)} style={{ ...filledBtn, padding: '11px 18px' }}>
                             <Download size={14} /> Export CSV
@@ -695,11 +868,11 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
                 <div className="flex flex-col gap-5">
                 {/* ── KPI cards ── */}
                 {loading ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                         {[0, 1, 2, 3].map(i => <Skeleton key={i} style={{ height: 104 }} />)}
                     </div>
                 ) : (
-                    <section aria-label="Risk summary" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <section aria-label="Risk summary" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
                         {summary.map(c => (
                             <div key={c.title} className="flex items-center gap-4 p-5" style={{ ...cardStyle, minHeight: 104 }}>
                                 <IconBubble icon={c.icon} color={c.color} size={52} iconSize={22} />
@@ -728,12 +901,6 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
                                 <option key={value} value={value}>{label}</option>
                             ))}
                         </select>
-                        <button type="button" onClick={resetFilters} className="fs-focus" style={outlineBtn}>
-                            <RotateCcw size={13} /> Reset
-                        </button>
-                        <button type="button" onClick={fetchScholars} className="fs-focus" style={outlineBtn} aria-label="Refresh list">
-                            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> <span className="hidden sm:inline">Refresh</span>
-                        </button>
                     </div>
 
                     {/* Risk tabs */}
@@ -776,9 +943,8 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
                                                 { h: 'Scholar', cls: '' },
                                                 { h: 'Year Level', cls: 'hidden md:table-cell' },
                                                 { h: 'Risk Level', cls: '' },
-                                                { h: 'Risk Score', cls: '' },
+                                                { h: 'Compliance Points', cls: '' },
                                                 { h: 'Key Issue', cls: 'hidden lg:table-cell' },
-                                                { h: 'Last Updated', cls: 'hidden lg:table-cell' },
                                                 { h: 'Actions', cls: '', align: 'right' },
                                             ].map(col => (
                                                 <th key={col.h} scope="col" className={col.cls}
@@ -792,7 +958,6 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
                                         {pageRows.map((sch, idx) => {
                                             const m = deriveMetrics(sch);
                                             const topFlag = m.flags[0];
-                                            const updated = lastUpdatedOf(sch);
                                             return (
                                                 <tr key={sch.scholar_id} className="fs-row" style={{ borderTop: `1px solid ${BORDER}` }}>
                                                     <td className="hidden sm:table-cell" style={{ ...sans, fontSize: '0.76rem', color: MUTED, padding: '10px 14px' }}>{startIdx + idx + 1}</td>
@@ -811,17 +976,13 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
                                                     <td className="hidden md:table-cell" style={{ ...sans, fontSize: '0.76rem', color: MUTED, padding: '10px 14px' }}>{sch.year_level ?? '—'}</td>
                                                     <td style={{ padding: '10px 14px' }}><RiskBadge level={sch.risk_level} /></td>
                                                     <td style={{ padding: '10px 14px' }}>
-                                                        <p style={{ ...serif, fontSize: '1rem', fontWeight: 700, color: riskColor(sch.risk_level) }}>{m.riskScore}</p>
+                                                        <p style={{ ...serif, fontSize: '1rem', fontWeight: 700, color: riskColor(sch.risk_level) }}>{Math.round(m.overallCompliance)} points</p>
                                                         <div className="h-1 rounded-full overflow-hidden mt-1" style={{ background: BORDER, width: 44 }}>
-                                                            <div className="h-full rounded-full" style={{ width: `${Math.min(100, m.riskScore)}%`, background: riskColor(sch.risk_level) }} />
+                                                            <div className="h-full rounded-full" style={{ width: `${Math.min(100, m.overallCompliance)}%`, background: riskColor(sch.risk_level) }} />
                                                         </div>
                                                     </td>
                                                     <td className="hidden lg:table-cell" style={{ padding: '10px 14px', maxWidth: 240 }}>
                                                         <p style={{ ...sans, fontSize: '0.76rem', color: INK }} className="truncate">{topFlag ? topFlag.description : '—'}</p>
-                                                    </td>
-                                                    <td className="hidden lg:table-cell" style={{ ...sans, fontSize: '0.76rem', color: MUTED, padding: '10px 14px', whiteSpace: 'nowrap' }}
-                                                        title={updated && !updated.exact ? 'Based on last submission date' : undefined}>
-                                                        {updated ? updated.label : '—'}
                                                     </td>
                                                     <td style={{ padding: '10px 14px', textAlign: 'right', whiteSpace: 'nowrap' }}>
                                                         <button type="button" onClick={() => openDetails(sch.scholar_id)} className="fs-focus"
@@ -899,7 +1060,10 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
                     <DetailsPanel key={detailScholar.scholar_id} scholar={detailScholar}
                         tab={tab} setTab={setTab}
                         note={detailNote} setNote={(v) => setNoteFor(detailScholar.scholar_id, v)}
-                        saved={savedNoteFor === detailScholar.scholar_id} onSaveNote={() => saveNote(detailScholar.scholar_id)}
+                        saved={savedNoteFor === detailScholar.scholar_id} savingNote={savingNoteFor === detailScholar.scholar_id}
+                        interventions={interventionsByScholar[detailScholar.scholar_id] || []}
+                        loadingInterventions={loadingInterventionsFor === detailScholar.scholar_id}
+                        interventionError={interventionError} onSaveNote={() => saveNote(detailScholar.scholar_id)}
                         onHomeVisit={() => handleHomeVisit(detailScholar)} onAddNote={focusCaseNote}
                         loggingVisit={loggingVisitFor === detailScholar.scholar_id} />
                 </ScholarModal>

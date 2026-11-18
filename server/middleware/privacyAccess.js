@@ -9,8 +9,6 @@ const getSettings = async () => {
     const rows = await query('SELECT * FROM privacy_settings WHERE id = 1 LIMIT 1');
     if (!rows.length) throw new Error('Privacy settings migration has not been run.');
     return {
-        roleBasedAccess: Boolean(rows[0].role_based_access),
-        documentProtection: Boolean(rows[0].document_protection),
         accessLogging: Boolean(rows[0].access_logging),
         privacyMonitoring: Boolean(rows[0].privacy_monitoring),
     };
@@ -34,13 +32,10 @@ const logPrivacyAccess = async (req, { action, resourceType, resourceId, status 
     );
 };
 
-const canAccessScholar = async (req, scholarId, { document = false } = {}) => {
+const canAccessScholar = async (req, scholarId) => {
     const role = String(req.user?.role || '').toLowerCase();
     if (role === 'admin') return true;
-    const settings = await getSettings();
-    if (document && !settings.documentProtection) return false;
     if (role === 'scholar') return String(req.user.scholar_id || '') === String(scholarId);
-    if (!settings.roleBasedAccess) return false;
     if (role !== 'officer') return false;
 
     const rows = await query(

@@ -8,6 +8,7 @@ import {
     AlarmClock, ShieldCheck, Inbox, UserRound, Repeat2, Info
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
+import { formatDuration, getDutyHours } from '../../utils/dutyHelpers.js';
 
 const API = `${API_ORIGIN}/api`;
 const token = () => localStorage.getItem('token');
@@ -73,37 +74,6 @@ const formatDutyTime = (value) => {
     if (!time) return null;
     const hour = time.hours % 12 || 12;
     return `${hour}:${String(time.minutes).padStart(2, '0')} ${time.hours >= 12 ? 'PM' : 'AM'}`;
-};
-
-const formatDuration = (hours) => {
-    const totalMinutes = Math.round(Number(hours) * 60);
-    if (!Number.isFinite(totalMinutes) || totalMinutes < 0) return '—';
-    const wholeHours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    if (wholeHours && minutes) return `${wholeHours}h ${minutes}m`;
-    if (wholeHours) return `${wholeHours}h`;
-    return `${minutes}m`;
-};
-
-const parseAttendanceTimestamp = (value) => {
-    if (!value) return null;
-    const text = String(value).trim();
-    const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(text)
-        ? text.replace(' ', 'T')
-        : text;
-    const timestamp = new Date(normalized).getTime();
-    return Number.isFinite(timestamp) ? timestamp : null;
-};
-
-// Service credit follows recorded check-in/check-out timestamps, not the
-// scheduled duty duration. Completed makeup duties receive one extra hour.
-const getDutyHours = (duty) => {
-    const checkedInAt = parseAttendanceTimestamp(duty.marked_at);
-    const checkedOutAt = parseAttendanceTimestamp(duty.check_out_at);
-    if (checkedInAt === null || checkedOutAt === null || checkedOutAt <= checkedInAt) return 0;
-    const workedMinutes = Math.round((checkedOutAt - checkedInAt) / 60000);
-    const makeupBonusMinutes = Number(duty.is_makeup) === 1 ? 60 : 0;
-    return (workedMinutes + makeupBonusMinutes) / 60;
 };
 
 // ─── KPI card ─────────────────────────────────────────────────────────────
@@ -278,7 +248,6 @@ const QRScannerModal = ({ onScan, onClose }) => {
 
 const DutyParticipation = () => {
     const [duties,     setDuties]     = useState([]);
-    const [requiredHours, setRequiredHours] = useState(null);
     const [loading,    setLoading]    = useState(true);
     const [expanded,   setExpanded]   = useState(null);
     const [showScanner, setShowScanner] = useState(false);
@@ -298,30 +267,8 @@ const DutyParticipation = () => {
 
     const fetchDuties = async () => {
         try {
-            const [dutiesResult, complianceResult] = await Promise.allSettled([
-                axios.get(`${API}/scholar/my-duties`, authHeaders()),
-                axios.get(`${API}/scholar/compliance-status`, authHeaders()),
-            ]);
-            if (dutiesResult.status === 'fulfilled') {
-                setDuties(dutiesResult.value.data || []);
-            } else {
-                console.error('Error fetching scholar duties:', dutiesResult.reason);
-            }
-            if (complianceResult.status === 'fulfilled') {
-                const rawRequiredHours = complianceResult.value.data?.required_hours;
-                const configuredHours = Number(rawRequiredHours);
-                setRequiredHours(
-                    rawRequiredHours !== null
-                    && rawRequiredHours !== undefined
-                    && rawRequiredHours !== ''
-                    && Number.isFinite(configuredHours)
-                    && configuredHours >= 0
-                        ? configuredHours
-                        : null
-                );
-            } else {
-                console.error('Error fetching required service hours:', complianceResult.reason);
-            }
+            const response = await axios.get(`${API}/scholar/my-duties`, authHeaders());
+            setDuties(response.data || []);
         } catch (err) {
             console.error('Error loading duty participation:', err);
         } finally {
@@ -486,7 +433,7 @@ const DutyParticipation = () => {
                 {/* ── 2. Participation overview ── */}
                 {!loading && (
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4" style={{ marginBottom: 20 }}>
-                        <KpiCard icon={ShieldCheck} label="Verified Duty Hours" value={formatDuration(verifiedHours)} description={requiredHours === null ? 'required hours unavailable' : `of ${formatDuration(requiredHours)} required`} accent={SUCCESS} />
+                        <KpiCard icon={ShieldCheck} label="Verified Duty Hours" value={formatDuration(verifiedHours)} description="recorded from completed duties" accent={SUCCESS} />
                         <KpiCard icon={TrendingUp} label="Attendance Rate" value={`${attendanceRate}%`} description={`${completedCount} of ${duties.length} duties`} accent={PRIMARY} />
                         <KpiCard icon={CalendarDays} label="Activities Joined" value={completedCount} description="verified this semester" accent={BRONZE} />
                         <KpiCard icon={AlarmClock} label="Pending Verification" value={pendingCount} description="awaiting check-in" accent={WARNING} />

@@ -30,7 +30,7 @@ const sans = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
 
 const AccountSetup = () => {
     const navigate = useNavigate();
-    const [profile, setProfile] = useState({ login_id: '', full_name: '', email: '', phone: '', role: '' });
+    const [profile, setProfile] = useState({ login_id: '', full_name: '', email: '', role: '' });
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -72,7 +72,6 @@ const AccountSetup = () => {
             await axios.post(`${API_ORIGIN}/api/account/setup`, {
                 full_name: profile.full_name,
                 email: profile.email,
-                phone: profile.phone,
                 current_password: currentPassword,
                 new_password: newPassword,
             }, { headers: { Authorization: `Bearer ${token}` } });
@@ -156,10 +155,6 @@ const AccountSetup = () => {
                                             <div className="as-field">
                                                 <label className="as-label" htmlFor="as-email">Email address</label>
                                                 <input id="as-email" className="as-input" type="email" value={profile.email} onChange={(e) => updateProfile('email', e.target.value)} autoComplete="email" required maxLength={255} />
-                                            </div>
-                                            <div className="as-field">
-                                                <label className="as-label" htmlFor="as-phone">Phone number</label>
-                                                <input id="as-phone" className="as-input" type="tel" value={profile.phone} onChange={(e) => updateProfile('phone', e.target.value)} autoComplete="tel" required maxLength={64} />
                                             </div>
                                         </div>
                                     </section>
