@@ -360,7 +360,7 @@ const getDonorReport = async (filters) => {
          AND LOWER(COALESCE(d.status, '')) <> 'cancelled'
          ${filters.year_level ? ' AND u.year_level = ?' : ''}
          ${filters.scholar_id ? ' AND u.scholar_id = ?' : ''}
-       ORDER BY d.duty_date ASC, d.time_start ASC, g.group_name ASC, u.full_name ASC`,
+       ORDER BY DATE_FORMAT(d.duty_date, '%Y-%m-%d') ASC, d.time_start ASC, g.group_name ASC, u.full_name ASC`,
       dutyValues
     );
     const dutyAttendanceByScholar = new Map();

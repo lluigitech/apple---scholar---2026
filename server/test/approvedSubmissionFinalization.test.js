@@ -291,6 +291,7 @@ test('donor report returns group duty rosters with present, late, and absent sta
   assert.equal(queries.length, 3);
   assert.match(queries[2].sql, /JOIN duty_group_assignments dga ON dga\.duty_id = d\.id/);
   assert.match(queries[2].sql, /COALESCE\(da\.status, 'pending'\) AS attendance_status/);
+  assert.match(queries[2].sql, /ORDER BY DATE_FORMAT\(d\.duty_date, '%Y-%m-%d'\) ASC/);
   assert.deepEqual(queries[2].values, ['2026-11']);
   assert.deepEqual(rows.map((row) => [
     row.scholar_id,
