@@ -43,7 +43,7 @@ const ScoreRing = ({ score, color, size = 92 }) => {
                 transform={`rotate(-90 ${size / 2} ${size / 2})`}
                 style={{ transition: 'stroke-dashoffset 0.6s ease' }}
             />
-            <text x="50%" y="46%" textAnchor="middle" style={{ ...display, fontSize: size * 0.24, fontWeight: 700, fill: INK }}>{score}</text>
+            <text x="50%" y="46%" textAnchor="middle" style={{ ...display, fontSize: size * 0.24, fontWeight: 700, fill: INK }}>{Math.round(Number(score) || 0)}</text>
             <text x="50%" y="66%" textAnchor="middle" style={{ ...body, fontSize: size * 0.1, fill: MUTED }}>Score</text>
         </svg>
     );
@@ -55,7 +55,7 @@ const BreakdownCard = ({ label, value, sub }) => {
     return (
         <div className="text-center" style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '12px 10px' }}>
             <p style={{ ...body, fontSize: '0.66rem', color: MUTED, marginBottom: 3 }} className="truncate">{label}</p>
-            <p style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color }}>{value}</p>
+            <p style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color }}>{Math.round(Number(value) || 0)}</p>
             <p style={{ ...body, fontSize: '0.6rem', color: '#c6b8ae' }}>{sub}</p>
         </div>
     );
@@ -105,7 +105,7 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
                         </div>
                         <div className="text-right flex-shrink-0" style={{ minWidth: 110 }}>
                             <p style={{ ...body, fontSize: '0.66rem', color: MUTED }}>Overall score</p>
-                            <p style={{ ...display, fontSize: '1.1rem', fontWeight: 600, color: INK }}>{ev.overallScore}/100</p>
+                            <p style={{ ...display, fontSize: '1.1rem', fontWeight: 600, color: INK }}>{Math.round(Number(ev.overallScore) || 0)}/100</p>
                             {ev.toneLabel && (
                                 <>
                                     <p style={{ ...body, fontSize: '0.66rem', color: MUTED, marginTop: 6 }}>Academic tone</p>

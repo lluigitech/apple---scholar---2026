@@ -92,7 +92,7 @@ const HistoryCard = ({ item, onResubmit }) => {
     const sentColor = sentimentPct === null ? MUTED : sentimentPct >= 70 ? SUCCESS : sentimentPct >= 40 ? WARNING : DANGER;
 
     const completeness = isLetter && item.quality_score !== null && item.quality_score !== undefined
-        ? Number(item.quality_score)
+        ? Math.round(Number(item.quality_score))
         : null;
 
     const hasMedia = !!item.media_paths;

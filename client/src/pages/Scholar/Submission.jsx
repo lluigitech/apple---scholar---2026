@@ -138,7 +138,7 @@ const GradeStamp = ({ score, color, size = 'lg' }) => {
       }}
     >
       <span style={{ ...body, fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em' }}>GRADE</span>
-      <span style={{ ...display, fontSize: big ? '1.6rem' : '1.3rem', fontWeight: 700, lineHeight: 1 }}>{score}</span>
+      <span style={{ ...display, fontSize: big ? '1.6rem' : '1.3rem', fontWeight: 700, lineHeight: 1 }}>{Math.round(Number(score) || 0)}</span>
       <span style={{ ...body, fontSize: '0.52rem', color, opacity: 0.8 }}>/ 100</span>
     </div>
   );
@@ -153,7 +153,7 @@ const ScoreBar = ({ score, weight, label }) => {
         <span style={{ ...body, fontSize: '0.73rem', color: '#3f2f28', fontWeight: 500 }}>{label}</span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <span style={{ ...body, fontSize: '0.62rem', color: MUTED }}>{weight} pts</span>
-          <span style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color }}>{score}/100</span>
+          <span style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color }}>{Math.round(Number(score) || 0)}/100</span>
         </div>
       </div>
       <div className="rounded-full overflow-hidden" style={{ height: 4, background: BORDER }}>
@@ -550,7 +550,7 @@ function Submission() {
 
         const bodyScore = Number(scoreResponse?.data?.body_score);
         if (Number.isFinite(bodyScore)) {
-          const reportScore = Math.min(Math.max(bodyScore, 0), LETTER_BODY_MAX);
+          const reportScore = Math.min(Math.max(Math.round(bodyScore), 0), LETTER_BODY_MAX);
           const mediaScore = calcMediaScore(media);
           const infoScore = calcInfoScore(info);
           const overallScore = Math.min(reportScore + mediaScore + infoScore, 100);
@@ -1099,7 +1099,7 @@ function Submission() {
                         return (
                           <div key={s.label} className="rounded-xl p-2 sm:p-3 text-center" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
                             <p style={{ ...body, fontSize: '0.58rem', color: MUTED, marginBottom: 2 }} className="truncate">{s.label}</p>
-                            <p style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: c }}>{s.value}</p>
+                            <p style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: c }}>{Math.round(Number(s.value) || 0)}</p>
                             <p style={{ ...body, fontSize: '0.58rem', color: '#c6b8ae' }}>{s.sub}</p>
                           </div>
                         );

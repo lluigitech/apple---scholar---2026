@@ -189,7 +189,7 @@ const ScholarLetterView = ({ submission, onClose }) => {
                                 className="text-xs font-bold px-2.5 py-1 rounded-full"
                                 style={{ backgroundColor: qualityInfo.bg, color: qualityInfo.color }}
                             >
-                                {submission.quality_score}% · {qualityInfo.label}
+                                {Math.round(Number(submission.quality_score) || 0)}% · {qualityInfo.label}
                             </span>
                             <button
                                 onClick={onClose}
@@ -207,7 +207,7 @@ const ScholarLetterView = ({ submission, onClose }) => {
                                 Quality Score
                             </p>
                             <p style={{ fontFamily: "'DM Sans',sans-serif", fontSize: '1rem', fontWeight: 800, color: getQualityColor(submission.quality_score) }}>
-                                {submission.quality_score ?? '—'}/100
+                                {submission.quality_score == null ? '—' : Math.round(Number(submission.quality_score) || 0)}/100
                             </p>
                         </div>
                         <div>
