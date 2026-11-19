@@ -12,6 +12,14 @@ class MlApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["status"], "ready")
+        self.assertTrue(response.json["model_loaded"])
+
+    def test_health_allows_bootstrap_before_model_upload(self):
+        response = create_app().test_client().get("/health")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json["status"], "model_missing")
+        self.assertFalse(response.json["model_loaded"])
 
     def test_predict_accepts_letter_aliases(self):
         for field in ("letter", "letter_text", "letter_content"):

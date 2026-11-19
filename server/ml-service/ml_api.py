@@ -14,7 +14,12 @@ def create_app(predictor=None, api_key=None):
 
     @app.get("/health")
     def health():
-        return jsonify({"status": "ready", "model": "xlm-roberta-base"})
+        model_loaded = app.config["predictor"] is not None
+        return jsonify({
+            "status": "ready" if model_loaded else "model_missing",
+            "model": "xlm-roberta-base",
+            "model_loaded": model_loaded,
+        })
 
     @app.post("/predict")
     def predict():
