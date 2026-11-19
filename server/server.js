@@ -26,7 +26,6 @@ const retentionRoutes  = require('./routes/retentionRoutes');
 const { sendTaskDeadlineReminders, sendComplianceAlerts } = require('./utils/notifyHelpers');
 const { rateLimit } = require('./middleware/rateLimit');
 const { cleanupExpired } = require('./services/resumableUploadService');
-const { loadModelAtStartup } = require('./services/letterScoreService');
 const { runScheduledBackups } = require('./services/backupRecoveryService');
 const { markEndedDutyAbsences } = require('./services/dutyAbsenceService');
 const { autoCheckOutDutyAttendances } = require('./services/dutyAttendanceService');
@@ -107,8 +106,6 @@ app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({ error: 'Something went wrong on the server!' });
 });
-
-loadModelAtStartup();
 
 let databaseReady = false;
 

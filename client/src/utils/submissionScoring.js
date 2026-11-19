@@ -1,9 +1,6 @@
 import { getEducationStage, hasEducationProgram } from './educationStage.js';
 
-// ─── Scoring (LOCAL — temporary stand-in until Naive Bayes dataset is ready) ──
-// This rule-based utility provides consistent output for the UI. When the
-// ML scoring service is available, swap out buildEval while preserving the
-// same return shape.
+// ─── Local rule-based fallback when the ML scoring service is unavailable ──
 
 // The scoring contract is intentionally three-way in the UI model,
 // rendered as a 100-point scoreboard with explicit subcomponent maxes.

@@ -145,7 +145,7 @@ const GradeStamp = ({ score, color, size = 'lg' }) => {
 };
 
 // Score bar with progress indicator
-const ScoreBar = ({ score, weight, label }) => {
+const ScoreBar = ({ score, weight, label, valueLabel }) => {
   const color = score >= 75 ? SUCCESS : score >= 50 ? WARNING : DANGER;
   return (
     <div className="rounded-xl px-3 py-2 mb-1.5" style={{ background: `${color}0f`, border: `1px solid ${color}30` }}>
@@ -153,7 +153,7 @@ const ScoreBar = ({ score, weight, label }) => {
         <span style={{ ...body, fontSize: '0.73rem', color: '#3f2f28', fontWeight: 500 }}>{label}</span>
         <div className="flex items-center gap-1.5 flex-shrink-0">
           <span style={{ ...body, fontSize: '0.62rem', color: MUTED }}>{weight} pts</span>
-          <span style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color }}>{Math.round(Number(score) || 0)}/100</span>
+          <span style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color }}>{valueLabel || `${Math.round(Number(score) || 0)}/100`}</span>
         </div>
       </div>
       <div className="rounded-full overflow-hidden" style={{ height: 4, background: BORDER }}>
@@ -571,11 +571,15 @@ function Submission() {
             mediaScore,
             infoScore,
             overallScore,
-            source: 'naive_bayes',
+            source: 'xlm_roberta',
+            modelBodyScore: Number(scoreResponse.data.model_body_score),
+            modelMaxScore: Number(scoreResponse.data.model_max_score),
+            categories: scoreResponse.data.categories,
+            sentimentLabel: scoreResponse.data.sentiment_label,
             ...quality,
             ...tone,
             qualityLabel: quality.riskLabel,
-            breakdown: scoreResponse?.data?.breakdown || { date: 5, body: 49, attachments: 20, caption: 13 },
+            breakdown: scoreResponse?.data?.breakdown || {},
           };
         }
       } catch (scoreErr) {
@@ -1014,8 +1018,8 @@ function Submission() {
                       <h3 style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: INK, marginTop: 2 }}>Correspondence Evaluation</h3>
                       <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 3 }}>{info.name || 'Scholar'} · {info.date}</p>
                     </div>
-                    <span style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: evalResult.flagged ? DANGER : evalResult.source === 'naive_bayes' ? GOLD : SLATE, background: `${evalResult.flagged ? DANGER : evalResult.source === 'naive_bayes' ? GOLD : SLATE}14`, padding: '4px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>
-                      {evalResult.flagged ? 'Invalid Letter' : evalResult.source === 'naive_bayes' ? 'Naive Bayes ML' : 'Rule-Based'}
+                    <span style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: evalResult.flagged ? DANGER : evalResult.source === 'xlm_roberta' ? GOLD : SLATE, background: `${evalResult.flagged ? DANGER : evalResult.source === 'xlm_roberta' ? GOLD : SLATE}14`, padding: '4px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                      {evalResult.flagged ? 'Invalid Letter' : evalResult.source === 'xlm_roberta' ? 'XLM-RoBERTa ML' : 'Rule-Based'}
                     </span>
                   </div>
                 </div>
@@ -1106,28 +1110,27 @@ function Submission() {
                       })}
                     </div>
 
-                    {evalResult.source === 'naive_bayes' && evalResult.rubric && (
-                      <>
-                        <div className="mb-3">
-                          <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em', marginBottom: 6 }}>INFO (10 pts)</p>
-                          <ScoreBar score={evalResult.rubric.date.score} weight={10} label="Date Format" />
+                    {evalResult.source === 'xlm_roberta' && evalResult.categories && (
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em' }}>LETTER BODY</p>
+                          <span style={{ ...body, fontSize: '0.75rem', fontWeight: 700, color: INK }}>
+                            {Math.round(Number(evalResult.modelBodyScore) || 0)}/{evalResult.modelMaxScore || 75}
+                          </span>
                         </div>
-
-                        <div className="mb-3">
-                          <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em', marginBottom: 6 }}>LETTER BODY (70 pts)</p>
-                          <ScoreBar score={evalResult.rubric.paragraph.score}        weight={14}  label="Paragraph Structure" />
-                          <ScoreBar score={evalResult.rubric.academic.score}         weight={14}  label="Academic Updates" />
-                          <ScoreBar score={evalResult.rubric.self_improvement.score} weight={14}  label="Self-Improvement" />
-                          <ScoreBar score={evalResult.rubric.family.score}           weight={14}  label="Family Situation" />
-                          <ScoreBar score={evalResult.rubric.difficulty.score}       weight={14}  label="Socio-Economic" />
-                        </div>
-
-                        <div className="mb-3">
-                          <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em', marginBottom: 6 }}>DOCUMENTATION (20 pts)</p>
-                          <ScoreBar score={evalResult.rubric.picture.score} weight={15} label="Document / Picture" />
-                          <ScoreBar score={evalResult.rubric.caption.score} weight={5} label="Captions" />
-                        </div>
-                      </>
+                        {Object.entries(evalResult.categories).map(([label, points]) => (
+                          <ScoreBar
+                            key={label}
+                            score={Math.round((Number(points) / 15) * 100)}
+                            weight={15}
+                            label={label}
+                            valueLabel={`${Math.round(Number(points) || 0)}/15`}
+                          />
+                        ))}
+                        <p style={{ ...body, fontSize: '0.75rem', color: MUTED, marginTop: 8 }}>
+                          Sentiment: {evalResult.sentimentLabel || '—'}
+                        </p>
+                      </div>
                     )}
 
                     {evalResult.source === 'rule_based' && (

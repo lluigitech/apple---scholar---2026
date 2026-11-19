@@ -7,7 +7,9 @@ const controllerContent = fs.readFileSync(
   'utf8'
 );
 
-const lateModelBranch = controllerContent.match(/const result = await predictLetterScore\(rawLetter\);[\s\S]*?return res\.status\(200\)\.json\(\{[\s\S]*?score: Number\(result\.score\),[\s\S]*?fallback: false,\s*\}\);/m);
-assert.ok(lateModelBranch, 'local model success branch should serialize a numeric score with fallback: false');
+assert.match(controllerContent, /const prediction = await predictLetterWithMl\(rawLetter\);/);
+assert.match(controllerContent, /return res\.status\(503\)\.json\(\{[\s\S]*?fallback: true,/);
+assert.match(controllerContent, /body_score: prediction\.body_score \* 70 \/ prediction\.max_score/);
+assert.match(controllerContent, /source: 'xlm_roberta'/);
 
-console.log('submissionController predict fallback regression test passed');
+console.log('submissionController XLM-RoBERTa prediction regression test passed');

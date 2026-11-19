@@ -16,8 +16,7 @@ const { logAuditEvent } = require('../utils/auditLogger');
 const { canAccessScholar, logPrivacyAccess } = require('../middleware/privacyAccess');
 const { consumeCompleted, removeSession } = require('../services/resumableUploadService');
 const r2Storage = require('../services/r2StorageService');
-const { predictSentimentForLetter, predictContentScoreForLetter, mapSentimentValueToLabel } = require('../services/sentimentService');
-const { predictLetterScore, mapQualityStatus, mapQualityLabel } = require('../services/letterScoreService');
+const { predictLetterWithMl } = require('../services/sentimentService');
 const { buildSubmissionReviewEmail } = require('../utils/emailTemplates');
 
 const normalizeManualWorkflowStatus = (value) => {
@@ -546,7 +545,6 @@ exports.submitCompliance = async (req, res) => {
             });
         }
 
-        let modelScorePrediction = null;
         await uploadPermanentFiles(uploadedFiles, scholar_id);
         await registerFileAssets(scholar_id, uploadedFiles);
         await Promise.all(resumableIds.map(removeSession));
@@ -579,31 +577,21 @@ exports.submitCompliance = async (req, res) => {
             quality_status: resolvedType === 'letter' ? normalizeQualityStatus(normalizeSubmissionValue(quality_status)) : null,
         };
 
-        let prediction = null;
         let contentPrediction = null;
         if (resolvedType === 'letter' && normalizedPayload.letter_content) {
-            prediction = await predictSentimentForLetter(normalizedPayload.letter_content);
-            contentPrediction = await predictContentScoreForLetter(normalizedPayload.letter_content);
-            try {
-                modelScorePrediction = await predictLetterScore(normalizedPayload.letter_content);
-            } catch (scoreErr) {
-                console.warn('Warning: model score prediction unavailable; keeping submitted letter quality fields.', scoreErr?.message || scoreErr);
+            contentPrediction = await predictLetterWithMl(normalizedPayload.letter_content);
+            if (contentPrediction) {
+                normalizedPayload.sentiment_score = normalizeSubmissionValue(contentPrediction.sentiment);
+                normalizedPayload.sentiment_label = normalizeSubmissionValue(contentPrediction.sentiment_label);
+                normalizedPayload.quality_label = normalizeSubmissionValue(contentPrediction.quality_label);
+                normalizedPayload.content_score = normalizeSubmissionValue(contentPrediction.percentage);
+                normalizedPayload.content_breakdown = normalizeSubmissionValue(JSON.stringify({
+                    categories: contentPrediction.categories,
+                    body_score: contentPrediction.body_score,
+                    max_score: contentPrediction.max_score,
+                    academic_tone: contentPrediction.academic_tone,
+                }));
             }
-            if (modelScorePrediction?.score != null) {
-                normalizedPayload.quality_score = normalizeSubmissionValue(modelScorePrediction.score);
-                normalizedPayload.quality_status = normalizeQualityStatus(normalizeSubmissionValue(modelScorePrediction.quality_status));
-            }
-        }
-
-        if (prediction) {
-            normalizedPayload.sentiment_score = normalizeSubmissionValue(prediction.sentiment);
-            normalizedPayload.sentiment_label = normalizeSubmissionValue(prediction.sentiment_label);
-        }
-
-        if (contentPrediction) {
-            normalizedPayload.content_score = normalizeSubmissionValue(contentPrediction.score);
-            normalizedPayload.content_breakdown = normalizeSubmissionValue(JSON.stringify(contentPrediction.breakdown));
-            normalizedPayload.quality_label = normalizeSubmissionValue(contentPrediction.quality_label);
         }
 
         // Rule: one active submission per requirement type at a time.
@@ -810,7 +798,7 @@ exports.submitCompliance = async (req, res) => {
     }
 };
 
-// SCORE A LETTER BODY USING THE TRAINED REGRESSION MODEL
+// Score a letter with the persistent XLM-RoBERTa prediction service.
 exports.predictLetterScore = async (req, res) => {
     const rawLetter = typeof req.body?.letter_content === 'string'
         ? req.body.letter_content
@@ -822,144 +810,36 @@ exports.predictLetterScore = async (req, res) => {
         return res.status(400).json({ error: 'Missing letter content' });
     }
 
-    try {
-        const flaskScore = await predictContentScoreForLetter(rawLetter);
-        console.log('[letter-score-debug] controller received Flask response:', {
-            raw: flaskScore?.raw_response || null,
-            normalized: flaskScore,
-        });
-
-        if (flaskScore?.flagged === true) {
-            console.warn('[letter-score-debug] flagged path selected; skipping local model and rule-based scoring:', flaskScore.flag_reason);
-            return res.status(200).json({
-                score: 0,
-                body_score: 0,
-                flagged: true,
-                flag_reason: flaskScore.flag_reason || 'This submission does not appear to be a valid letter.',
-                quality_status: 'high_risk',
-                quality_label: 'Invalid Letter',
-                academic_tone: 'Informal',
-                breakdown: {
-                    date: { score: 0 },
-                    paragraph: { score: 0 },
-                    academic: { score: 0 },
-                    self_improvement: { score: 0 },
-                    family: { score: 0 },
-                    difficulty: { score: 0 },
-                    picture: { score: 0 },
-                    caption: { score: 0 },
-                },
-                fallback: false,
-            });
-        }
-
-        if (flaskScore && typeof flaskScore.score === 'number') {
-            const computedScore = Number(flaskScore.score);
-            const breakdown = {
-                date: { score: 5 },
-                paragraph: { score: Number(flaskScore.breakdown?.paragraph ?? 0) },
-                academic: { score: Number(flaskScore.breakdown?.academic ?? 0) },
-                self_improvement: { score: Number(flaskScore.breakdown?.self_improvement ?? 0) },
-                family: { score: Number(flaskScore.breakdown?.family ?? 0) },
-                difficulty: { score: Number(flaskScore.breakdown?.difficulty ?? 0) },
-                picture: { score: 10 },
-                caption: { score: 10 },
-            };
-
-            const bodyScoreOutOf70 = ['paragraph', 'academic', 'self_improvement', 'family', 'difficulty']
-                .reduce((sum, key) => sum + Number(breakdown[key].score), 0);
-            console.log('[letter-score-debug] Flask ML path executed for /predict-score');
-            console.log('[letter-score-debug] RAW Flask /predict-score response:', flaskScore.raw_response);
-            console.log('[letter-score-debug] reshaped frontend breakdown:', breakdown);
-            console.log('[letter-score-debug] body arithmetic:', {
-                bodyScoreOutOf70,
-                flaskOverallScoreOutOf100: computedScore,
-            });
-
-            return res.status(200).json({
-                score: computedScore,
-                body_score: bodyScoreOutOf70,
-                quality_status: mapQualityStatus(computedScore),
-                quality_label: String(flaskScore.quality_label || mapQualityLabel(computedScore)),
-                academic_tone: 'Formal',
-                breakdown,
-                fallback: false,
-            });
-        }
-
-        console.warn('[letter-score-debug] Flask response unusable; selecting local model fallback.');
-        const result = await predictLetterScore(rawLetter);
-        console.log('[letter-score-debug] Flask ML path unavailable; local regression fallback result:', result);
-        if (!result || result.fallback || result.score === null) {
-            console.log('[letter-score-debug] rule-based fallback path selected: no usable Flask or local regression score');
-            return res.status(200).json({
-                score: null,
-                quality_label: 'Good',
-                quality_status: 'accepted',
-                academic_tone: 'Formal',
-                breakdown: {
-                    date: { score: 5 },
-                    paragraph: { score: 0 },
-                    academic: { score: 0 },
-                    self_improvement: { score: 0 },
-                    family: { score: 0 },
-                    difficulty: { score: 0 },
-                    picture: { score: 10 },
-                    caption: { score: 10 },
-                },
-                fallback: true,
-            });
-        }
-
-        console.log('[letter-score-debug] local regression path executed; reshaped frontend breakdown:', {
-            date: Number(result.breakdown?.date ?? 5),
-            paragraph: Number(result.breakdown?.body ?? 50),
-            academic: 0,
-            self_improvement: 0,
-            family: 0,
-            difficulty: 0,
-            picture: Number(result.breakdown?.attachments ?? 20),
-            caption: Number(result.breakdown?.caption ?? 13),
-        });
-        const localBodyScore = Number(result.score) * 70 / 100;
-        return res.status(200).json({
-            score: Number(result.score),
-            body_score: localBodyScore,
-            quality_label: result.quality_label,
-            quality_status: result.quality_status,
-            academic_tone: result.academic_tone || 'Formal',
-            breakdown: {
-                date: { score: Number(result.breakdown?.date ?? 5) },
-                paragraph: { score: Number(result.breakdown?.body ?? 50) },
-                academic: { score: 0 },
-                self_improvement: { score: 0 },
-                family: { score: 0 },
-                difficulty: { score: 0 },
-                picture: { score: Number(result.breakdown?.attachments ?? 20) },
-                caption: { score: Number(result.breakdown?.caption ?? 13) },
-            },
-            fallback: false,
-        });
-    } catch (err) {
-        console.warn('Warning: model score route failed:', err?.message || err);
-        return res.status(200).json({
-            score: null,
-            quality_label: 'Good',
-            quality_status: 'accepted',
-            academic_tone: 'Formal',
-            breakdown: {
-                date: { score: 5 },
-                paragraph: { score: 0 },
-                academic: { score: 0 },
-                self_improvement: { score: 0 },
-                family: { score: 0 },
-                difficulty: { score: 0 },
-                picture: { score: 10 },
-                caption: { score: 10 },
-            },
+    const prediction = await predictLetterWithMl(rawLetter);
+    if (!prediction) {
+        return res.status(503).json({
+            error: 'XLM-RoBERTa prediction service is unavailable.',
             fallback: true,
         });
     }
+
+    const toPercent = (score) => Math.round((Number(score) / 15) * 100);
+    const breakdown = Object.fromEntries(
+        Object.entries(prediction.breakdown).map(([category, score]) => [
+            category,
+            { score: toPercent(score), points: score, max_points: 15 },
+        ])
+    );
+
+    return res.json({
+        score: prediction.percentage,
+        body_score: prediction.body_score * 70 / prediction.max_score,
+        model_body_score: prediction.body_score,
+        model_max_score: prediction.max_score,
+        percentage: prediction.percentage,
+        categories: prediction.categories,
+        sentiment: prediction.sentiment,
+        sentiment_label: prediction.sentiment_label,
+        academic_tone: prediction.academic_tone,
+        breakdown,
+        source: 'xlm_roberta',
+        fallback: false,
+    });
 };
 
 // PREVIEW / PROXY A REGISTERED FILE
@@ -2113,192 +1993,6 @@ exports.getAllGrades = (req, res) => {
         console.error('Failed to scope grades to assigned scholars:', err);
         res.status(500).json({ error: 'Unable to verify scholar access.' });
     });
-};
-
-// ============================================================
-// NAIVE BAYES ML EVALUATION
-// Calls the Python Flask microservice (ml_service.py) to evaluate
-// a scholar letter using the trained Naive Bayes model.
-// Returns same shape as buildEval() so the frontend doesn't change.
-// ============================================================
-// ============================================================
-// NAIVE BAYES ML EVALUATION — RUBRIC-BASED HYBRID SCORING
-// Follows exact same formula as the Excel spreadsheet:
-// Date(5%) + Body(70%) + Documentation(25%) = Evaluated Grade
-//
-// Body breakdown (70% total, 14% each):
-//   Paragraph Structure, Academic, Self-Improvement, Family, Difficulty
-//
-// Documentation breakdown (25% total, 12.5% each):
-//   Document/Picture, Caption
-// ============================================================
-exports.evaluateLetterML = async (req, res) => {
-    return res.status(410).json({ error: 'AI evaluation has been permanently disabled for data privacy.' });
-/*
-    const {
-        letter_text,
-        media_count = 0,
-        captions_complete = false,
-        has_date = true,
-    } = req.body;
-
-    if (!letter_text || letter_text.trim().length < 10) {
-        return res.status(400).json({ error: 'Missing or too short letter_text' });
-    }
-
-    const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://127.0.0.1:5001/evaluate';
-
-    try {
-        // ── Call Flask Naive Bayes microservice ──
-        const mlRes = await fetch(ML_SERVICE_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ letter_text: letter_text.trim() }),
-            signal: AbortSignal.timeout(8000),
-        });
-
-        if (!mlRes.ok) throw new Error(`ML service responded with status ${mlRes.status}`);
-        const ml = await mlRes.json();
-
-        const words = letter_text.trim().split(/\s+/).filter(Boolean).length;
-        const t = letter_text.toLowerCase();
-        const sentences = letter_text.split(/[.!?]/).filter(s => s.trim().length > 5).length;
-
-        // ── 1. DATE SCORE (5%) ──
-        // Check if letter has a proper date format
-        const hasProperDate = has_date &&
-            /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(t) &&
-            /\b(20\d{2})\b/.test(t);
-        const dateScore = hasProperDate ? 100 : 0;
-
-        // ── 2. BODY OF LETTER SCORES (70% total, 14% each) ──
-
-        // Paragraph Structure — rule-based (ML doesn't directly measure this)
-        let paragraphScore = 0;
-        const paragraphs = letter_text.split(/\n\n+/).filter(p => p.trim().length > 20).length;
-        if (paragraphs >= 3)      paragraphScore = 100; // intro, body, conclusion
-        else if (paragraphs >= 2) paragraphScore = 75;
-        else if (words >= 100)    paragraphScore = 50;
-        else if (words >= 50)     paragraphScore = 25;
-        else                      paragraphScore = 0;
-
-        // Academic, Self-Improvement, Family, Difficulty — from Naive Bayes ML
-        const academicScore        = ml.category_scores?.academic         ?? 0;
-        const selfImprovementScore = ml.category_scores?.self_improvement ?? 0;
-        const familyScore          = ml.category_scores?.family           ?? 0;
-        const difficultyScore      = ml.category_scores?.difficulty       ?? 0;
-
-        // Apply word count penalty to ML scores for very short letters
-        const wordPenaltyFactor = words < 30 ? 0.1 : words < 50 ? 0.3 : words < 100 ? 0.6 : 1.0;
-
-        const adjustedAcademic        = Math.round(academicScore        * wordPenaltyFactor);
-        const adjustedSelfImprovement = Math.round(selfImprovementScore * wordPenaltyFactor);
-        const adjustedFamily          = Math.round(familyScore          * wordPenaltyFactor);
-        const adjustedDifficulty      = Math.round(difficultyScore      * wordPenaltyFactor);
-
-        // ── 3. DOCUMENTATION SCORES (25% total, 12.5% each) ──
-
-        // Document/Picture score
-        let pictureScore = 0;
-        if (media_count >= 2)      pictureScore = 100; // rubric requires at least 2
-        else if (media_count === 1) pictureScore = 50;
-        else                        pictureScore = 0;
-
-        // Caption score
-        const captionScore = media_count === 0 ? 0 : captions_complete ? 100 : 50;
-
-        // ── 4. EVALUATED GRADE (exact same formula as Excel spreadsheet) ──
-        // = (Date×5 + Para×14 + Academic×14 + Self×14 + Family×14 + Difficulty×14 + Picture×12.5 + Caption×12.5) / 100
-        const overallScore = Math.round(
-            (dateScore             * 5   +
-             paragraphScore        * 14  +
-             adjustedAcademic      * 14  +
-             adjustedSelfImprovement * 14 +
-             adjustedFamily        * 14  +
-             adjustedDifficulty    * 14  +
-             pictureScore          * 12.5 +
-             captionScore          * 12.5) / 100
-        );
-
-        // ── 5. RISK LEVEL ──
-        let riskLevel, riskColor, riskLabel, accepted, qualityStatus;
-        if (overallScore >= 90) {
-            riskLevel = 'accepted'; riskColor = '#16a34a'; riskLabel = 'Excellent';
-            accepted = true; qualityStatus = 'accepted';
-        } else if (overallScore >= 75) {
-            riskLevel = 'accepted'; riskColor = '#16a34a'; riskLabel = 'Good';
-            accepted = true; qualityStatus = 'accepted';
-        } else if (overallScore >= 50) {
-            riskLevel = 'medium'; riskColor = '#d97706'; riskLabel = 'Needs Improvement';
-            accepted = false; qualityStatus = 'medium_risk';
-        } else {
-            riskLevel = 'high'; riskColor = '#ef4444'; riskLabel = 'Non-Compliant';
-            accepted = false; qualityStatus = 'high_risk';
-        }
-
-        const toneLabel = overallScore >= 80 ? 'Strong' : overallScore >= 60 ? 'Moderate' : 'Informal';
-        const toneColor = overallScore >= 80 ? '#16a34a' : overallScore >= 60 ? '#d97706' : '#ef4444';
-        const sentimentLabel = overallScore >= 75 ? 'Positive' : overallScore >= 50 ? 'Neutral' : 'Negative';
-        const sentimentScore = (overallScore - 50) / 50;
-
-        return res.json({
-            // Same shape as buildEval()
-            overallScore,
-            reportScore:  Math.round(
-                (dateScore * 5 + paragraphScore * 14 + adjustedAcademic * 14 +
-                 adjustedSelfImprovement * 14 + adjustedFamily * 14 + adjustedDifficulty * 14) / 79
-            ),
-            mediaScore: Math.round((pictureScore * 12.5 + captionScore * 12.5) / 25),
-            toneLabel,
-            toneColor,
-            riskLevel,
-            riskColor,
-            riskLabel,
-            accepted,
-            qualityStatus,
-            sentimentLabel,
-            sentimentScore,
-
-            // Full rubric breakdown (for UI display)
-            rubric: {
-                date:              { score: dateScore,                  weight: 5   },
-                paragraph:         { score: paragraphScore,             weight: 14  },
-                academic:          { score: adjustedAcademic,           weight: 14  },
-                self_improvement:  { score: adjustedSelfImprovement,    weight: 14  },
-                family:            { score: adjustedFamily,             weight: 14  },
-                difficulty:        { score: adjustedDifficulty,         weight: 14  },
-                picture:           { score: pictureScore,               weight: 12.5 },
-                caption:           { score: captionScore,               weight: 12.5 },
-            },
-
-            // Raw ML output
-            ml: {
-                academic_detected:            ml.academic_detected,
-                academic_probability:         ml.academic_probability,
-                self_improvement_detected:    ml.self_improvement_detected,
-                self_improvement_probability: ml.self_improvement_probability,
-                family_detected:              ml.family_detected,
-                family_probability:           ml.family_probability,
-                difficulty_detected:          ml.difficulty_detected,
-                difficulty_probability:       ml.difficulty_probability,
-                compliance_label:             ml.compliance_label,
-                compliance_probabilities:     ml.compliance_probabilities,
-                category_scores:              ml.category_scores,
-            },
-
-            source: 'naive_bayes',
-        });
-
-    } catch (err) {
-        console.error('ML service error:', err.message);
-        return res.status(503).json({
-            error: 'ML service unavailable',
-            fallback: true,
-            message: 'Naive Bayes service is offline. Use rule-based scoring as fallback.',
-        });
-    }
-};
-*/
 };
 
 // Generate or return existing generated PDF for a submission (Officer on-demand)

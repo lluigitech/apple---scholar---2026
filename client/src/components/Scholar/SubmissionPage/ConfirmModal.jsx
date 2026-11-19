@@ -64,7 +64,7 @@ const BreakdownCard = ({ label, value, sub }) => {
 const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
     const RiskIcon = ev.accepted ? CheckCircle2 : ev.riskLevel === 'medium' ? AlertCircle : XCircle;
     const failedItems = ev.checklist.filter(c => !c.passed);
-    const sourceLabel = ev.source === 'naive_bayes' ? 'Naive Bayes ML' : ev.source === 'flagged' ? 'Flagged' : 'Rule-Based';
+    const sourceLabel = ev.source === 'xlm_roberta' ? 'XLM-RoBERTa ML' : ev.source === 'flagged' ? 'Flagged' : 'Rule-Based';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(36,21,18,0.55)' }}>
@@ -123,6 +123,28 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
                         <BreakdownCard label="Documentation" value={ev.mediaScore} sub="20 pts" />
                         <BreakdownCard label="Info" value={ev.infoScore || 0} sub="10 pts" />
                     </div>
+
+                    {ev.categories && (
+                        <div style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 14, marginBottom: 16 }}>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                                <p style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY }}>XLM-RoBERTa letter-body scores</p>
+                                <span style={{ ...body, fontSize: '0.76rem', fontWeight: 700, color: INK }}>
+                                    {Math.round(Number(ev.modelBodyScore) || 0)}/{ev.modelMaxScore || 75}
+                                </span>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                {Object.entries(ev.categories).map(([label, points]) => (
+                                    <div key={label} className="rounded-lg px-2.5 py-2" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+                                        <p style={{ ...body, fontSize: '0.66rem', color: MUTED }}>{label}</p>
+                                        <p style={{ ...display, fontSize: '1rem', fontWeight: 700, color: INK }}>{Math.round(Number(points) || 0)}/15</p>
+                                    </div>
+                                ))}
+                            </div>
+                            <p style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 10 }}>
+                                Sentiment: {ev.sentimentLabel || '—'} · Academic tone: {ev.toneLabel || '—'}
+                            </p>
+                        </div>
+                    )}
 
                     {/* ── 4. Improvement checklist ── */}
                     <div style={{ background: failedItems.length ? `${DANGER}0a` : `${SUCCESS}0d`, border: `1px solid ${failedItems.length ? `${DANGER}33` : `${SUCCESS}33`}`, borderRadius: RADIUS, padding: '16px 18px', marginBottom: 16 }}>

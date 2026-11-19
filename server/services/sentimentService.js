@@ -1,119 +1,96 @@
 const axios = require('axios');
 
-const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://127.0.0.1:5001';
+const ML_SERVICE_URL = (process.env.ML_SERVICE_URL || 'http://127.0.0.1:5001').replace(/\/+$/, '');
+const ML_REQUEST_TIMEOUT_MS = Number(process.env.ML_REQUEST_TIMEOUT_MS) || 120000;
+const ML_SERVICE_API_KEY = process.env.ML_SERVICE_API_KEY;
 
-const mapSentimentValueToLabel = (value) => {
-    const normalized = Number(value);
-    if (normalized === -1) return 'Negative';
-    if (normalized === 1) return 'Positive';
-    return 'Neutral';
+const CATEGORY_KEYS = {
+    'Paragraph Structure': 'paragraph',
+    'Academic Update': 'academic',
+    'Self-Improvement': 'self_improvement',
+    'Family Update': 'family',
+    'Difficulty Update': 'difficulty',
 };
 
-const normalizeSentimentResponse = (payload) => {
-    if (!payload || typeof payload !== 'object') return null;
-
-    const sentiment = Number.parseInt(payload.sentiment ?? payload.sentiment_score ?? payload.score ?? 0, 10);
-    if (Number.isNaN(sentiment)) return null;
-
-    const label = String(payload.sentiment_label || mapSentimentValueToLabel(sentiment));
-    const confidence = typeof payload.confidence === 'number' ? payload.confidence : null;
-
-    return {
-        sentiment,
-        sentiment_label: label,
-        confidence,
-    };
+const mapSentimentLabelToValue = (label) => {
+    const normalized = String(label || '').toLowerCase();
+    if (normalized === 'negative') return -1;
+    if (normalized === 'positive') return 1;
+    return 0;
 };
 
 const normalizeContentScoreResponse = (payload) => {
     if (!payload || typeof payload !== 'object') return null;
 
-    const score = Number(payload.score ?? 0);
-    if (Number.isNaN(score)) return null;
+    const categories = payload.categories && typeof payload.categories === 'object'
+        ? payload.categories
+        : null;
+    const breakdown = {};
+    for (const [label, key] of Object.entries(CATEGORY_KEYS)) {
+        const score = Number(categories?.[label]);
+        if (!Number.isFinite(score) || score < 0 || score > 15) return null;
+        breakdown[key] = score;
+    }
 
-    const rawBreakdown = payload.breakdown && typeof payload.breakdown === 'object' ? payload.breakdown : {};
-    const breakdown = {
-        paragraph: Number(rawBreakdown.paragraph ?? 0),
-        academic: Number(rawBreakdown.academic ?? 0),
-        self_improvement: Number(rawBreakdown.self_improvement ?? 0),
-        family: Number(rawBreakdown.family ?? 0),
-        difficulty: Number(rawBreakdown.difficulty ?? 0),
-    };
-
-    const qualityLabel = String(payload.quality_label || 'Unknown');
+    const bodyScore = Number(payload.body_score);
+    const maxScore = Number(payload.max_score);
+    const percentage = Number(payload.percentage);
+    const sentimentLabel = String(payload.sentiment || '');
+    const academicTone = String(payload.academic_tone || '');
+    if (
+        !Number.isFinite(bodyScore) || bodyScore < 0 || bodyScore > 75
+        || maxScore !== 75
+        || !Number.isFinite(percentage) || percentage < 0 || percentage > 100
+        || !['negative', 'neutral', 'positive'].includes(sentimentLabel.toLowerCase())
+        || !['formal', 'moderate', 'informal'].includes(academicTone.toLowerCase())
+    ) {
+        return null;
+    }
 
     return {
-        score,
+        score: percentage,
+        body_score: bodyScore,
+        max_score: maxScore,
+        percentage,
         breakdown,
-        quality_label: qualityLabel,
-        ...(Object.prototype.hasOwnProperty.call(payload, 'flagged')
-            ? { flagged: payload.flagged === true }
-            : {}),
-        ...(Object.prototype.hasOwnProperty.call(payload, 'flag_reason')
-            ? { flag_reason: payload.flag_reason ? String(payload.flag_reason) : null }
-            : {}),
+        categories,
+        sentiment: mapSentimentLabelToValue(sentimentLabel),
+        sentiment_label: sentimentLabel,
+        academic_tone: academicTone,
+        quality_label: percentage >= 75 ? 'Good' : percentage >= 50 ? 'Needs Improvement' : 'Non-Compliant',
     };
 };
 
-const predictSentimentForLetter = async (letterText) => {
+const predictLetterWithMl = async (letterText) => {
     if (!letterText || !String(letterText).trim()) return null;
 
     try {
         const response = await axios.post(`${ML_SERVICE_URL}/predict`, {
-            letter_text: String(letterText),
+            letter: String(letterText),
         }, {
-            timeout: 2500,
-            headers: { 'Content-Type': 'application/json' },
+            timeout: ML_REQUEST_TIMEOUT_MS,
+            headers: {
+                'Content-Type': 'application/json',
+                ...(ML_SERVICE_API_KEY ? { Authorization: `Bearer ${ML_SERVICE_API_KEY}` } : {}),
+            },
         });
-
-        const prediction = normalizeSentimentResponse(response?.data);
-        if (!prediction) {
-            console.warn('Sentiment service returned an unreadable payload; continuing submission without sentiment.');
-            return null;
-        }
-
-        return prediction;
-    } catch (err) {
-        console.warn('Warning: sentiment prediction service unavailable; continuing submission without sentiment.', err?.message || err);
-        return null;
-    }
-};
-
-const predictContentScoreForLetter = async (letterText) => {
-    if (!letterText || !String(letterText).trim()) return null;
-
-    try {
-        const response = await axios.post(`${ML_SERVICE_URL}/predict-score`, {
-            letter_text: String(letterText),
-        }, {
-            timeout: 2500,
-            headers: { 'Content-Type': 'application/json' },
-        });
-
-        console.log('[letter-score-debug] Flask /predict-score call succeeded:', response?.data);
 
         const prediction = normalizeContentScoreResponse(response?.data);
         if (!prediction) {
-            console.warn('Content scoring service returned an unreadable payload; continuing submission without content score fields.');
+            console.warn('ML service returned an invalid XLM-RoBERTa prediction.');
             return null;
         }
-
-        return {
-            ...prediction,
-            raw_response: response.data,
-        };
-    } catch (err) {
-        console.warn('[letter-score-debug] Flask /predict-score call failed:', err?.message || err);
-        console.warn('Warning: content score prediction service unavailable; continuing submission without content score fields.', err?.message || err);
+        return prediction;
+    } catch (error) {
+        console.warn('ML prediction service unavailable:', error?.message || error);
         return null;
     }
 };
 
 module.exports = {
     ML_SERVICE_URL,
-    mapSentimentValueToLabel,
-    normalizeSentimentResponse,
+    CATEGORY_KEYS,
+    mapSentimentLabelToValue,
     normalizeContentScoreResponse,
-    predictSentimentForLetter,
-    predictContentScoreForLetter,
+    predictLetterWithMl,
 };

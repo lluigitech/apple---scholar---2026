@@ -18,6 +18,7 @@ build/
 server/uploads/generated-letters/
 server/backups/
 server/certs/
+server/ml-service/letter_model_clean/
 submission-*.docx
 submission-*.pdf
 submission-*.png
