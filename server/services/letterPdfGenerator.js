@@ -7,6 +7,7 @@ const ImageModule = require('docxtemplater-image-module-free');
 const db = require('../config/db');
 const cloudinary = require('../config/cloudinary');
 const r2Storage = require('./r2StorageService');
+const { normalizeToPng } = require('./imageBufferService');
 
 const promiseDb = db.promise();
 
@@ -54,28 +55,49 @@ const execAsync = (cmd) => new Promise((resolve, reject) => {
 
 const fetchImageBuffer = async (filePath) => {
   if (!filePath) return null;
-  try {
-    if (r2Storage.parseR2Uri(filePath)) {
-      return await r2Storage.readObjectBuffer(filePath);
-    }
-
-    // Remote URL (Cloudinary or external)
-    if (filePath.startsWith('http://') || filePath.startsWith('https://')) {
-      const res = await fetch(filePath);
-      if (!res.ok) return null;
-      const ab = await res.arrayBuffer();
-      return Buffer.from(ab);
-    }
-
-    // Local server file path (e.g. /uploads/...) -> resolve to project root
-    const rel = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-    const abs = path.resolve(process.cwd(), rel);
-    if (!fs.existsSync(abs)) return null;
-    return fs.readFileSync(abs);
-  } catch (e) {
-    console.warn('Failed to read image', filePath, e && e.message ? e.message : e);
-    return null;
+  if (r2Storage.parseR2Uri(filePath)) {
+    return r2Storage.readObjectBuffer(filePath);
   }
+
+  if (/^https?:\/\//i.test(filePath)) {
+    let downloadUrl = filePath;
+    const parsedUrl = new URL(filePath);
+    if (parsedUrl.hostname === 'res.cloudinary.com') {
+      const [assetRows] = await promiseDb.query(
+        'SELECT public_id, resource_type, file_format FROM file_assets WHERE file_url = ? LIMIT 1',
+        [filePath]
+      );
+      if (assetRows.length > 0) {
+        const asset = assetRows[0];
+        downloadUrl = cloudinary.utils.private_download_url(
+          asset.public_id,
+          asset.file_format || 'bin',
+          {
+            resource_type: asset.resource_type || 'image',
+            type: 'authenticated',
+            expires_at: Math.floor(Date.now() / 1000) + 600,
+            attachment: false,
+          }
+        );
+      } else if (parsedUrl.protocol === 'http:') {
+        parsedUrl.protocol = 'https:';
+        downloadUrl = parsedUrl.toString();
+      }
+    }
+
+    const res = await fetch(downloadUrl);
+    if (!res.ok) throw new Error(`Remote image returned HTTP ${res.status}.`);
+    const buffer = Buffer.from(await res.arrayBuffer());
+    if (buffer.length === 0) throw new Error('Remote image is empty.');
+    return buffer;
+  }
+
+  const rel = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+  const abs = path.resolve(process.cwd(), rel);
+  if (!fs.existsSync(abs)) throw new Error('Local image file was not found.');
+  const buffer = fs.readFileSync(abs);
+  if (buffer.length === 0) throw new Error('Local image file is empty.');
+  return buffer;
 };
 
 async function generateLetterDocx(submissionId) {
@@ -115,7 +137,8 @@ async function generateLetterDocx(submissionId) {
   sub.school = userProfile.school || '';
 
   const [mediaRows] = await promiseDb.query(
-    `SELECT file_path, description FROM submission_media WHERE submission_id = ? ORDER BY id ASC LIMIT 2`,
+    `SELECT COALESCE(NULLIF(file_path, ''), NULLIF(photo_path, '')) AS file_path, description
+     FROM submission_media WHERE submission_id = ? ORDER BY id ASC LIMIT 2`,
     [submissionId]
   );
 
@@ -140,18 +163,17 @@ async function generateLetterDocx(submissionId) {
   for (let i = 0; i < Math.min(mediaRows.length, 2); i++) {
     const media = mediaRows[i];
     if (media && media.file_path) {
-      const buf = await fetchImageBuffer(media.file_path);
-      imageBuffers[`photo${i + 1}`] = buf || null;
+      const buffer = await fetchImageBuffer(media.file_path);
+      imageBuffers[`photo${i + 1}`] = buffer ? await normalizeToPng(buffer) : null;
     }
   }
 
-  const TRANSPARENT_PNG = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=',
-    'base64'
-  );
+  if (!imageBuffers.photo1 && !imageBuffers.photo2) {
+    console.warn(`No submission photos found for PDF generation (submission ${submissionId}).`);
+  }
 
-  data.photo1 = 'photo1';
-  data.photo2 = 'photo2';
+  data.photo1 = imageBuffers.photo1 ? 'photo1' : null;
+  data.photo2 = imageBuffers.photo2 ? 'photo2' : null;
 
   if (!fs.existsSync(TEMPLATE_PATH)) {
     throw new Error(`Template not found at ${TEMPLATE_PATH}`);
@@ -161,11 +183,7 @@ async function generateLetterDocx(submissionId) {
   const zip = new PizZip(content);
 
   const imageModule = new ImageModule({
-    getImage: function(tagValue, tagName) {
-      if (!tagValue) return TRANSPARENT_PNG;
-      const buffer = imageBuffers[tagValue] || (tagValue === 'photo2' ? TRANSPARENT_PNG : TRANSPARENT_PNG);
-      return buffer;
-    },
+    getImage: (tagValue) => imageBuffers[tagValue],
     getSize: function(img, tagValue) {
       if (tagValue === 'photo2') return [200, 150];
       return [200, 150];
