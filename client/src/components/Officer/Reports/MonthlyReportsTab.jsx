@@ -139,7 +139,26 @@ const mapRow = row => {
   const fullText = pick(row, 'letter_content', 'letterContent') || '';
   let cb = pick(row, 'content_breakdown', 'contentBreakdown');
   try { if (typeof cb === 'string') cb = JSON.parse(cb); } catch { cb = null; }
-  const rubric = cb && typeof cb === 'object' ? RUBRIC.map(r => ({ label: r.label, max: r.max, score: Number(cb[r.key] ?? 0) })) : [];
+  const v3Categories = cb?.v3?.categories && typeof cb.v3.categories === 'object'
+    ? cb.v3.categories
+    : null;
+  const rubric = Array.isArray(cb?.criteria)
+    ? cb.criteria.map(item => ({
+      label: String(item.label || item.key || 'Scoring criterion'),
+      max: Number(item.max) || 0,
+      score: Number(item.score) || 0,
+    }))
+    : v3Categories
+      ? Object.entries(v3Categories).map(([label, category]) => ({
+        label,
+        max: 15,
+        score: Number(category?.score) || 0,
+      }))
+    : cb?.categories && typeof cb.categories === 'object'
+      ? Object.entries(cb.categories).map(([label, value]) => ({ label, max: 15, score: Number(value) || 0 }))
+    : cb && typeof cb === 'object'
+      ? RUBRIC.map(r => ({ label: r.label, max: r.max, score: Number(cb[r.key] ?? 0) }))
+      : [];
   const q = pick(row, 'quality_score', 'qualityScore');
   const score = q === undefined ? null : Number(q);
   const { sentiment, score: sScore } = getSentiment(pick(row, 'sentiment_label', 'sentimentLabel'), pick(row, 'sentiment_score', 'sentimentScore'));
@@ -155,12 +174,18 @@ const mapRow = row => {
     submittedDate: formatDate(pick(row, 'submitted_at', 'submittedAt')),
     type: 'Monthly Progress Report',
     score, quality, sentiment, sentimentScore: sScore,
+    experimentalClassification: cb?.primary_classification || cb?.experimental_classification || null,
     sentimentKeywords: Array.isArray(row.sentiment_keywords) ? row.sentiment_keywords : [],
     pdfUrl: pick(row, 'letter_pdf_url', 'letterPdfUrl', 'generated_pdf_path', 'generatedPdfPath', 'letter_file_url', 'file_url') || null,
     review: normReview(pick(row, 'review_status', 'staff_action', 'staffAction')),
     comment: pick(row, 'staff_comment', 'staffComment') || null,
     fullText, excerpt: fullText.slice(0, 240), wordCount: wordCountOf(fullText), rubric,
-    bodyScore: rubric.reduce((s, r) => s + r.score, 0),
+    bodyScore: Number(cb?.body_score ?? rubric.reduce((s, r) => s + r.score, 0)),
+    scoringMethod: cb?.method === 'rule_based_v3'
+      ? 'V3 rule-based'
+      : cb?.method === 'rule_based'
+        ? 'baseline rule-based'
+        : 'rubric',
     checklist: [
       { label: 'Letter body provided', met: wordCountOf(fullText) > 0 },
       { label: 'Minimum word count (300+)', met: wordCountOf(fullText) >= 300 },
@@ -374,10 +399,10 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
           </div>
 
           <div>
-            <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.08em', color: GOLD, marginBottom: 10 }}>AI EVALUATION</p>
+            <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.08em', color: GOLD, marginBottom: 10 }}>REPORT EVALUATION</p>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {[
-                ['Quality Score', letter.score === null ? '—' : `${letter.score}%`, letter.rubric.length ? `${letter.bodyScore} / 70 rubric points` : 'No rubric data', qColor],
+                ['Quality Score', letter.score === null ? '—' : `${letter.score}%`, letter.rubric.length ? `${letter.bodyScore} / 70 ${letter.scoringMethod} points` : 'No rubric data', qColor],
                 ['Sentiment', sc ? sc.label : '—', sc && letter.sentimentScore !== null ? `${letter.sentimentScore} / 100` : 'No sentiment data', sc?.color || MUTED],
                 ['Word Count', letter.wordCount, 'words', INK],
               ].map(([label, value, sub, color], index) => (
@@ -396,8 +421,27 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
               </div>
             )}
 
+            {letter.experimentalClassification && (
+              <div className="mt-3" style={{ border: `1px solid ${RULE}`, borderRadius: 12, background: `${AMBER}0a`, padding: '12px 16px' }}>
+                <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', color: CLAY }}>TF-IDF + LOGISTIC REGRESSION · PRIMARY CLASSIFICATION</p>
+                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <p style={{ ...body, fontSize: '0.78rem', color: INK }}>
+                    Sentiment: <strong>{letter.experimentalClassification.sentiment.label}</strong>
+                    <span style={{ color: MUTED }}> ({letter.experimentalClassification.sentiment.confidence_percent}% confidence)</span>
+                  </p>
+                  <p style={{ ...body, fontSize: '0.78rem', color: INK }}>
+                    Academic tone: <strong>{letter.experimentalClassification.academic_tone.label}</strong>
+                    <span style={{ color: MUTED }}> ({letter.experimentalClassification.academic_tone.confidence_percent}% confidence)</span>
+                  </p>
+                </div>
+                <p style={{ ...body, fontSize: '0.7rem', color: MUTED, marginTop: 6 }}>
+                  Trained on synthetic examples; not human-validated. This advisory does not determine the score or trigger follow-up.
+                </p>
+              </div>
+            )}
+
             <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
-              <MetricCard label="RUBRIC BREAKDOWN">
+              <MetricCard label={letter.scoringMethod === 'rule-based' ? 'RULE-BASED SCORE BREAKDOWN' : 'RUBRIC BREAKDOWN'}>
                 {letter.rubric.length ? <div className="space-y-3">
                   {letter.rubric.map(item => {
                     const percentage = item.max ? Math.min(100, (item.score / item.max) * 100) : 0;

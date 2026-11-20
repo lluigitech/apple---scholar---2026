@@ -1,58 +1,49 @@
 const assert = require('assert');
 const {
   mapSentimentLabelToValue,
-  normalizeContentScoreResponse,
+  normalizeExperimentalClassification,
 } = require('../services/sentimentService');
 
 assert.strictEqual(mapSentimentLabelToValue('Negative'), -1);
 assert.strictEqual(mapSentimentLabelToValue('Neutral'), 0);
 assert.strictEqual(mapSentimentLabelToValue('Positive'), 1);
 
-assert.deepStrictEqual(normalizeContentScoreResponse({
-  categories: {
-    'Paragraph Structure': 12,
-    'Academic Update': 13,
-    'Self-Improvement': 14,
-    'Family Update': 10,
-    'Difficulty Update': 11,
+assert.deepStrictEqual(normalizeExperimentalClassification({
+  success: true,
+  model_type: 'Experimental TF-IDF + Logistic Regression',
+  sentiment: {
+    prediction: 'Negative',
+    confidence: 0.81,
+    confidence_status: 'High',
   },
-  body_score: 60,
-  max_score: 75,
-  percentage: 80,
-  sentiment: 'Positive',
-  academic_tone: 'Formal',
+  academic_tone: {
+    prediction: 'Moderate',
+    confidence: 0.63,
+    confidence_status: 'Moderate',
+  },
 }), {
-  score: 80,
-  body_score: 60,
-  max_score: 75,
-  percentage: 80,
-  breakdown: {
-    paragraph: 12,
-    academic: 13,
-    self_improvement: 14,
-    family: 10,
-    difficulty: 11,
+  model_type: 'TF-IDF + Logistic Regression',
+  sentiment_score: -1,
+  sentiment: {
+    label: 'Negative',
+    confidence: 0.81,
+    confidence_percent: 81,
+    confidence_status: 'High',
   },
-  categories: {
-    'Paragraph Structure': 12,
-    'Academic Update': 13,
-    'Self-Improvement': 14,
-    'Family Update': 10,
-    'Difficulty Update': 11,
+  academic_tone: {
+    label: 'Moderate',
+    confidence: 0.63,
+    confidence_percent: 63,
+    confidence_status: 'Moderate',
   },
-  sentiment: 1,
-  sentiment_label: 'Positive',
-  academic_tone: 'Formal',
-  quality_label: 'Good',
+  automated_estimate: true,
+  disclaimer: 'Automated model estimate; not independently validated for real-world accuracy.',
 });
 
-assert.strictEqual(normalizeContentScoreResponse({
-  categories: {},
-  body_score: 75,
-  max_score: 75,
-  percentage: 100,
-  sentiment: 'Positive',
-  academic_tone: 'Formal',
+assert.strictEqual(normalizeExperimentalClassification({
+  success: true,
+  sentiment: { prediction: 'Negative', confidence: 0.81 },
+  academic_tone: { prediction: 'Moderate', confidence: 1.1 },
 }), null);
 
 console.log('sentimentService test passed');

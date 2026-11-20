@@ -220,7 +220,6 @@ const OfficerAnalytics = () => {
   const completenessData = useMemo(() => {
     const total = monthlySubs.length || 1;
     const counts = {
-      'Letter body (50+ words)': 0,
       'Minimum length (150+ words)': 0,
       'At least 1 photo': 0,
       'All photos have descriptions': 0,
@@ -284,7 +283,6 @@ const OfficerAnalytics = () => {
 
     monthlySubs.forEach((sub) => {
       const checks = sub.checklistResults || [];
-      if (!checks.find(c => c.label === 'Letter body (50+ words)')?.passed) counts['Below minimum length'] += 1;
       if (!checks.find(c => c.label === 'Minimum length (150+ words)')?.passed) counts['Below minimum length'] += 1;
       if (!checks.find(c => c.label === 'At least 1 photo')?.passed) counts['Missing photo'] += 1;
       if (!checks.find(c => c.label === 'All photos have descriptions')?.passed) counts['Missing photo descriptions'] += 1;

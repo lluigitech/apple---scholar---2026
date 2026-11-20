@@ -52,7 +52,7 @@ test('monthly letter list returns review and AI data within the officer assignme
       quality_status: 'accepted',
       quality_label: 'accepted',
       content_score: 57,
-      content_breakdown: '{"paragraph":6}',
+      content_breakdown: '{"paragraph":6,"primary_classification":{"model_type":"TF-IDF + Logistic Regression","automated_estimate":true,"sentiment_score":0,"sentiment":{"label":"Neutral","confidence_percent":84},"academic_tone":{"label":"Formal","confidence_percent":72}}}',
       sentiment_score: 0.4,
       sentiment_label: 'positive',
       review_status: 'pending',
@@ -79,9 +79,18 @@ test('monthly letter list returns review and AI data within the officer assignme
   assert.equal(response.body[0].review_status, 'pending');
   assert.equal(response.body[0].quality_status, 'accepted');
   assert.equal(response.body[0].generated_pdf_path, 'https://example.test/monthly-letter.pdf');
-  assert.equal(response.body[0].content_breakdown, '{"paragraph":6}');
+  const contentBreakdown = JSON.parse(response.body[0].content_breakdown);
+  assert.equal(contentBreakdown.primary_classification.model_type, 'TF-IDF + Logistic Regression');
+  assert.equal(contentBreakdown.primary_classification.automated_estimate, true);
+  assert.equal(contentBreakdown.primary_classification.sentiment.label, 'Neutral');
+  assert.equal(contentBreakdown.primary_classification.academic_tone.label, 'Formal');
   assert.equal(response.body[0].staffAction, null);
   assert.equal(response.body[0].photos[0].description, 'Activity');
+  assert.deepEqual(response.body[0].checklistResults.map(({ label }) => label), [
+    'Minimum length (150+ words)',
+    'At least 1 photo',
+    'All photos have descriptions',
+  ]);
 
   const listQuery = queries.find(({ sql }) => sql.includes('FROM submissions s'));
   assert.match(listQuery.sql, /s\.generated_pdf_path/);

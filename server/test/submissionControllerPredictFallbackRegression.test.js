@@ -7,9 +7,21 @@ const controllerContent = fs.readFileSync(
   'utf8'
 );
 
-assert.match(controllerContent, /const prediction = await predictLetterWithMl\(rawLetter\);/);
-assert.match(controllerContent, /return res\.status\(503\)\.json\(\{[\s\S]*?fallback: true,/);
-assert.match(controllerContent, /body_score: prediction\.body_score \* 70 \/ prediction\.max_score/);
-assert.match(controllerContent, /source: 'xlm_roberta'/);
+assert.doesNotMatch(controllerContent, /const bodyEvaluation = scoreLetterBody\(rawLetter\);/, 'preview must not use baseline scorer for new submissions');
+assert.doesNotMatch(controllerContent, /const bodyEvaluation = scoreLetterBody\(normalizedPayload\.letter_content\);/, 'submission must not use baseline scorer for new submissions');
+assert.match(controllerContent, /const v3Evaluation = scoreLetterBodyExperimentalV3\(rawLetter\);/);
+assert.match(controllerContent, /const v3Evaluation = scoreLetterBodyExperimentalV3\(normalizedPayload\.letter_content\);/);
+assert.match(controllerContent, /normalizedPayload\.content_score = normalizeSubmissionValue\(v3Percentage\);/);
+assert.match(controllerContent, /body_score: v3Evaluation\.totalScore/);
+assert.match(controllerContent, /source: classification \? 'rule_based_v3_tfidf' : 'rule_based_v3'/);
+assert.match(controllerContent, /fallback: !classification/);
+assert.match(controllerContent, /predictExperimentalLetterClassification\(normalizedPayload\.letter_content\)/);
+assert.match(controllerContent, /normalizedPayload\.sentiment_score = normalizeSubmissionValue\(classification\.sentiment_score\)/);
+assert.match(controllerContent, /breakdown\.primary_classification = classification/);
+assert.doesNotMatch(
+  controllerContent,
+  /predictLetterWithMl/,
+  'active submission and preview classification must not call XLM-RoBERTa'
+);
 
-console.log('submissionController XLM-RoBERTa prediction regression test passed');
+console.log('submissionController rule-based body scoring regression test passed');

@@ -6,6 +6,7 @@
 # Python cache
 __pycache__/
 *.py[cod]
+.venv/
 
 # Node dependencies
 node_modules/

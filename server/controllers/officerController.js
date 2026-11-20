@@ -877,7 +877,6 @@ exports.getMonthlySubmissions = async (req, res) => {
                     reportScore: qualityScore,
                     body: row.letter_content,
                     checklistResults: [
-                        { label: 'Letter body (50+ words)', passed: wordCount >= 50 },
                         { label: 'Minimum length (150+ words)', passed: wordCount >= 150 },
                         { label: 'At least 1 photo', passed: photos.length > 0 },
                         { label: 'All photos have descriptions', passed: photos.length > 0 && photos.every(photo => photo.description && photo.description.trim()) },

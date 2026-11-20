@@ -15,7 +15,7 @@ import ConfirmModal from '../../components/Scholar/SubmissionPage/ConfirmModal';
 import SubmittedView from '../../components/Scholar/SubmissionPage/SubmittedView';
 import SubmissionHistory from '../../components/Scholar/SubmissionPage/SubmissionHistory';
 import ScholarGrades from '../../components/Scholar/SubmissionPage/ScholarGrades';
-import { CHECKLIST, LETTER_BODY_MAX, buildEval, calcInfoScore, calcMediaScore, classifyAcademicTone, classifyQualityScore, getRiskBg, getRiskBorder } from '../../utils/submissionScoring';
+import { CHECKLIST, LETTER_BODY_MAX, buildEval, calcInfoScore, calcMediaScore, countWords, classifyQualityScore, getRiskBg, getRiskBorder } from '../../utils/submissionScoring';
 import { uploadResumableFile } from '../../utils/resumableUpload';
 import { getEducationStage, hasEducationProgram } from '../../utils/educationStage';
 
@@ -320,7 +320,7 @@ function Submission() {
   const scholarId = localStorage.getItem('scholar_id');
   const updateInfo = (key) => (val) => setInfo(prev => ({ ...prev, [key]: val }));
   const educationStage = getEducationStage(info.year);
-  const wordCount = body_.trim().split(/\s+/).filter(Boolean).length;
+  const wordCount = countWords(body_);
   const hasContent = info.name.trim().length > 0 && body_.trim().length > 20;
   const datePresent = asText(info.date).length > 0;
   const selectedDeadlineType = selectedType === 'monthly-report' ? 'letter'
@@ -542,7 +542,24 @@ function Submission() {
 
         if (scoreResponse?.data?.fallback) {
           console.log('[letter-score-debug] frontend rule-based fallback path selected.');
-          setEvalResult({ ...fallbackEval, checklist: fallbackChecklist, source: 'rule_based' });
+          const fallbackBodyScore = Number(scoreResponse?.data?.body_score);
+          const fallbackMediaScore = calcMediaScore(media);
+          const fallbackInfoScore = calcInfoScore(info);
+          const fallbackOverallScore = Number.isFinite(fallbackBodyScore)
+            ? Math.min(Math.round(fallbackBodyScore) + fallbackMediaScore + fallbackInfoScore, 100)
+            : fallbackEval.overallScore;
+          setEvalResult({
+            ...fallbackEval,
+            reportScore: Number.isFinite(fallbackBodyScore) ? Math.min(Math.round(fallbackBodyScore), LETTER_BODY_MAX) : fallbackEval.reportScore,
+            mediaScore: fallbackMediaScore,
+            infoScore: fallbackInfoScore,
+            overallScore: fallbackOverallScore,
+            checklist: fallbackChecklist,
+            bodyCriteria: scoreResponse?.data?.breakdown,
+            categories: scoreResponse?.data?.categories || fallbackEval.categories,
+            source: 'rule_based_v3',
+            ...classifyQualityScore(fallbackOverallScore),
+          });
           setEvaluating(false);
           setView('evaluation');
           return;
@@ -554,16 +571,13 @@ function Submission() {
           const mediaScore = calcMediaScore(media);
           const infoScore = calcInfoScore(info);
           const overallScore = Math.min(reportScore + mediaScore + infoScore, 100);
-          console.log('[letter-score-debug] frontend Flask normal path selected:', {
+          console.log('[letter-score-debug] frontend rule-based body with TF-IDF classification path selected:', {
             apiScoreIgnoredForBodyScore: scoreResponse?.data?.score,
             bodyScoreFromBreakdown: bodyScore,
-            reportScoreOutOf70: reportScore,
+            reportScoreOutOf75: reportScore,
             overallScoreOutOf100: overallScore,
           });
           const quality = classifyQualityScore(overallScore);
-          const tone = scoreResponse?.data?.academic_tone
-            ? { toneLabel: scoreResponse.data.academic_tone, toneColor: scoreResponse.data.academic_tone === 'Formal' ? SUCCESS : scoreResponse.data.academic_tone === 'Moderate' ? WARNING : DANGER }
-            : classifyAcademicTone(body_);
 
           evalScore = {
             ...fallbackEval,
@@ -571,15 +585,13 @@ function Submission() {
             mediaScore,
             infoScore,
             overallScore,
-            source: 'xlm_roberta',
-            modelBodyScore: Number(scoreResponse.data.model_body_score),
-            modelMaxScore: Number(scoreResponse.data.model_max_score),
-            categories: scoreResponse.data.categories,
+            source: scoreResponse.data.source || 'rule_based_v3',
             sentimentLabel: scoreResponse.data.sentiment_label,
+            categories: scoreResponse.data.categories,
+            categoryScore: scoreResponse.data.category_score,
+            bodyCriteria: scoreResponse.data.breakdown,
             ...quality,
-            ...tone,
             qualityLabel: quality.riskLabel,
-            breakdown: scoreResponse?.data?.breakdown || {},
           };
         }
       } catch (scoreErr) {
@@ -1018,8 +1030,8 @@ function Submission() {
                       <h3 style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: INK, marginTop: 2 }}>Correspondence Evaluation</h3>
                       <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 3 }}>{info.name || 'Scholar'} · {info.date}</p>
                     </div>
-                    <span style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: evalResult.flagged ? DANGER : evalResult.source === 'xlm_roberta' ? GOLD : SLATE, background: `${evalResult.flagged ? DANGER : evalResult.source === 'xlm_roberta' ? GOLD : SLATE}14`, padding: '4px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>
-                      {evalResult.flagged ? 'Invalid Letter' : evalResult.source === 'xlm_roberta' ? 'XLM-RoBERTa ML' : 'Rule-Based'}
+                    <span style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: evalResult.flagged ? DANGER : evalResult.source === 'rule_based_v3_tfidf' || evalResult.source === 'rule_based_v3' ? GOLD : SLATE, background: `${evalResult.flagged ? DANGER : evalResult.source === 'rule_based_v3_tfidf' || evalResult.source === 'rule_based_v3' ? GOLD : SLATE}14`, padding: '4px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                      {evalResult.flagged ? 'Invalid Letter' : evalResult.source === 'rule_based_v3_tfidf' ? 'V3 + TF-IDF/Logistic' : evalResult.source === 'rule_based_v3' ? 'V3 Rule-Based' : 'Rule-Based'}
                     </span>
                   </div>
                 </div>
@@ -1095,11 +1107,12 @@ function Submission() {
 
                     <div className="grid grid-cols-3 gap-2 mb-4">
                       {[
-                        { label: 'Letter Body', value: evalResult.reportScore, sub: '70 pts' },
-                        { label: 'Documentation', value: evalResult.mediaScore, sub: '20 pts' },
-                        { label: 'Info', value: evalResult.infoScore || 0, sub: '10 pts' },
+                        { label: 'Letter Body', value: evalResult.reportScore, max: LETTER_BODY_MAX, sub: '75 pts' },
+                        { label: 'Documentation', value: evalResult.mediaScore, max: 20, sub: '20 pts' },
+                        { label: 'Info', value: evalResult.infoScore || 0, max: 5, sub: '5 pts' },
                       ].map(s => {
-                        const c = s.value >= 75 ? SUCCESS : s.value >= 50 ? WARNING : DANGER;
+                        const percent = s.max ? (s.value / s.max) * 100 : 0;
+                        const c = percent >= 75 ? SUCCESS : percent >= 50 ? WARNING : DANGER;
                         return (
                           <div key={s.label} className="rounded-xl p-2 sm:p-3 text-center" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
                             <p style={{ ...body, fontSize: '0.58rem', color: MUTED, marginBottom: 2 }} className="truncate">{s.label}</p>
@@ -1110,13 +1123,11 @@ function Submission() {
                       })}
                     </div>
 
-                    {evalResult.source === 'xlm_roberta' && evalResult.categories && (
-                      <div className="mb-3">
+                    {evalResult.categories && (
+                      <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
                         <div className="flex items-center justify-between gap-2 mb-2">
-                          <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em' }}>LETTER BODY</p>
-                          <span style={{ ...body, fontSize: '0.75rem', fontWeight: 700, color: INK }}>
-                            {Math.round(Number(evalResult.modelBodyScore) || 0)}/{evalResult.modelMaxScore || 75}
-                          </span>
+                          <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em' }}>RULE-BASED CATEGORY SCORES</p>
+                          <span style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color: INK }}>{evalResult.categoryScore || 0}/75</span>
                         </div>
                         {Object.entries(evalResult.categories).map(([label, points]) => (
                           <ScoreBar
@@ -1127,9 +1138,13 @@ function Submission() {
                             valueLabel={`${Math.round(Number(points) || 0)}/15`}
                           />
                         ))}
-                        <p style={{ ...body, fontSize: '0.75rem', color: MUTED, marginTop: 8 }}>
-                          Sentiment: {evalResult.sentimentLabel || '—'}
-                        </p>
+                      </div>
+                    )}
+
+                    {evalResult.sentimentLabel && (
+                      <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+                        <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em', marginBottom: 6 }}>LETTER CLASSIFICATION</p>
+                        <p style={{ ...body, fontSize: '0.75rem', color: MUTED }}>Sentiment: {evalResult.sentimentLabel}</p>
                       </div>
                     )}
 
@@ -1147,19 +1162,6 @@ function Submission() {
                         </div>
                       </>
                     )}
-
-                    <div style={{ height: 1, background: BORDER, margin: '10px 0' }} />
-
-                    <div className="flex items-center justify-between mb-1 gap-2">
-                      <span style={{ ...body, fontSize: '0.8rem', fontWeight: 600, color: '#3f2f28' }}>Academic Tone</span>
-                      <span style={{ ...body, fontSize: '0.8rem', fontWeight: 700, color: evalResult.toneColor }}>{evalResult.toneLabel}</span>
-                    </div>
-                    <p style={{ ...body, fontSize: '0.73rem', color: MUTED, lineHeight: 1.5, fontStyle: 'italic', marginBottom: 10 }}>
-                      {evalResult.overallScore >= 90 ? '"Professional and well-structured letter."'
-                        : evalResult.overallScore >= 75 ? '"Good overall quality and structure."'
-                        : evalResult.overallScore >= 50 ? '"Decent tone; needs more detail or formal language."'
-                        : '"Letter needs significant improvement before submission."'}
-                    </p>
 
                     {!evalResult.accepted && (
                       <div className="rounded-xl p-3 mb-3" style={{ background: getRiskBg(evalResult.riskLevel), border: `1px solid ${getRiskBorder(evalResult.riskLevel)}` }}>

@@ -4,14 +4,6 @@ const ML_SERVICE_URL = (process.env.ML_SERVICE_URL || 'http://127.0.0.1:5001').r
 const ML_REQUEST_TIMEOUT_MS = Number(process.env.ML_REQUEST_TIMEOUT_MS) || 120000;
 const ML_SERVICE_API_KEY = process.env.ML_SERVICE_API_KEY;
 
-const CATEGORY_KEYS = {
-    'Paragraph Structure': 'paragraph',
-    'Academic Update': 'academic',
-    'Self-Improvement': 'self_improvement',
-    'Family Update': 'family',
-    'Difficulty Update': 'difficulty',
-};
-
 const mapSentimentLabelToValue = (label) => {
     const normalized = String(label || '').toLowerCase();
     if (normalized === 'negative') return -1;
@@ -19,53 +11,47 @@ const mapSentimentLabelToValue = (label) => {
     return 0;
 };
 
-const normalizeContentScoreResponse = (payload) => {
-    if (!payload || typeof payload !== 'object') return null;
+const normalizeExperimentalClassification = (payload) => {
+    if (!payload || payload.success !== true) return null;
 
-    const categories = payload.categories && typeof payload.categories === 'object'
-        ? payload.categories
-        : null;
-    const breakdown = {};
-    for (const [label, key] of Object.entries(CATEGORY_KEYS)) {
-        const score = Number(categories?.[label]);
-        if (!Number.isFinite(score) || score < 0 || score > 15) return null;
-        breakdown[key] = score;
-    }
+    const normalizePrediction = (value, labels) => {
+        const label = String(value?.prediction || '');
+        const confidence = Number(value?.confidence);
+        if (
+            !labels.includes(label.toLowerCase())
+            || !Number.isFinite(confidence)
+            || confidence < 0
+            || confidence > 1
+        ) {
+            return null;
+        }
+        return {
+            label,
+            confidence,
+            confidence_percent: Math.round(confidence * 10000) / 100,
+            confidence_status: String(value?.confidence_status || ''),
+        };
+    };
 
-    const bodyScore = Number(payload.body_score);
-    const maxScore = Number(payload.max_score);
-    const percentage = Number(payload.percentage);
-    const sentimentLabel = String(payload.sentiment || '');
-    const academicTone = String(payload.academic_tone || '');
-    if (
-        !Number.isFinite(bodyScore) || bodyScore < 0 || bodyScore > 75
-        || maxScore !== 75
-        || !Number.isFinite(percentage) || percentage < 0 || percentage > 100
-        || !['negative', 'neutral', 'positive'].includes(sentimentLabel.toLowerCase())
-        || !['formal', 'moderate', 'informal'].includes(academicTone.toLowerCase())
-    ) {
-        return null;
-    }
+    const sentiment = normalizePrediction(payload.sentiment, ['negative', 'neutral', 'positive']);
+    const academicTone = normalizePrediction(payload.academic_tone, ['formal', 'moderate', 'informal']);
+    if (!sentiment || !academicTone) return null;
 
     return {
-        score: percentage,
-        body_score: bodyScore,
-        max_score: maxScore,
-        percentage,
-        breakdown,
-        categories,
-        sentiment: mapSentimentLabelToValue(sentimentLabel),
-        sentiment_label: sentimentLabel,
+        model_type: 'TF-IDF + Logistic Regression',
+        sentiment_score: mapSentimentLabelToValue(sentiment.label),
+        sentiment,
         academic_tone: academicTone,
-        quality_label: percentage >= 75 ? 'Good' : percentage >= 50 ? 'Needs Improvement' : 'Non-Compliant',
+        automated_estimate: true,
+        disclaimer: 'Automated model estimate; not independently validated for real-world accuracy.',
     };
 };
 
-const predictLetterWithMl = async (letterText) => {
+const predictExperimentalLetterClassification = async (letterText) => {
     if (!letterText || !String(letterText).trim()) return null;
 
     try {
-        const response = await axios.post(`${ML_SERVICE_URL}/predict`, {
+        const response = await axios.post(`${ML_SERVICE_URL}/classify`, {
             letter: String(letterText),
         }, {
             timeout: ML_REQUEST_TIMEOUT_MS,
@@ -75,22 +61,21 @@ const predictLetterWithMl = async (letterText) => {
             },
         });
 
-        const prediction = normalizeContentScoreResponse(response?.data);
-        if (!prediction) {
-            console.warn('ML service returned an invalid XLM-RoBERTa prediction.');
+        const classification = normalizeExperimentalClassification(response?.data);
+        if (!classification) {
+            console.warn('Experimental classifier returned an invalid classification.');
             return null;
         }
-        return prediction;
+        return classification;
     } catch (error) {
-        console.warn('ML prediction service unavailable:', error?.message || error);
+        console.warn('Experimental classification service unavailable:', error?.message || error);
         return null;
     }
 };
 
 module.exports = {
     ML_SERVICE_URL,
-    CATEGORY_KEYS,
     mapSentimentLabelToValue,
-    normalizeContentScoreResponse,
-    predictLetterWithMl,
+    normalizeExperimentalClassification,
+    predictExperimentalLetterClassification,
 };

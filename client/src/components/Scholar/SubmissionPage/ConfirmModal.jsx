@@ -50,8 +50,9 @@ const ScoreRing = ({ score, color, size = 92 }) => {
 };
 
 // One of the 3 compact evaluation-breakdown cards.
-const BreakdownCard = ({ label, value, sub }) => {
-    const color = value >= 75 ? SUCCESS : value >= 50 ? WARNING : DANGER;
+const BreakdownCard = ({ label, value, max, sub }) => {
+    const percentage = max ? (value / max) * 100 : 0;
+    const color = percentage >= 75 ? SUCCESS : percentage >= 50 ? WARNING : DANGER;
     return (
         <div className="text-center" style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '12px 10px' }}>
             <p style={{ ...body, fontSize: '0.66rem', color: MUTED, marginBottom: 3 }} className="truncate">{label}</p>
@@ -64,7 +65,10 @@ const BreakdownCard = ({ label, value, sub }) => {
 const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
     const RiskIcon = ev.accepted ? CheckCircle2 : ev.riskLevel === 'medium' ? AlertCircle : XCircle;
     const failedItems = ev.checklist.filter(c => !c.passed);
-    const sourceLabel = ev.source === 'xlm_roberta' ? 'XLM-RoBERTa ML' : ev.source === 'flagged' ? 'Flagged' : 'Rule-Based';
+    const sourceLabel = ev.source === 'rule_based_v3_tfidf' ? 'V3 Rule-Based + TF-IDF/Logistic'
+        : ev.source === 'rule_based_v3' ? 'V3 Rule-Based'
+        : ev.source === 'rule_based_tfidf' ? 'Rule-Based + TF-IDF/Logistic'
+        : ev.source === 'flagged' ? 'Flagged' : 'Rule-Based';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(36,21,18,0.55)' }}>
@@ -72,7 +76,7 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
                 {/* ── 1. Premium header ── */}
                 <div style={{ height: 4, background: `linear-gradient(90deg, ${PRIMARY} 0%, ${BRONZE} 100%)`, flexShrink: 0 }} />
                 <div className="p-5 sm:p-6 pb-4" style={{ flexShrink: 0 }}>
-                    <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', color: BRONZE }}>AI QUALITY EVALUATION</p>
+                    <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', color: BRONZE }}>REPORT EVALUATION</p>
                     <h3 style={{ ...display, fontSize: '1.3rem', fontWeight: 600, color: INK, marginTop: 4 }}>Review Before Submission</h3>
                     <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 4 }}>
                         {ev.flagged
@@ -106,12 +110,6 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
                         <div className="text-right flex-shrink-0" style={{ minWidth: 110 }}>
                             <p style={{ ...body, fontSize: '0.66rem', color: MUTED }}>Overall score</p>
                             <p style={{ ...display, fontSize: '1.1rem', fontWeight: 600, color: INK }}>{Math.round(Number(ev.overallScore) || 0)}/100</p>
-                            {ev.toneLabel && (
-                                <>
-                                    <p style={{ ...body, fontSize: '0.66rem', color: MUTED, marginTop: 6 }}>Academic tone</p>
-                                    <p style={{ ...body, fontSize: '0.8rem', fontWeight: 600, color: ev.toneColor || INK }}>{ev.toneLabel}</p>
-                                </>
-                            )}
                             <p style={{ ...body, fontSize: '0.66rem', color: MUTED, marginTop: 6 }}>Evaluation source</p>
                             <p style={{ ...body, fontSize: '0.76rem', fontWeight: 600, color: INK }}>{sourceLabel}</p>
                         </div>
@@ -119,18 +117,16 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
 
                     {/* ── 3. Evaluation breakdown ── */}
                     <div className="grid grid-cols-3 gap-2" style={{ marginBottom: 16 }}>
-                        <BreakdownCard label="Letter Body" value={ev.reportScore} sub="70 pts" />
-                        <BreakdownCard label="Documentation" value={ev.mediaScore} sub="20 pts" />
-                        <BreakdownCard label="Info" value={ev.infoScore || 0} sub="10 pts" />
+                        <BreakdownCard label="Letter Body" value={ev.reportScore} max={75} sub="75 pts" />
+                        <BreakdownCard label="Documentation" value={ev.mediaScore} max={20} sub="20 pts" />
+                        <BreakdownCard label="Info" value={ev.infoScore || 0} max={5} sub="5 pts" />
                     </div>
 
                     {ev.categories && (
                         <div style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 14, marginBottom: 16 }}>
                             <div className="flex items-center justify-between gap-2 mb-2">
-                                <p style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY }}>XLM-RoBERTa letter-body scores</p>
-                                <span style={{ ...body, fontSize: '0.76rem', fontWeight: 700, color: INK }}>
-                                    {Math.round(Number(ev.modelBodyScore) || 0)}/{ev.modelMaxScore || 75}
-                                </span>
+                                <p style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY }}>RULE-BASED CATEGORY SCORES</p>
+                                <span style={{ ...body, fontSize: '0.74rem', fontWeight: 700, color: INK }}>{ev.categoryScore || 0}/75</span>
                             </div>
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                 {Object.entries(ev.categories).map(([label, points]) => (
@@ -140,9 +136,13 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
                                     </div>
                                 ))}
                             </div>
-                            <p style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 10 }}>
-                                Sentiment: {ev.sentimentLabel || '—'} · Academic tone: {ev.toneLabel || '—'}
-                            </p>
+                        </div>
+                    )}
+
+                    {ev.sentimentLabel && (
+                        <div style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 14, marginBottom: 16 }}>
+                            <p style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY, marginBottom: 6 }}>LETTER CLASSIFICATION</p>
+                            <p style={{ ...body, fontSize: '0.76rem', color: MUTED }}>Sentiment: {ev.sentimentLabel}</p>
                         </div>
                     )}
 

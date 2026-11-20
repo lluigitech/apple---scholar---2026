@@ -16,7 +16,11 @@ const { logAuditEvent } = require('../utils/auditLogger');
 const { canAccessScholar, logPrivacyAccess } = require('../middleware/privacyAccess');
 const { consumeCompleted, removeSession } = require('../services/resumableUploadService');
 const r2Storage = require('../services/r2StorageService');
-const { predictLetterWithMl } = require('../services/sentimentService');
+const {
+    predictExperimentalLetterClassification,
+} = require('../services/sentimentService');
+const { scoreLetterBodyExperimentalV3 } = require('../services/experimentalLetterBodyScoringV3');
+const { inspectMonthlyLetterSubmission } = require('../services/monthlyLetterSubmissionGuard');
 const { buildSubmissionReviewEmail } = require('../utils/emailTemplates');
 
 const normalizeManualWorkflowStatus = (value) => {
@@ -521,6 +525,24 @@ exports.submitCompliance = async (req, res) => {
         if (!Array.isArray(resumableIds) || resumableIds.length > 11) {
             return res.status(400).json({ error: 'Invalid resumable upload list' });
         }
+
+        const submissionFiles = req.files || {};
+        const requestedType = normalizeSubmissionType(submission_type, {
+            hasLetter: typeof letter_content === 'string' && Boolean(letter_content.trim()),
+            hasReportCard: Boolean(submissionFiles.report_card?.length),
+            hasCor: Boolean(submissionFiles.cor?.length),
+        });
+        if (requestedType === 'letter') {
+            const letterGuard = inspectMonthlyLetterSubmission(letter_content);
+            if (letterGuard.blocked) {
+                await Promise.all(resumableIds.map(removeSession));
+                return res.status(422).json({
+                    error: letterGuard.reason,
+                    code: 'INVALID_MONTHLY_LETTER',
+                });
+            }
+        }
+
         const stagedFiles = await Promise.all(resumableIds.map(id => consumeCompleted(id, scholar_id)));
         const uploadedFiles = [...Object.values(req.files || {}).flat(), ...stagedFiles];
         const resolvedType = normalizeSubmissionType(submission_type, {
@@ -562,8 +584,8 @@ exports.submitCompliance = async (req, res) => {
             course: normalizeSubmissionValue(course),
             track_strand: normalizeSubmissionValue(track_strand),
             school: normalizeSubmissionValue(school),
-            sentiment_score: normalizeSubmissionValue(sentiment_score),
-            sentiment_label: normalizeSubmissionValue(sentiment_label),
+            sentiment_score: resolvedType === 'letter' ? null : normalizeSubmissionValue(sentiment_score),
+            sentiment_label: resolvedType === 'letter' ? null : normalizeSubmissionValue(sentiment_label),
             content_score: null,
             content_breakdown: null,
             quality_label: null,
@@ -579,18 +601,42 @@ exports.submitCompliance = async (req, res) => {
 
         let contentPrediction = null;
         if (resolvedType === 'letter' && normalizedPayload.letter_content) {
-            contentPrediction = await predictLetterWithMl(normalizedPayload.letter_content);
-            if (contentPrediction) {
-                normalizedPayload.sentiment_score = normalizeSubmissionValue(contentPrediction.sentiment);
-                normalizedPayload.sentiment_label = normalizeSubmissionValue(contentPrediction.sentiment_label);
-                normalizedPayload.quality_label = normalizeSubmissionValue(contentPrediction.quality_label);
-                normalizedPayload.content_score = normalizeSubmissionValue(contentPrediction.percentage);
-                normalizedPayload.content_breakdown = normalizeSubmissionValue(JSON.stringify({
-                    categories: contentPrediction.categories,
-                    body_score: contentPrediction.body_score,
-                    max_score: contentPrediction.max_score,
-                    academic_tone: contentPrediction.academic_tone,
-                }));
+            const v3Evaluation = scoreLetterBodyExperimentalV3(normalizedPayload.letter_content);
+            const v3Categories = Object.fromEntries(
+                Object.entries(v3Evaluation.categories).map(([label, category]) => [label, category.score])
+            );
+            const v3Percentage = Math.round((v3Evaluation.totalScore / v3Evaluation.maxTotalScore) * 100);
+            normalizedPayload.content_score = normalizeSubmissionValue(v3Percentage);
+            normalizedPayload.quality_label = normalizeSubmissionValue(
+                v3Percentage >= 75 ? 'Good' : v3Percentage >= 50 ? 'Needs Improvement' : 'Non-Compliant',
+            );
+            normalizedPayload.content_breakdown = normalizeSubmissionValue(JSON.stringify({
+                method: 'rule_based_v3',
+                evaluation_method: v3Evaluation.evaluationMethod,
+                body_score: v3Evaluation.totalScore,
+                max_score: v3Evaluation.maxTotalScore,
+                category_score: v3Evaluation.totalScore,
+                category_max_score: v3Evaluation.maxTotalScore,
+                percentage: v3Percentage,
+                categories: v3Categories,
+                criteria: Object.entries(v3Evaluation.categories).map(([label, category]) => ({
+                    key: label,
+                    label,
+                    score: category.score,
+                    max: 15,
+                })),
+                v3: v3Evaluation,
+            }));
+
+            const classification = await predictExperimentalLetterClassification(normalizedPayload.letter_content);
+            contentPrediction = classification;
+            if (classification) {
+                normalizedPayload.sentiment_score = normalizeSubmissionValue(classification.sentiment_score);
+                normalizedPayload.sentiment_label = normalizeSubmissionValue(classification.sentiment.label);
+                const breakdown = JSON.parse(normalizedPayload.content_breakdown);
+                breakdown.primary_classification = classification;
+                breakdown.experimental_classification = classification;
+                normalizedPayload.content_breakdown = normalizeSubmissionValue(JSON.stringify(breakdown));
             }
         }
 
@@ -676,7 +722,7 @@ exports.submitCompliance = async (req, res) => {
                 normalizedPayload.quality_status,
                 'pending',   // status - always starts fresh, regardless of any earlier rejected row
                 null,        // officer_comment - always starts empty, old officer feedback stays only on the old row
-                prediction?.sentiment === -1 ? 1 : 0,
+                contentPrediction?.sentiment_score === -1 ? 1 : 0,
             ], (err, result) => {
                     if (err) {
                         console.error('DB error saving submission:', err);
@@ -798,7 +844,7 @@ exports.submitCompliance = async (req, res) => {
     }
 };
 
-// Score a letter with the persistent XLM-RoBERTa prediction service.
+// Score the letter body with V3 rules; classify sentiment and tone with TF-IDF + Logistic Regression.
 exports.predictLetterScore = async (req, res) => {
     const rawLetter = typeof req.body?.letter_content === 'string'
         ? req.body.letter_content
@@ -810,35 +856,42 @@ exports.predictLetterScore = async (req, res) => {
         return res.status(400).json({ error: 'Missing letter content' });
     }
 
-    const prediction = await predictLetterWithMl(rawLetter);
-    if (!prediction) {
-        return res.status(503).json({
-            error: 'XLM-RoBERTa prediction service is unavailable.',
-            fallback: true,
+    const letterGuard = inspectMonthlyLetterSubmission(rawLetter);
+    if (letterGuard.blocked) {
+        return res.json({
+            flagged: true,
+            flag_reason: letterGuard.reason,
         });
     }
 
-    const toPercent = (score) => Math.round((Number(score) / 15) * 100);
-    const breakdown = Object.fromEntries(
-        Object.entries(prediction.breakdown).map(([category, score]) => [
-            category,
-            { score: toPercent(score), points: score, max_points: 15 },
-        ])
+    const v3Evaluation = scoreLetterBodyExperimentalV3(rawLetter);
+    const v3Categories = Object.fromEntries(
+        Object.entries(v3Evaluation.categories).map(([label, category]) => [label, category.score])
     );
+    const v3Percentage = Math.round((v3Evaluation.totalScore / v3Evaluation.maxTotalScore) * 100);
+    const classification = await predictExperimentalLetterClassification(rawLetter);
 
     return res.json({
-        score: prediction.percentage,
-        body_score: prediction.body_score * 70 / prediction.max_score,
-        model_body_score: prediction.body_score,
-        model_max_score: prediction.max_score,
-        percentage: prediction.percentage,
-        categories: prediction.categories,
-        sentiment: prediction.sentiment,
-        sentiment_label: prediction.sentiment_label,
-        academic_tone: prediction.academic_tone,
-        breakdown,
-        source: 'xlm_roberta',
-        fallback: false,
+        score: v3Percentage,
+        body_score: v3Evaluation.totalScore,
+        max_score: v3Evaluation.maxTotalScore,
+        category_score: v3Evaluation.totalScore,
+        category_max_score: v3Evaluation.maxTotalScore,
+        percentage: v3Percentage,
+        categories: v3Categories,
+        breakdown: Object.entries(v3Evaluation.categories).map(([label, category]) => ({
+            key: label,
+            label,
+            score: category.score,
+            max: 15,
+        })),
+        v3: v3Evaluation,
+        sentiment: classification?.sentiment_score ?? null,
+        sentiment_label: classification?.sentiment.label ?? null,
+        academic_tone: classification?.academic_tone.label ?? null,
+        classification: classification ? 'tfidf_logistic_regression' : null,
+        source: classification ? 'rule_based_v3_tfidf' : 'rule_based_v3',
+        fallback: !classification,
     });
 };
 
