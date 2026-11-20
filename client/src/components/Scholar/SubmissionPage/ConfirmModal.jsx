@@ -1,8 +1,4 @@
-import React from 'react';
-import { CheckCircle2, XCircle, AlertCircle, Send, Loader2, Sparkles } from 'lucide-react';
-
-function getRiskBg(l) { return l === 'accepted' ? '#EAF3EC' : l === 'medium' ? '#FBF0DE' : '#FBE9E9'; }
-function getRiskBorder(l) { return l === 'accepted' ? '#bbf7d0' : l === 'medium' ? '#f3d9a6' : '#f3c6c6'; }
+import { CheckCircle2, XCircle, AlertCircle, Send, Loader2 } from 'lucide-react';
 
 // ── Scholar Portal design system ──
 // Same tokens as the rest of the Scholar module (dashboard, submissions,
@@ -15,7 +11,6 @@ const PRIMARY = '#6D2140';
 const PRIMARY_DARK = '#4A1730';
 const BRONZE = '#A9784E';
 const SUCCESS = '#6B8F71';
-const WARNING = '#C08A3E';
 const DANGER = '#C0473F';
 const INK = '#241512';
 const MUTED = '#8A7A68';
@@ -27,48 +22,8 @@ const body = { fontFamily: "'Inter', -apple-system, 'Segoe UI', sans-serif" };
 const outlineBtn = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 18px', border: `1px solid ${BORDER}`, borderRadius: 12, background: SURFACE, color: INK, ...body, fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' };
 const filledBtn = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_DARK} 100%)`, color: '#fff', ...body, fontSize: '0.85rem', fontWeight: 600, cursor: 'pointer' };
 
-// Circular quality-score ring — replaces the dashed rubber grade stamp.
-const ScoreRing = ({ score, color, size = 92 }) => {
-    const stroke = 9;
-    const r = (size - stroke) / 2;
-    const c = 2 * Math.PI * r;
-    const pct = Math.max(0, Math.min(100, score));
-    const offset = c - (pct / 100) * c;
-    return (
-        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}>
-            <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={BORDER} strokeWidth={stroke} />
-            <circle
-                cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
-                strokeLinecap="round" strokeDasharray={c} strokeDashoffset={offset}
-                transform={`rotate(-90 ${size / 2} ${size / 2})`}
-                style={{ transition: 'stroke-dashoffset 0.6s ease' }}
-            />
-            <text x="50%" y="46%" textAnchor="middle" style={{ ...display, fontSize: size * 0.24, fontWeight: 700, fill: INK }}>{Math.round(Number(score) || 0)}</text>
-            <text x="50%" y="66%" textAnchor="middle" style={{ ...body, fontSize: size * 0.1, fill: MUTED }}>Score</text>
-        </svg>
-    );
-};
-
-// One of the 3 compact evaluation-breakdown cards.
-const BreakdownCard = ({ label, value, max, sub }) => {
-    const percentage = max ? (value / max) * 100 : 0;
-    const color = percentage >= 75 ? SUCCESS : percentage >= 50 ? WARNING : DANGER;
-    return (
-        <div className="text-center" style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '12px 10px' }}>
-            <p style={{ ...body, fontSize: '0.66rem', color: MUTED, marginBottom: 3 }} className="truncate">{label}</p>
-            <p style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color }}>{Math.round(Number(value) || 0)}</p>
-            <p style={{ ...body, fontSize: '0.6rem', color: '#c6b8ae' }}>{sub}</p>
-        </div>
-    );
-};
-
 const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
-    const RiskIcon = ev.accepted ? CheckCircle2 : ev.riskLevel === 'medium' ? AlertCircle : XCircle;
     const failedItems = ev.checklist.filter(c => !c.passed);
-    const sourceLabel = ev.source === 'rule_based_v3_tfidf' ? 'V3 Rule-Based + TF-IDF/Logistic'
-        : ev.source === 'rule_based_v3' ? 'V3 Rule-Based'
-        : ev.source === 'rule_based_tfidf' ? 'Rule-Based + TF-IDF/Logistic'
-        : ev.source === 'flagged' ? 'Flagged' : 'Rule-Based';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(36,21,18,0.55)' }}>
@@ -76,68 +31,21 @@ const ConfirmModal = ({ ev, submitting, submitError, onCancel, onConfirm }) => {
                 {/* ── 1. Premium header ── */}
                 <div style={{ height: 4, background: `linear-gradient(90deg, ${PRIMARY} 0%, ${BRONZE} 100%)`, flexShrink: 0 }} />
                 <div className="p-5 sm:p-6 pb-4" style={{ flexShrink: 0 }}>
-                    <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', color: BRONZE }}>REPORT EVALUATION</p>
+                    <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', color: BRONZE }}>REPORT REVIEW</p>
                     <h3 style={{ ...display, fontSize: '1.3rem', fontWeight: 600, color: INK, marginTop: 4 }}>Review Before Submission</h3>
                     <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 4 }}>
                         {ev.flagged
                             ? 'This letter was flagged as invalid and cannot be submitted.'
-                            : ev.accepted
-                                ? 'Your report is ready for admin/office review.'
-                                : 'The AI score is advisory. You can still submit this letter for officer review.'}
+                            : 'Check your report details before sending it to your officer for review.'}
                     </p>
                 </div>
 
                 <div className="px-5 sm:px-6 overflow-y-auto" style={{ flex: 1 }}>
-                    {/* ── 2. Hero evaluation ── */}
-                    <div className="flex items-center gap-4 flex-wrap" style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: '18px 20px', marginBottom: 16 }}>
-                        <ScoreRing score={ev.overallScore} color={ev.riskColor} />
-                        <div className="flex-1 min-w-[140px]">
-                            <span
-                                className="inline-flex items-center gap-1.5"
-                                style={{ ...body, fontSize: '0.72rem', fontWeight: 600, color: ev.riskColor, background: `${ev.riskColor}16`, borderRadius: 999, padding: '4px 12px' }}
-                            >
-                                <RiskIcon size={13} />
-                                {ev.riskLabel}
-                            </span>
-                            <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 8 }}>
-                                {ev.flagged
-                                    ? 'Please revise the letter before submitting.'
-                                    : ev.accepted
-                                        ? 'Ready for admin/office review.'
-                                        : 'Your officer may review it and request revisions.'}
-                            </p>
-                        </div>
-                        <div className="text-right flex-shrink-0" style={{ minWidth: 110 }}>
-                            <p style={{ ...body, fontSize: '0.66rem', color: MUTED }}>Overall score</p>
-                            <p style={{ ...display, fontSize: '1.1rem', fontWeight: 600, color: INK }}>{Math.round(Number(ev.overallScore) || 0)}/100</p>
-                            <p style={{ ...body, fontSize: '0.66rem', color: MUTED, marginTop: 6 }}>Evaluation source</p>
-                            <p style={{ ...body, fontSize: '0.76rem', fontWeight: 600, color: INK }}>{sourceLabel}</p>
-                        </div>
+                    <div style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: '16px 18px', marginBottom: 16 }}>
+                        <p style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: INK }}>
+                            {ev.flagged ? 'Please revise the letter before submitting.' : 'Your officer will review the report after submission.'}
+                        </p>
                     </div>
-
-                    {/* ── 3. Evaluation breakdown ── */}
-                    <div className="grid grid-cols-3 gap-2" style={{ marginBottom: 16 }}>
-                        <BreakdownCard label="Letter Body" value={ev.reportScore} max={75} sub="75 pts" />
-                        <BreakdownCard label="Documentation" value={ev.mediaScore} max={20} sub="20 pts" />
-                        <BreakdownCard label="Info" value={ev.infoScore || 0} max={5} sub="5 pts" />
-                    </div>
-
-                    {ev.categories && (
-                        <div style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 14, marginBottom: 16 }}>
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                                <p style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY }}>RULE-BASED CATEGORY SCORES</p>
-                                <span style={{ ...body, fontSize: '0.74rem', fontWeight: 700, color: INK }}>{ev.categoryScore || 0}/75</span>
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                {Object.entries(ev.categories).map(([label, points]) => (
-                                    <div key={label} className="rounded-lg px-2.5 py-2" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-                                        <p style={{ ...body, fontSize: '0.66rem', color: MUTED }}>{label}</p>
-                                        <p style={{ ...display, fontSize: '1rem', fontWeight: 700, color: INK }}>{Math.round(Number(points) || 0)}/15</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
 
                     {ev.sentimentLabel && (
                         <div style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 14, marginBottom: 16 }}>

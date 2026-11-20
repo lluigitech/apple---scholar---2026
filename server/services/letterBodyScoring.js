@@ -84,7 +84,7 @@ function getReportedDifficultySentences(text) {
     return splitIntoSentences(text).filter((sentence) => (
         splitIntoClauses(sentence).some((clause) => (
             matchesAny(clause, KEYWORDS.difficultyWords)
-            && !isNegatedDifficulty(clause)
+            && !matchesAny(clause, KEYWORDS.englishNegations)
         ))
     ));
 }

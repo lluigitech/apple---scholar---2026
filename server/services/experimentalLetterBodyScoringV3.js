@@ -21,25 +21,21 @@ const patternCache = new Map();
 const STRUCTURE_TERMS = {
     greeting: [
         'dear', 'hello', 'good day', 'good morning', 'good afternoon',
-        'mahal kong', 'magandang araw', 'magandang umaga',
     ],
     opening: [
         'i am', 'i would like to share', 'i want to share', 'this month',
-        'this semester', 'ngayong buwan', 'sa buwang ito', 'ako po',
-        'nais ko pong ibahagi',
+        'this semester',
     ],
     closing: [
-        'thank you', 'thanks', 'salamat', 'maraming salamat', 'taos-puso',
-        'lubos na nagpapasalamat',
+        'thank you', 'thanks',
     ],
     signature: [
         'sincerely', 'respectfully', 'regards', 'yours truly',
-        'your scholar', 'lubos na gumagalang', 'sumasainyo',
+        'your scholar',
     ],
     transitions: [
         'also', 'however', 'therefore', 'in addition', 'as a result',
-        'on the other hand', 'at the same time', 'dahil', 'kaya',
-        'pero', 'samantala', 'bukod dito', 'sa kabilang banda',
+        'on the other hand', 'at the same time',
     ],
 };
 
@@ -47,90 +43,69 @@ const TIME_TERMS = [
     'this month', 'this semester', 'this term', 'this school year',
     'during the month', 'every week', 'every day', 'each week',
     'each day', 'each evening', 'every evening', 'weekly', 'daily',
-    'ngayong buwan', 'sa buwang ito', 'ngayong semestre',
-    'sa panahong ito', 'araw-araw', 'linggo-linggo', 'gabi-gabi',
 ];
 const EXPLANATION_TERMS = [
     'because', 'so that', 'as a result', 'which helped', 'this helped',
     'which allowed', 'so i could', 'this meant', 'in order to',
-    'as a way to', 'dahil', 'upang', 'para', 'kaya', 'bunga nito',
-    'nakatulong ito', 'it helped', 'which helped',
+    'as a way to', 'it helped', 'which helped',
 ];
 const OUTCOME_TERMS = [
     'resulted in', 'improved', 'learned', 'achieved', 'completed',
     'passed', 'earned', 'increased', 'decreased', 'understood',
-    'understand', 'helped', 'finished', 'continued', 'natuto',
-    'natapos', 'nakamit', 'pumasa', 'tumaas', 'bumuti',
+    'understand', 'helped', 'finished', 'continued',
 ];
 const PERSON_TERMS = [
-    'i', 'me', 'my', 'we', 'our', 'ako', 'ko', 'akin', 'aking',
-    'namin', 'natin', 'kami', 'tayo',
+    'i', 'me', 'my', 'we', 'our',
 ];
 const ACADEMIC_ITEMS = [
     'class', 'classes', 'subject', 'subjects', 'grade', 'grades',
     'exam', 'exams', 'quiz', 'quizzes', 'test', 'tests', 'project',
     'projects', 'assignment', 'assignments', 'research', 'thesis',
     'school activity', 'activities', 'presentation', 'presentations',
-    'klase', 'asignatura', 'grado', 'proyekto', 'pagsusulit',
-    'pananaliksik', 'aktibidad',
 ];
 const ACADEMIC_TOPIC_TERMS = [
     ...KEYWORDS.academicTopics,
-    'semestre', 'research', 'thesis', 'pananaliksik', 'marka', 'proyekto',
-    'akademiko', 'pag-aaral',
+    'research', 'thesis',
 ];
 const ACADEMIC_RESULTS = [
     'grade', 'grades', 'score', 'scores', 'mark', 'marks', 'result',
-    'results', 'passed', 'earned', 'completed', 'natapos', 'pumasa',
-    'marka', 'grado', 'puntos', 'resulta',
+    'results', 'passed', 'earned', 'completed',
 ];
 const SELF_METHODS = [
     'study habit', 'study habits', 'time management', 'practice',
     'practiced', 'review', 'reviewed', 'read', 'reading', 'skill',
-    'skills', 'lesson', 'lessons', 'learned', 'nag-aral', 'nag-aaral',
-    'nagsikap', 'nagsisikap', 'nagpraktis', 'nag-review', 'pag-aaral',
-    'kasanayan', 'aral', 'pagbutihin', 'mag-aral',
+    'skills', 'lesson', 'lessons', 'learned',
 ];
 const SELF_PLAN_TERMS = [
     'plan', 'planned', 'intend', 'will try', 'want to', 'aim to',
-    'goal', 'goals', 'balak', 'plano', 'sisikapin', 'nais kong',
-    'gagawin ko', 'mag-aaral ako',
+    'goal', 'goals',
 ];
 const FAMILY_STATUS_TERMS = [
     'doing well', 'doing fine', 'is well', 'is fine', 'is doing okay',
-    'maayos', 'mabuti', 'okay', 'kumusta', 'mabuti naman',
+    'okay',
 ];
 const FAMILY_CONTEXT_ITEMS = [
     'work', 'works', 'worked', 'working', 'health', 'income', 'livelihood', 'chores', 'household',
     'responsibilities', 'expenses', 'finances', 'business', 'job',
-    'trabaho', 'nagtatrabaho', 'nagtrabaho', 'kalusugan', 'kabuhayan',
-    'gawaing bahay', 'responsibilidad', 'gastusin', 'kita', 'hanapbuhay',
-    'kalagayan', 'bayarin',
 ];
 const FAMILY_PRONOUNS = [
-    'they', 'their', 'them', 'we', 'our', 'kami', 'namin', 'natin',
-    'sila', 'kanila', 'pamilya ko', 'magulang ko',
+    'they', 'their', 'them', 'we', 'our',
 ];
 const DIFFICULTY_NEGATION_TERMS = [
     ...KEYWORDS.englishNegations,
-    ...KEYWORDS.filipinoNegations,
-    'hindi naging', 'di naging', 'wala namang', 'walang naging',
 ];
 const SELF_NEGATION_TERMS = [
     ...KEYWORDS.englishNegations,
-    ...KEYWORDS.filipinoNegations,
-    'hindi ko', 'di ko', 'hindi na', 'di na',
 ];
 const COPING_ACTIONS = [
     ...KEYWORDS.copingActions,
     'asked', 'borrowed', 'saved', 'reorganized', 'contacted',
-    'rescheduled', 'adjusted my schedule', 'hiniram', 'nakiusap',
-    'nag-ipon', 'inayos', 'nakahanap', 'naghanap',
+    'rescheduled', 'adjusted my schedule',
 ];
 
 const EXPERIMENTAL_SCORING_LIMITATIONS = [
     'This scorer uses explainable phrase and context heuristics; it does not understand language as reliably as a human evaluator.',
-    'English, Filipino, and Taglish variants are supported by explicit patterns only; unlisted paraphrases and inflections may be missed.',
+    'Only English letters are supported; unlisted paraphrases and inflections may be missed.',
     'Difficulty negation detection reuses the production sentence detector and has known scope and clause-boundary limitations.',
     'Evidence dimensions are proposed operational judgments, not evaluator-approved point anchors.',
     'The scorer returns indicator labels and dimension explanations, not letter text or personal information.',
@@ -203,7 +178,7 @@ function splitSentences(text) {
 
 function splitClauses(sentence) {
     return sentence
-        .split(/\b(?:but|however|although|though|yet|pero|subalit)\b/iu)
+        .split(/\b(?:but|however|although|though|yet)\b/iu)
         .map((clause) => clause.trim())
         .filter(Boolean);
 }
@@ -465,8 +440,8 @@ function scoreSelfImprovement(groupedSentences) {
         const hasMethod = hasAny(text, SELF_METHODS);
         const hasSpecificObject = hasAny(text, [
             'study habit', 'time management', 'skill', 'skills', 'english',
-            'reading', 'reviewing', 'practice', 'pag-aaral', 'kasanayan',
-            'vocabulary', 'oras', 'aralin',
+            'reading', 'reviewing', 'practice',
+            'vocabulary',
         ]);
         const hasContext = hasTimeContext(text);
         const hasPurposeOrReason = hasExplanatoryLink(text);
@@ -547,7 +522,7 @@ function scoreFamilyUpdate(groupedSentences) {
         const hasExplanatoryLinkEvidence = hasExplanatoryLink(text);
         const hasSituationChange = hasAny(text, [
             'changed', 'reduced', 'increased', 'work', 'works', 'worked', 'working',
-            'nagtatrabaho', 'nagtrabaho',
+            'labor',
         ]);
         const hasTime = hasTimeContext(text);
         const hasConcreteParticular = hasSpecificArea
@@ -606,8 +581,7 @@ function scoreDifficultyUpdate(text, groupedSentences) {
         const hasCopingResponse = hasAny(paragraph, COPING_ACTIONS);
         const hasImpact = hasAny(paragraph, [
             'affected', 'impact', 'because', 'so', 'prevented', 'made it hard',
-            'interrupted', 'which helped', 'allowed me', 'naging dahilan',
-            'nakaapekto', 'nahadlangan',
+            'interrupted', 'which helped', 'allowed me',
         ]);
         const hasTime = hasTimeContext(paragraph);
         const hasExplanation = hasExplanatoryLink(paragraph) || hasImpact;

@@ -3,82 +3,63 @@
     "school", "class", "classroom", "subject", "lesson", "teacher",
     "assignment", "exam", "examination", "study", "studies", "studying",
     "education", "academic", "college", "university", "semester", "term",
-    "attendance", "aralin", "paaralan", "guro", "asignatura", "klase",
-    "silid-aralan", "takdang aralin", "pag-aaral", "edukasyon", "pagsusulit"
+    "attendance"
   ],
   "academicActions": [
     "studied", "study", "studying", "completed", "attended", "submitted",
     "reviewed", "practiced", "participated", "prepared", "finished", "passed",
-    "presented", "discussed", "performed", "learned", "nag-aral", "natapos",
-    "pumasok", "nagsumite", "nagpraktis", "nakilahok", "naghanda", "pumasa",
-    "ipinasa", "tinalakay", "ginawa"
+    "presented", "discussed", "performed", "learned"
   ],
   "academicOutcomes": [
     "grade", "grades", "score", "scores", "project", "projects", "quiz",
     "quizzes", "test", "tests", "learned", "learning", "knowledge", "subject",
     "subjects", "activity", "activities", "research", "presentation",
-    "achievement", "marka", "grado", "puntos", "proyekto", "natuto",
-    "kaalaman", "aktibidad", "pananaliksik", "presentasyon", "natutunan"
+    "achievement"
   ],
   "improvement": [
     "improve", "improved", "improving", "improvement", "develop", "developed",
     "development", "growth", "skill", "skills", "learn", "learned", "learning",
-    "progress", "progressed", "enhance", "enhanced", "strengthen",
-    "strengthened", "natuto", "pag-unlad", "umunlad", "pinabuti", "pinagbuti",
-    "pagpapabuti", "kasanayan", "kaalaman", "lumago"
+    "progress", "progressed", "enhance", "enhanced", "strengthen", "strengthened"
   ],
   "effort": [
     "practice", "practiced", "effort", "worked", "work hard", "tried", "trying",
     "discipline", "responsible", "responsibility", "dedicated", "determined",
-    "consistent", "persevered", "nagsikap", "pagsisikap", "disiplina",
-    "responsable", "responsibilidad", "tiyaga", "nagpatuloy", "pinag-aralan"
+    "consistent", "persevered"
   ],
   "goals": [
     "goal", "goals", "confident", "confidence", "progress", "better", "achieved",
     "achievement", "accomplished", "success", "successful", "motivated",
-    "motivation", "aim", "target", "layunin", "nakamit", "tagumpay",
-    "mas mahusay", "motibasyon", "pangarap", "nagawa"
+    "motivation", "aim", "target"
   ],
   "familyMembers": [
     "family", "families", "mother", "father", "parent", "parents", "sibling",
     "siblings", "brother", "sister", "grandmother", "grandfather", "grandma",
-    "grandpa", "guardian", "relatives", "pamilya", "magulang", "nanay", "tatay",
-    "ama", "ina", "kapatid", "lola", "lolo", "kamag-anak"
+    "grandpa", "guardian", "relatives"
   ],
   "familySupport": [
     "support", "supported", "help", "helped", "together", "care", "cared",
-    "assist", "assisted", "encourage", "encouraged", "love", "loving", "guidance",
-    "tumulong", "sumuporta", "kasama", "nag-alaga", "nag-asikaso",
-    "nagmamalasakit", "paggabay", "pagmamahal"
+    "assist", "assisted", "encourage", "encouraged", "love", "loving", "guidance"
   ],
   "familyContext": [
     "home", "household", "chores", "work", "health", "income", "livelihood",
-    "daily", "family business", "housework", "responsibilities", "tahanan",
-    "bahay", "gawaing bahay", "kalusugan", "trabaho", "kabuhayan",
-    "pang-araw-araw", "responsibilidad", "gastusin"
+    "daily", "family business", "housework", "responsibilities"
   ],
   "difficultyWords": [
     "difficult", "difficulty", "difficulties", "challenge", "challenges",
     "challenging", "struggle", "struggling", "struggled", "problem", "problems",
     "hardship", "hardships", "trouble", "troubles", "stress", "stressed",
     "pressure", "anxiety", "worried", "worry", "obstacle", "obstacles", "lack",
-    "limited", "shortage", "issue", "issues", "burden", "nahirapan",
-    "nahihirapan", "hirap", "hamon", "pagsubok", "problema", "kakulangan",
-    "pinagdadaanan", "mabigat", "alalahanin", "pag-aalala"
+    "limited", "shortage", "issue", "issues", "burden"
   ],
   "difficultyContext": [
     "financial", "money", "expense", "expenses", "budget", "health", "illness",
     "sick", "time", "school", "family", "transportation", "internet", "workload",
-    "pressure", "stress", "anxiety", "lack", "limited", "gastusin", "pinansyal",
-    "pera", "kalusugan", "sakit", "oras", "pag-aaral", "pamilya", "pamasahe",
-    "trabaho", "kakulangan"
+    "pressure", "stress", "anxiety", "lack", "limited"
   ],
   "copingActions": [
     "manage", "managed", "overcome", "overcame", "address", "resolved", "cope",
     "continued", "continue", "seek", "sought", "adjust", "adjusted", "find",
-    "found", "support", "help", "solution", "solve", "solved", "nagpatuloy",
-    "nalampasan", "hinarap", "nakayanan", "humingi", "nag-adjust", "naghanap",
-    "tumulong", "solusyon", "ginawan"
+    "found", "support", "help", "solution", "solve", "solved"
   ],
   "englishNegations": [
     "no", "not", "never", "without", "none", "nothing", "hardly", "didn't",
@@ -86,14 +67,7 @@
     "haven't", "havent", "have not", "hasn't", "hasnt", "has not", "hadn't",
     "hadnt", "had not"
   ],
-  "filipinoNegations": [
-    "wala akong", "wala kaming", "walang", "hindi ako", "hindi kami", "di ako",
-    "di kami"
-  ],
-  "filipinoNegatedVerbs": [
-    "nahirapan", "nahihirapan", "nakaranas"
-  ],
-  "filipinoPronouns": [
-    "ako", "kami", "siya", "sila", "po"
-  ]
+  "filipinoNegations": [],
+  "filipinoNegatedVerbs": [],
+  "filipinoPronouns": []
 }

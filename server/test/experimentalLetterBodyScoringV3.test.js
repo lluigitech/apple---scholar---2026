@@ -108,32 +108,30 @@ test('difficulty negation scores as absent and mixed reports require review', ()
     assert.ok(detailed.score >= 13);
 });
 
-test('English, Filipino, and Taglish examples are recognized without returning text', () => {
-    const academicFilipino = category(
-        'Ngayong semestre, natapos ko ang research project at tumaas ang marka ko dahil nag-review ako.',
+test('English-only examples are recognized without returning letter text', () => {
+    const academicEnglish = category(
+        'This semester, I completed a research project and improved my grade because I reviewed each week.',
         'Academic Update',
     );
-    const selfFilipino = category(
-        'Nagsisikap ako na pagbutihin ang aking pag-aaral; nagbabasa ako gabi-gabi upang mas maintindihan ang lessons.',
+    const selfEnglish = category(
+        'I am improving my study habits. I read every evening to better understand the lessons.',
         'Self-Improvement',
     );
-    const familyFilipino = category(
-        'Ngayong buwan, maayos ang kalagayan ng pamilya ko. Nagtatrabaho ang tatay ko sa bukid, kaya inayos namin ang gastusin.',
+    const familyEnglish = category(
+        'This month, my family is doing well. My father works at the farm, so we adjusted our expenses.',
         'Family Update',
     );
-    const difficultyTaglish = category(
-        'Nahirapan ako sa internet access ngayong buwan, pero naghanap ako ng library connection at natapos ko ang assignments.',
+    const difficultyEnglish = category(
+        'I struggled with internet access this month, so I found a library connection and completed my assignments.',
         'Difficulty Update',
     );
 
-    assert.ok(academicFilipino.score >= 9);
-    assert.ok(selfFilipino.score >= 9);
-    assert.ok(familyFilipino.score >= 9);
-    assert.ok(difficultyTaglish.score >= 9);
-    for (const result of [academicFilipino, selfFilipino, familyFilipino, difficultyTaglish]) {
-        assert.ok(!JSON.stringify(result).includes('Ngayong'));
-        assert.ok(!JSON.stringify(result).includes('Nagsisikap'));
-        assert.ok(!JSON.stringify(result).includes('Nahirapan'));
+    assert.ok(academicEnglish.score >= 9);
+    assert.ok(selfEnglish.score >= 9);
+    assert.ok(familyEnglish.score >= 9);
+    assert.ok(difficultyEnglish.score >= 9);
+    for (const result of [academicEnglish, selfEnglish, familyEnglish, difficultyEnglish]) {
+        assert.ok(!JSON.stringify(result).toLowerCase().includes('this month'));
     }
 });
 

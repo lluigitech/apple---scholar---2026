@@ -15,7 +15,7 @@ import ConfirmModal from '../../components/Scholar/SubmissionPage/ConfirmModal';
 import SubmittedView from '../../components/Scholar/SubmissionPage/SubmittedView';
 import SubmissionHistory from '../../components/Scholar/SubmissionPage/SubmissionHistory';
 import ScholarGrades from '../../components/Scholar/SubmissionPage/ScholarGrades';
-import { CHECKLIST, LETTER_BODY_MAX, buildEval, calcInfoScore, calcMediaScore, countWords, classifyQualityScore, getRiskBg, getRiskBorder } from '../../utils/submissionScoring';
+import { CHECKLIST, LETTER_BODY_MAX, buildEval, calcInfoScore, calcMediaScore, countWords, classifyQualityScore } from '../../utils/submissionScoring';
 import { uploadResumableFile } from '../../utils/resumableUpload';
 import { getEducationStage, hasEducationProgram } from '../../utils/educationStage';
 
@@ -31,18 +31,12 @@ const WARNING = '#B8863F';
 const DANGER = '#C1666B';
 const INK = '#241512';
 const MUTED = '#8A7A68';
-const SLATE = '#5c7487';
 const RADIUS = 18;
 
 const display = { fontFamily: "'Playfair Display', Georgia, serif" };
 const body = { fontFamily: "'Inter', -apple-system, 'Segoe UI', sans-serif" };
 
 const API_BASE = `${API_ORIGIN}/api/submission`;
-
-const asText = (value) => {
-    if (value === null || typeof value === 'undefined') return '';
-    return String(value).trim();
-};
 
 const authHeader = () => {
     const token = localStorage.getItem('token');
@@ -124,44 +118,6 @@ const CardHeader = ({ icon: Icon, eyebrow, title, right }) => (
     {right}
   </div>
 );
-
-// Grade badge for the overall evaluated score.
-const GradeStamp = ({ score, color, size = 'lg' }) => {
-  const big = size === 'lg';
-  return (
-    <div
-      className="flex flex-col items-center justify-center flex-shrink-0"
-      style={{
-        width: big ? 84 : 68, height: big ? 70 : 58,
-        borderRadius: 16, color,
-        background: `${color}12`, border: `1px solid ${color}33`,
-      }}
-    >
-      <span style={{ ...body, fontSize: '0.56rem', fontWeight: 700, letterSpacing: '0.06em' }}>GRADE</span>
-      <span style={{ ...display, fontSize: big ? '1.6rem' : '1.3rem', fontWeight: 700, lineHeight: 1 }}>{Math.round(Number(score) || 0)}</span>
-      <span style={{ ...body, fontSize: '0.52rem', color, opacity: 0.8 }}>/ 100</span>
-    </div>
-  );
-};
-
-// Score bar with progress indicator
-const ScoreBar = ({ score, weight, label, valueLabel }) => {
-  const color = score >= 75 ? SUCCESS : score >= 50 ? WARNING : DANGER;
-  return (
-    <div className="rounded-xl px-3 py-2 mb-1.5" style={{ background: `${color}0f`, border: `1px solid ${color}30` }}>
-      <div className="flex items-center justify-between mb-1 gap-2">
-        <span style={{ ...body, fontSize: '0.73rem', color: '#3f2f28', fontWeight: 500 }}>{label}</span>
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span style={{ ...body, fontSize: '0.62rem', color: MUTED }}>{weight} pts</span>
-          <span style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color }}>{valueLabel || `${Math.round(Number(score) || 0)}/100`}</span>
-        </div>
-      </div>
-      <div className="rounded-full overflow-hidden" style={{ height: 4, background: BORDER }}>
-        <div className="h-full rounded-full transition-all" style={{ width: `${score}%`, background: color }} />
-      </div>
-    </div>
-  );
-};
 
 // Compact progress-overview card (replaces the old flat StatCard trio)
 const ProgressCard = ({ eyebrow, title, children }) => (
@@ -322,7 +278,6 @@ function Submission() {
   const educationStage = getEducationStage(info.year);
   const wordCount = countWords(body_);
   const hasContent = info.name.trim().length > 0 && body_.trim().length > 20;
-  const datePresent = asText(info.date).length > 0;
   const selectedDeadlineType = selectedType === 'monthly-report' ? 'letter'
     : selectedType === 'cor' ? 'cor'
       : selectedType === 'other' ? 'other' : null;
@@ -343,14 +298,6 @@ function Submission() {
                 ? 'Your submission was approved. Please wait for the next task from Admin before submitting again.'
                 : 'You already submitted this task. Please wait for Officer review, or resubmit if it is returned for revision.'
               : '';
-  const liveEval = evalResult || {
-    overallScore: 0,
-    reportScore: 0,
-    mediaScore: 0,
-    infoScore: 0,
-    riskColor: MUTED,
-  };
-
   // ---- Presentation-only refs for the workflow-step scroll targets ----
   const infoSectionRef = useRef(null);
   const letterSectionRef = useRef(null);
@@ -983,23 +930,6 @@ function Submission() {
                       })}
                     </div>
 
-                    <div className="rounded-xl p-3 mb-4" style={{ background: `${PRIMARY}08`, border: `1px solid ${PRIMARY}22` }}>
-                      <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.04em', color: PRIMARY, marginBottom: 8 }}>AUTOMATED REVIEW</p>
-                      <div className="flex items-center justify-between mb-1">
-                        <span style={{ ...body, fontSize: '0.74rem', color: MUTED }}>Predicted score</span>
-                        <span style={{ ...body, fontSize: '0.78rem', fontWeight: 700, color: datePresent ? liveEval.riskColor : MUTED }}>
-                          {datePresent ? liveEval.overallScore : '—'}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span style={{ ...body, fontSize: '0.74rem', color: MUTED }}>Risk</span>
-                        <span style={{ ...body, fontSize: '0.74rem', fontWeight: 600, color: datePresent ? liveEval.riskColor : MUTED }}>
-                          {datePresent && evalResult ? evalResult.riskLabel : 'Not yet evaluated'}
-                        </span>
-                      </div>
-                      <p style={{ ...body, fontSize: '0.66rem', color: MUTED, marginTop: 8, fontStyle: 'italic' }}>This is only a preview — run Automated Review for the full breakdown.</p>
-                    </div>
-
                     {!scholarId && (
                       <div className="mb-4"><AlertStrip color={DANGER}>No scholar account detected. Please log out and log back in.</AlertStrip></div>
                     )}
@@ -1026,13 +956,15 @@ function Submission() {
                 <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: '18px 18px 0 0', borderBottom: 'none' }} className="p-4 sm:p-[18px_22px]">
                   <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
-                      <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.05em', color: GOLD }}>STEP 4 · AUTOMATED REVIEW</p>
-                      <h3 style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: INK, marginTop: 2 }}>Correspondence Evaluation</h3>
+                      <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.05em', color: GOLD }}>STEP 4 · REPORT REVIEW</p>
+                      <h3 style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: INK, marginTop: 2 }}>Review Your Report</h3>
                       <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 3 }}>{info.name || 'Scholar'} · {info.date}</p>
                     </div>
-                    <span style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: evalResult.flagged ? DANGER : evalResult.source === 'rule_based_v3_tfidf' || evalResult.source === 'rule_based_v3' ? GOLD : SLATE, background: `${evalResult.flagged ? DANGER : evalResult.source === 'rule_based_v3_tfidf' || evalResult.source === 'rule_based_v3' ? GOLD : SLATE}14`, padding: '4px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>
-                      {evalResult.flagged ? 'Invalid Letter' : evalResult.source === 'rule_based_v3_tfidf' ? 'V3 + TF-IDF/Logistic' : evalResult.source === 'rule_based_v3' ? 'V3 Rule-Based' : 'Rule-Based'}
-                    </span>
+                    {evalResult.flagged && (
+                      <span style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: DANGER, background: `${DANGER}14`, padding: '4px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>
+                        Invalid Letter
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1091,56 +1023,8 @@ function Submission() {
                     <p style={{ ...body, fontSize: '0.7rem', color: '#c6b8ae', marginTop: 16 }}>Words: {wordCount} · Page 1 / Apple Scholar</p>
                   </div>
 
-                  {/* Right — Scores Panel */}
+                  {/* Right — Review checklist */}
                   <div className="p-3 sm:p-4 overflow-y-auto lg:max-h-[620px]" style={{ background: BG }}>
-
-                    <div className="rounded-xl p-3 sm:p-4 mb-4 flex items-center gap-3 flex-wrap" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-                      <GradeStamp score={evalResult.overallScore} color={evalResult.riskColor} />
-                      <div className="min-w-0">
-                        <p style={{ ...body, fontSize: '0.62rem', fontWeight: 700, color: MUTED, letterSpacing: '0.04em', marginBottom: 4 }}>EVALUATED GRADE</p>
-                        <span className="inline-block px-2.5 py-1 rounded-full"
-                          style={{ ...body, fontSize: '0.68rem', fontWeight: 700, background: `${evalResult.riskColor}18`, color: evalResult.riskColor }}>
-                          {evalResult.riskLabel}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-3 gap-2 mb-4">
-                      {[
-                        { label: 'Letter Body', value: evalResult.reportScore, max: LETTER_BODY_MAX, sub: '75 pts' },
-                        { label: 'Documentation', value: evalResult.mediaScore, max: 20, sub: '20 pts' },
-                        { label: 'Info', value: evalResult.infoScore || 0, max: 5, sub: '5 pts' },
-                      ].map(s => {
-                        const percent = s.max ? (s.value / s.max) * 100 : 0;
-                        const c = percent >= 75 ? SUCCESS : percent >= 50 ? WARNING : DANGER;
-                        return (
-                          <div key={s.label} className="rounded-xl p-2 sm:p-3 text-center" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-                            <p style={{ ...body, fontSize: '0.58rem', color: MUTED, marginBottom: 2 }} className="truncate">{s.label}</p>
-                            <p style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: c }}>{Math.round(Number(s.value) || 0)}</p>
-                            <p style={{ ...body, fontSize: '0.58rem', color: '#c6b8ae' }}>{s.sub}</p>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {evalResult.categories && (
-                      <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-                        <div className="flex items-center justify-between gap-2 mb-2">
-                          <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em' }}>RULE-BASED CATEGORY SCORES</p>
-                          <span style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color: INK }}>{evalResult.categoryScore || 0}/75</span>
-                        </div>
-                        {Object.entries(evalResult.categories).map(([label, points]) => (
-                          <ScoreBar
-                            key={label}
-                            score={Math.round((Number(points) / 15) * 100)}
-                            weight={15}
-                            label={label}
-                            valueLabel={`${Math.round(Number(points) || 0)}/15`}
-                          />
-                        ))}
-                      </div>
-                    )}
-
                     {evalResult.sentimentLabel && (
                       <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
                         <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em', marginBottom: 6 }}>LETTER CLASSIFICATION</p>
@@ -1148,33 +1032,18 @@ function Submission() {
                       </div>
                     )}
 
-                    {evalResult.source === 'rule_based' && (
-                      <>
-                        <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: '#3f2f28', letterSpacing: '0.04em', marginBottom: 8 }}>MISSING REQUIREMENTS</p>
-                        <div className="space-y-1.5 mb-4">
-                          {evalResult.checklist.map(({ item, passed }) => (
-                            <div key={item.id} className="flex items-center gap-2 rounded-lg px-2.5 sm:px-3 py-1.5"
-                              style={{ background: passed ? `${SUCCESS}14` : `${DANGER}14`, border: `1px solid ${passed ? SUCCESS : DANGER}33` }}>
-                              {passed ? <CheckCircle size={13} style={{ color: SUCCESS, flexShrink: 0 }} /> : <XCircle size={13} style={{ color: DANGER, flexShrink: 0 }} />}
-                              <span style={{ ...body, fontSize: '0.74rem', fontWeight: 500, color: passed ? SUCCESS : DANGER }}>{item.label}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </>
-                    )}
-
-                    {!evalResult.accepted && (
-                      <div className="rounded-xl p-3 mb-3" style={{ background: getRiskBg(evalResult.riskLevel), border: `1px solid ${getRiskBorder(evalResult.riskLevel)}` }}>
-                        <p style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: evalResult.riskColor, marginBottom: 3 }}>
-                          {evalResult.riskLevel === 'medium' ? 'Needs Improvement' : 'Needs Improvement — Officer Review Recommended'}
-                        </p>
-                        <p style={{ ...body, fontSize: '0.73rem', color: MUTED, lineHeight: 1.5 }}>
-                          {evalResult.overallScore < 75
-                            ? 'You can still submit this letter. Your Officer will review it and may request corrections.'
-                            : 'Your letter meets the quality score threshold.'}
-                        </p>
+                    <div className="rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+                      <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.04em', marginBottom: 8 }}>SUBMISSION CHECKLIST</p>
+                      <div className="space-y-1.5">
+                        {evalResult.checklist.map(({ item, passed }) => (
+                          <div key={item.id} className="flex items-center gap-2 rounded-lg px-2.5 sm:px-3 py-1.5"
+                            style={{ background: passed ? `${SUCCESS}14` : `${DANGER}14`, border: `1px solid ${passed ? SUCCESS : DANGER}33` }}>
+                            {passed ? <CheckCircle size={13} style={{ color: SUCCESS, flexShrink: 0 }} /> : <XCircle size={13} style={{ color: DANGER, flexShrink: 0 }} />}
+                            <span style={{ ...body, fontSize: '0.74rem', fontWeight: 500, color: passed ? SUCCESS : DANGER }}>{item.label}</span>
+                          </div>
+                        ))}
                       </div>
-                    )}
+                    </div>
                   </div>
                 </div>
               </div>
