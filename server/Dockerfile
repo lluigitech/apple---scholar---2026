@@ -8,12 +8,13 @@ RUN apt-get update \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+WORKDIR /app/server
 
-COPY package*.json ./
+COPY server/package*.json ./
 RUN npm ci --omit=dev
 
-COPY . .
+COPY server/ ./
+COPY shared/ /app/shared/
 
 ENV NODE_ENV=production
 ENV SOFFICE_PATH=/usr/bin/soffice
