@@ -197,6 +197,15 @@ async function generateLetterDocx(submissionId) {
 async function generateLetterPdf(submissionId) {
   const buf = await generateLetterDocx(submissionId);
 
+  const [submissionRows] = await promiseDb.query(
+    'SELECT scholar_id FROM submissions WHERE id = ? LIMIT 1',
+    [submissionId]
+  );
+  if (!submissionRows || submissionRows.length === 0) {
+    throw new Error('Submission not found');
+  }
+  const scholarId = submissionRows[0].scholar_id;
+
   ensureOutputDir();
 
   const timestamp = Date.now();
@@ -227,7 +236,7 @@ async function generateLetterPdf(submissionId) {
   if (r2Storage.getStorageProvider() === 'r2') {
     const key = r2Storage.createObjectKey({
       folder: 'monthly-letters',
-      scholarId: sub.scholar_id,
+      scholarId,
       originalName: `${baseName}.pdf`,
     });
     storageAsset = await r2Storage.uploadFile({
@@ -260,7 +269,7 @@ async function generateLetterPdf(submissionId) {
        VALUES (?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE public_id = VALUES(public_id), resource_type = VALUES(resource_type), file_format = VALUES(file_format)`,
       [
-        sub.scholar_id,
+        scholarId,
         publicPath,
         storageAsset.key || storageAsset.public_id,
         storageAsset.resourceType || storageAsset.resource_type || 'raw',
