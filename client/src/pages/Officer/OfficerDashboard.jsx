@@ -42,14 +42,6 @@ function SkeletonBox({ h = 16, w = '100%', radius = 6 }) {
   return <div className="animate-pulse" style={{ height: h, width: w, borderRadius: radius, background: PAPER }} />;
 }
 
-const normalizeLevel = value => String(value || '')
-  .trim()
-  .toLowerCase()
-  .replace(/[_-]/g, ' ')
-  .replace(/\s+/g, ' ')
-  .replace(/^grade\s*(\d+)$/, 'grade $1')
-  .replace(/^(1st|2nd|3rd|4th|5th)\s+year(?:\s+college)?$/, (_, year) => `college ${{ '1st': 1, '2nd': 2, '3rd': 3, '4th': 4, '5th': 5 }[year]}`);
-
 const dateKey = value => {
   if (!value) return '';
   if (value instanceof Date) {
@@ -58,40 +50,16 @@ const dateKey = value => {
   return String(value).slice(0, 10);
 };
 
-const parseTargetLevels = value => {
-  if (Array.isArray(value)) return value;
-  try {
-    const parsed = JSON.parse(value || '[]');
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+const submissionTimestamp = value => {
+  const parsed = value instanceof Date ? value : new Date(String(value || '').replace(' ', 'T'));
+  const timestamp = parsed.getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
 };
 
-const getMonthlyCompliance = (scholars, tasks, submissions, today = new Date()) => {
+const getMonthlyCompliance = (scholars, submissions, today = new Date()) => {
   const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const todayKey = dateKey(today);
-  const metrics = { submitted: 0, missing: 0, total: 0 };
-  const taskDeadlinesByScholar = new Map();
-  const monthlyTasks = tasks.filter(task => (
-    String(task.type || '').trim().toLowerCase() === 'monthly report'
-    && dateKey(task.due_date).startsWith(monthKey)
-    && dateKey(task.due_date) <= todayKey
-  ));
-
-  scholars.forEach(scholar => {
-    const assignedTaskDeadlines = monthlyTasks
-      .filter(task => {
-        const levels = parseTargetLevels(task.target_year_levels).map(normalizeLevel);
-        return !levels.length || levels.includes(normalizeLevel(scholar.year_level));
-      })
-      .map(task => dateKey(task.due_date))
-      .sort();
-    if (assignedTaskDeadlines.length) {
-      taskDeadlinesByScholar.set(scholar.scholar_id, assignedTaskDeadlines[assignedTaskDeadlines.length - 1]);
-    }
-  });
-
+  const metrics = { submitted: 0, pending: 0, notSubmitted: 0, total: 0 };
   const monthlySubmissionsByScholar = new Map();
   submissions.forEach(submission => {
     const submissionDate = dateKey(submission.submitted_at);
@@ -103,19 +71,24 @@ const getMonthlyCompliance = (scholars, tasks, submissions, today = new Date()) 
       || !scholarId
     ) return;
     if (!monthlySubmissionsByScholar.has(scholarId)) monthlySubmissionsByScholar.set(scholarId, []);
-    monthlySubmissionsByScholar.get(scholarId).push(submissionDate);
+    monthlySubmissionsByScholar.get(scholarId).push(submission);
   });
 
   scholars.forEach(scholar => {
     metrics.total += 1;
-    const submittedDates = monthlySubmissionsByScholar.get(scholar.scholar_id) || [];
-    if (!submittedDates.length) {
-      metrics.missing += 1;
+    const scholarSubmissions = monthlySubmissionsByScholar.get(scholar.scholar_id) || [];
+    if (!scholarSubmissions.length) {
+      metrics.notSubmitted += 1;
       return;
     }
 
-    const deadline = taskDeadlinesByScholar.get(scholar.scholar_id);
-    if (!deadline || submittedDates.some(submittedDate => submittedDate <= deadline)) metrics.submitted += 1;
+    const latestSubmission = scholarSubmissions.reduce((latest, submission) => {
+      return submissionTimestamp(submission.submitted_at) > submissionTimestamp(latest.submitted_at) ? submission : latest;
+    });
+    const status = String(latestSubmission.status || 'pending').trim().toLowerCase();
+    if (['approved', 'accepted', 'archived'].includes(status)) metrics.submitted += 1;
+    else if (['pending', 'under_review', 'under review'].includes(status)) metrics.pending += 1;
+    else metrics.notSubmitted += 1;
   });
 
   return {
@@ -145,7 +118,7 @@ function Panel({ icon: Icon, title, description, children, className = '', style
 }
 
 // ── Monthly Scholar Compliance (ring + monthly report status breakdown) ──
-function ComplianceSeal({ loading, rate, submitted, missing, monthLabel }) {
+function ComplianceSeal({ loading, rate, submitted, pending, notSubmitted, monthLabel }) {
   const color = rate === null || rate >= 80 ? SAGE : rate >= 50 ? AMBER : CLAY;
   const radius = 58, stroke = 12, size = 140;
   const c = 2 * Math.PI * radius;
@@ -153,10 +126,11 @@ function ComplianceSeal({ loading, rate, submitted, missing, monthLabel }) {
   const offset = c - (pct / 100) * c;
 
   const stats = [
-    { label: 'On time', value: submitted, color: SAGE, icon: CheckCircle },
-    { label: 'Missing', value: missing, color: CLAY, icon: AlertTriangle },
+    { label: 'Submitted', value: submitted, color: SAGE, icon: CheckCircle },
+    { label: 'Pending', value: pending, color: AMBER, icon: Clock },
+    { label: 'Not Submitted', value: notSubmitted, color: CLAY, icon: AlertTriangle },
   ];
-  const barTotal = submitted + missing;
+  const barTotal = submitted + pending + notSubmitted;
 
   return (
     <Panel icon={TrendingUp} title="Overall Scholar Compliance" description={`Monthly Report compliance for ${monthLabel}.`} className="h-full">
@@ -175,7 +149,7 @@ function ComplianceSeal({ loading, rate, submitted, missing, monthLabel }) {
               <>
                 <span style={{ ...serif, fontSize: '2rem', fontWeight: 800, color: INK, lineHeight: 1 }}>{rate === null ? '—' : `${rate}%`}</span>
                 <span style={{ ...sans, fontSize: '0.6rem', fontWeight: 700, color: '#a89890', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 4 }}>
-                  {rate === null ? 'No tasks due' : 'On time'}
+                  {rate === null ? 'No tasks due' : 'Submitted'}
                 </span>
               </>
             )}
@@ -183,7 +157,7 @@ function ComplianceSeal({ loading, rate, submitted, missing, monthLabel }) {
         </div>
 
         <div className="w-full min-w-0 flex-1">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             {stats.map(s => (
               <div key={s.label} className="flex items-center gap-3 rounded-xl p-3.5" style={{ background: `${s.color}12`, border: `1px solid ${s.color}30` }}>
                 <span className="inline-flex flex-shrink-0 items-center justify-center rounded-lg" style={{ width: 34, height: 34, background: `${s.color}1f`, color: s.color }}>
@@ -199,7 +173,7 @@ function ComplianceSeal({ loading, rate, submitted, missing, monthLabel }) {
 
           <div style={{ marginTop: 16 }}>
             {loading ? <SkeletonBox h={10} radius={999} /> : (
-              <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: RULE }} role="img" aria-label="Monthly Report on-time and missing breakdown">
+              <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: RULE }} role="img" aria-label="Monthly Report submitted, pending, and not submitted breakdown">
                 {barTotal > 0 && stats.map(s => s.value > 0 && (
                   <div key={s.label} style={{ width: `${(s.value / barTotal) * 100}%`, background: s.color }} />
                 ))}
@@ -462,7 +436,6 @@ const OfficerDashboard = () => {
   const [submissions, setSubmissions] = useState([]);
   const [validationCounts, setValidationCounts] = useState({ newSubmissions: 0, pendingReviews: 0 });
   const [scholars, setScholars] = useState([]);
-  const [tasks, setTasks] = useState([]);
   const [deadlines, setDeadlines] = useState([]);
   const [complianceReminders, setComplianceReminders] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
@@ -530,7 +503,6 @@ const OfficerDashboard = () => {
 
       if (Array.isArray(data.complianceReminders)) setComplianceReminders(data.complianceReminders);
       if (Array.isArray(data.tasks)) {
-        setTasks(data.tasks);
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         setDeadlines(data.tasks.filter(task => {
@@ -569,8 +541,8 @@ const OfficerDashboard = () => {
   const pending = submissions.filter(s => s.status === 'pending').length;
   const approved = submissions.filter(s => s.status === 'approved').length;
   const rejected = submissions.filter(s => s.status === 'rejected').length;
-  const monthlyCompliance = getMonthlyCompliance(scholars, tasks, submissions);
-  const { submitted, missing, rate: complianceRate, monthLabel } = monthlyCompliance;
+  const monthlyCompliance = getMonthlyCompliance(scholars, submissions);
+  const { submitted, pending: pendingCompliance, notSubmitted, rate: complianceRate, monthLabel } = monthlyCompliance;
 
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -636,7 +608,7 @@ const OfficerDashboard = () => {
 
         {/* ── Overall Scholar Compliance (left) + Quick Actions (right) ── */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <ComplianceSeal loading={loading} rate={complianceRate} submitted={submitted} missing={missing} monthLabel={monthLabel} />
+          <ComplianceSeal loading={loading} rate={complianceRate} submitted={submitted} pending={pendingCompliance} notSubmitted={notSubmitted} monthLabel={monthLabel} />
           <QuickActions />
         </div>
 
