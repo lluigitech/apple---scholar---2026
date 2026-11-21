@@ -71,7 +71,7 @@ const parseTargetLevels = value => {
 const getMonthlyCompliance = (scholars, tasks, submissions, today = new Date()) => {
   const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
   const todayKey = dateKey(today);
-  const metrics = { submitted: 0, missing: 0, late: 0, total: 0 };
+  const metrics = { submitted: 0, missing: 0, total: 0 };
   const taskDeadlinesByScholar = new Map();
   const monthlyTasks = tasks.filter(task => (
     String(task.type || '').trim().toLowerCase() === 'monthly report'
@@ -116,7 +116,6 @@ const getMonthlyCompliance = (scholars, tasks, submissions, today = new Date()) 
 
     const deadline = taskDeadlinesByScholar.get(scholar.scholar_id);
     if (!deadline || submittedDates.some(submittedDate => submittedDate <= deadline)) metrics.submitted += 1;
-    else metrics.late += 1;
   });
 
   return {
@@ -146,7 +145,7 @@ function Panel({ icon: Icon, title, description, children, className = '', style
 }
 
 // ── Monthly Scholar Compliance (ring + monthly report status breakdown) ──
-function ComplianceSeal({ loading, rate, submitted, missing, late, monthLabel }) {
+function ComplianceSeal({ loading, rate, submitted, missing, monthLabel }) {
   const color = rate === null || rate >= 80 ? SAGE : rate >= 50 ? AMBER : CLAY;
   const radius = 58, stroke = 12, size = 140;
   const c = 2 * Math.PI * radius;
@@ -156,10 +155,8 @@ function ComplianceSeal({ loading, rate, submitted, missing, late, monthLabel })
   const stats = [
     { label: 'On time', value: submitted, color: SAGE, icon: CheckCircle },
     { label: 'Missing', value: missing, color: CLAY, icon: AlertTriangle },
-    { label: 'Late', value: late, color: AMBER, icon: Clock },
   ];
-  // The bar shows the relative size of the three counts shown above.
-  const barTotal = submitted + missing + late;
+  const barTotal = submitted + missing;
 
   return (
     <Panel icon={TrendingUp} title="Overall Scholar Compliance" description={`Monthly Report compliance for ${monthLabel}.`} className="h-full">
@@ -186,7 +183,7 @@ function ComplianceSeal({ loading, rate, submitted, missing, late, monthLabel })
         </div>
 
         <div className="w-full min-w-0 flex-1">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {stats.map(s => (
               <div key={s.label} className="flex items-center gap-3 rounded-xl p-3.5" style={{ background: `${s.color}12`, border: `1px solid ${s.color}30` }}>
                 <span className="inline-flex flex-shrink-0 items-center justify-center rounded-lg" style={{ width: 34, height: 34, background: `${s.color}1f`, color: s.color }}>
@@ -202,7 +199,7 @@ function ComplianceSeal({ loading, rate, submitted, missing, late, monthLabel })
 
           <div style={{ marginTop: 16 }}>
             {loading ? <SkeletonBox h={10} radius={999} /> : (
-              <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: RULE }} role="img" aria-label="Monthly Report on-time, missing, and late breakdown">
+              <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: RULE }} role="img" aria-label="Monthly Report on-time and missing breakdown">
                 {barTotal > 0 && stats.map(s => s.value > 0 && (
                   <div key={s.label} style={{ width: `${(s.value / barTotal) * 100}%`, background: s.color }} />
                 ))}
@@ -573,7 +570,7 @@ const OfficerDashboard = () => {
   const approved = submissions.filter(s => s.status === 'approved').length;
   const rejected = submissions.filter(s => s.status === 'rejected').length;
   const monthlyCompliance = getMonthlyCompliance(scholars, tasks, submissions);
-  const { submitted, missing, late, rate: complianceRate, monthLabel } = monthlyCompliance;
+  const { submitted, missing, rate: complianceRate, monthLabel } = monthlyCompliance;
 
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -639,7 +636,7 @@ const OfficerDashboard = () => {
 
         {/* ── Overall Scholar Compliance (left) + Quick Actions (right) ── */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <ComplianceSeal loading={loading} rate={complianceRate} submitted={submitted} missing={missing} late={late} monthLabel={monthLabel} />
+          <ComplianceSeal loading={loading} rate={complianceRate} submitted={submitted} missing={missing} monthLabel={monthLabel} />
           <QuickActions />
         </div>
 
