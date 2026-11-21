@@ -571,11 +571,11 @@ function Submission() {
     const reason = item.staff_comment?.trim();
 
     if (item.submission_type === 'letter') {
-      setBody(item.letter_content || ''); setEvalResult(null); setView('editor');
+      setBody(item.letter_content || ''); setMedia([]); setEvalResult(null); setView('editor');
       setResubmitNotice(
         reason
-          ? `Returned by your officer: "${reason}" — please fix the part above in your letter below, then evaluate and resubmit.`
-          : 'This was returned for correction. Please review and fix your letter below, then resubmit.'
+          ? `Returned by your officer: "${reason}" — please fix the letter, reattach the required photos, then evaluate and resubmit.`
+          : 'This was returned for correction. Please review and fix your letter, reattach the photos, then resubmit.'
       );
     } else {
       setResubmitNotice(
@@ -1031,6 +1031,19 @@ function Submission() {
                         <p style={{ ...body, fontSize: '0.75rem', color: MUTED }}>Sentiment: {evalResult.sentimentLabel}</p>
                       </div>
                     )}
+
+                    <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+                      <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em', marginBottom: 6 }}>
+                        RULE-BASED SCORING
+                      </p>
+                      <p style={{ ...body, fontSize: '0.78rem', fontWeight: 700, color: INK }}>
+                        Overall: {Number.isFinite(evalResult.overallScore) ? `${evalResult.overallScore}%` : 'N/A'}
+                      </p>
+                      <p style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 3 }}>
+                        Letter body: {Number.isFinite(evalResult.reportScore) ? `${evalResult.reportScore}/75` : 'N/A'}
+                        {' · '}Method: {evalResult.source === 'rule_based_v3' ? 'V3 rule-based' : 'Rule-based'}
+                      </p>
+                    </div>
 
                     <div className="rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
                       <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.04em', marginBottom: 8 }}>SUBMISSION CHECKLIST</p>

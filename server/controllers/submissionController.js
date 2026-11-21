@@ -788,6 +788,7 @@ exports.submitCompliance = async (req, res) => {
 
                 const descriptions = JSON.parse(media_descriptions || '[]');
 
+                let pdfWillBeGeneratedAfterMedia = false;
                 if (mediaFiles.length > 0) {
                     const mediaValues = mediaFiles
                         .map((file, idx) => {
@@ -798,6 +799,7 @@ exports.submitCompliance = async (req, res) => {
                         .filter(Boolean);
 
                     if (mediaValues.length > 0) {
+                        pdfWillBeGeneratedAfterMedia = true;
                         const mediaSql = "INSERT INTO submission_media (submission_id, file_path, photo_path, description, uploaded_at, retention_until) VALUES ?";
                         const mediaRows = mediaValues.map(([id, filePath, description]) => [
                             id,
@@ -809,11 +811,26 @@ exports.submitCompliance = async (req, res) => {
                         ]);
                         db.query(mediaSql, [mediaRows], (mediaErr) => {
                             if (mediaErr) console.error('Media save error:', mediaErr);
+                            if (resolvedType === 'letter') {
+                                letterPdfGenerator.generateLetterPdf(submissionId)
+                                    .then((publicPath) => {
+                                        console.log(`Generated PDF for submission ${submissionId}: ${publicPath}`);
+                                        db.query(
+                                            `INSERT INTO documents (scholar_id, category, file_name, file_path, mime_type, status, retention_until, source_submission_id)
+                                             VALUES (?, 'monthly_letter', ?, ?, 'application/pdf', 'Pending', DATE_ADD(NOW(), INTERVAL 3 YEAR), ?)`,
+                                            [scholar_id, `monthly-letter-${submissionId}.pdf`, publicPath, submissionId],
+                                            (documentErr) => { if (documentErr) console.error('Letter retention registry error:', documentErr.message); }
+                                        );
+                                    })
+                                    .catch((genErr) => {
+                                        console.error(`Failed to generate PDF for letter submission ${submissionId}:`, genErr);
+                                    });
+                            }
                         });
                     }
                 }
 
-                if (resolvedType === 'letter') {
+                if (resolvedType === 'letter' && !pdfWillBeGeneratedAfterMedia) {
                     letterPdfGenerator.generateLetterPdf(submissionId)
                         .then((publicPath) => {
                             console.log(`Generated PDF for submission ${submissionId}: ${publicPath}`);
