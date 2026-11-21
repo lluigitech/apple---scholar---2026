@@ -7,6 +7,7 @@ RUN apt-get update \
         fonts-liberation \
         ca-certificates \
         clamav \
+        clamav-daemon \
         clamav-freshclam \
     && freshclam --stdout \
     && rm -rf /var/lib/apt/lists/*
@@ -23,7 +24,10 @@ ENV NODE_ENV=production
 ENV SOFFICE_PATH=/usr/bin/soffice
 ENV CLAMSCAN_PATH=/usr/bin/clamscan
 ENV CLAMAV_DB_DIR=/var/lib/clamav
+ENV CLAMD_PATH=/usr/sbin/clamd
+ENV CLAMAV_HOST=127.0.0.1
+ENV CLAMAV_PORT=3310
 
 EXPOSE 10000
 
-CMD ["node", "server.js"]
+CMD ["node", "start-with-clamd.js"]
