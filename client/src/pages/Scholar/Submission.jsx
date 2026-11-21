@@ -1043,7 +1043,59 @@ function Submission() {
                         Letter body: {Number.isFinite(evalResult.reportScore) ? `${evalResult.reportScore}/75` : 'N/A'}
                         {' · '}Method: {evalResult.source === 'rule_based_v3' ? 'V3 rule-based' : 'Rule-based'}
                       </p>
+                      <div className="mt-2 space-y-1">
+                        {[
+                          ['Documentation', evalResult.mediaScore, 20],
+                          ['Scholar information', evalResult.infoScore, 5],
+                        ].map(([label, score, max]) => (
+                          <div key={label} className="flex items-center justify-between" style={{ ...body, fontSize: '0.68rem', color: MUTED }}>
+                            <span>{label}</span>
+                            <span style={{ fontWeight: 700, color: INK }}>{Number.isFinite(score) ? score : 0}/{max}</span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
+
+                    {evalResult.bodyCriteria?.length > 0 && (
+                      <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+                        <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.04em', marginBottom: 8 }}>
+                          LETTER BODY BREAKDOWN
+                        </p>
+                        <div className="space-y-2">
+                          {evalResult.bodyCriteria.map((criterion) => {
+                            const score = Number(criterion.score || 0);
+                            const max = Number(criterion.max || 15);
+                            return (
+                              <div key={criterion.key || criterion.label}>
+                                <div className="flex items-center justify-between mb-1" style={{ ...body, fontSize: '0.68rem', color: MUTED }}>
+                                  <span>{criterion.label || criterion.key}</span>
+                                  <span style={{ fontWeight: 700, color: INK }}>{score}/{max}</span>
+                                </div>
+                                <div className="w-full overflow-hidden" style={{ height: 4, borderRadius: 999, background: BORDER }}>
+                                  <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, (score / max) * 100))}%`, background: PRIMARY, borderRadius: 999 }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {media.length > 0 && (
+                      <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+                        <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.04em', marginBottom: 8 }}>
+                          DOCUMENTATION &amp; CAPTIONS
+                        </p>
+                        <div className="space-y-1.5">
+                          {media.map((item, index) => (
+                            <div key={item.id} style={{ ...body, fontSize: '0.68rem', color: MUTED, lineHeight: 1.4 }}>
+                              <span style={{ fontWeight: 700, color: INK }}>Photo {index + 1}: </span>
+                              {item.description?.trim() || 'No caption'}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
                       <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.04em', marginBottom: 8 }}>SUBMISSION CHECKLIST</p>
