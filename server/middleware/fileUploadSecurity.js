@@ -28,8 +28,14 @@ const validateUploadedFileSignatures = (req, res, next) => {
     return res.status(400).json({ error: 'Uploaded file content does not match its declared file type' });
 };
 
-const getClamScanPath = () => process.env.CLAMSCAN_PATH || 'C:\\ClamAV\\clamscan.exe';
-const getClamDbDir = () => process.env.CLAMAV_DB_DIR || 'C:\\ClamAV\\db';
+const getClamScanPath = (platform = process.platform) =>
+    process.env.CLAMSCAN_PATH || (platform === 'win32'
+        ? 'C:\\ClamAV\\clamscan.exe'
+        : '/usr/bin/clamscan');
+const getClamDbDir = (platform = process.platform) =>
+    process.env.CLAMAV_DB_DIR || (platform === 'win32'
+        ? 'C:\\ClamAV\\db'
+        : '/var/lib/clamav');
 
 const scanBuffer = (buffer) => new Promise((resolve, reject) => {
     const temporaryPath = path.join(os.tmpdir(), `apple-scholar-scan-${crypto.randomUUID()}.bin`);
@@ -76,4 +82,11 @@ const scanUploadedFiles = async (req, res, next) => {
     }
 };
 
-module.exports = { hasValidFileSignature, validateUploadedFileSignatures, scanUploadedFiles, scanBuffer };
+module.exports = {
+    hasValidFileSignature,
+    validateUploadedFileSignatures,
+    scanUploadedFiles,
+    scanBuffer,
+    getClamScanPath,
+    getClamDbDir,
+};
