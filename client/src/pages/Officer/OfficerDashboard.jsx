@@ -42,60 +42,11 @@ function SkeletonBox({ h = 16, w = '100%', radius = 6 }) {
   return <div className="animate-pulse" style={{ height: h, width: w, borderRadius: radius, background: PAPER }} />;
 }
 
-const dateKey = value => {
-  if (!value) return '';
-  if (value instanceof Date) {
-    return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
-  }
-  return String(value).slice(0, 10);
-};
-
-const submissionTimestamp = value => {
-  const parsed = value instanceof Date ? value : new Date(String(value || '').replace(' ', 'T'));
-  const timestamp = parsed.getTime();
-  return Number.isNaN(timestamp) ? 0 : timestamp;
-};
-
-const getMonthlyCompliance = (scholars, submissions, today = new Date()) => {
-  const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-  const todayKey = dateKey(today);
-  const metrics = { submitted: 0, pending: 0, notSubmitted: 0, total: 0 };
-  const monthlySubmissionsByScholar = new Map();
-  submissions.forEach(submission => {
-    const submissionDate = dateKey(submission.submitted_at);
-    const scholarId = submission.scholar_id || submission.sid;
-    if (
-      String(submission.submission_type || '').toLowerCase() !== 'letter'
-      || !submissionDate.startsWith(monthKey)
-      || submissionDate > todayKey
-      || !scholarId
-    ) return;
-    if (!monthlySubmissionsByScholar.has(scholarId)) monthlySubmissionsByScholar.set(scholarId, []);
-    monthlySubmissionsByScholar.get(scholarId).push(submission);
-  });
-
-  scholars.forEach(scholar => {
-    metrics.total += 1;
-    const scholarSubmissions = monthlySubmissionsByScholar.get(scholar.scholar_id) || [];
-    if (!scholarSubmissions.length) {
-      metrics.notSubmitted += 1;
-      return;
-    }
-
-    const latestSubmission = scholarSubmissions.reduce((latest, submission) => {
-      return submissionTimestamp(submission.submitted_at) > submissionTimestamp(latest.submitted_at) ? submission : latest;
-    });
-    const status = String(latestSubmission.status || 'pending').trim().toLowerCase();
-    if (['approved', 'accepted', 'archived'].includes(status)) metrics.submitted += 1;
-    else if (['pending', 'under_review', 'under review'].includes(status)) metrics.pending += 1;
-    else metrics.notSubmitted += 1;
-  });
-
-  return {
-    ...metrics,
-    rate: metrics.total ? Math.min(100, Math.round((metrics.submitted / metrics.total) * 100)) : null,
-    monthLabel: today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
-  };
+const formatTaskDueDate = value => {
+  const date = value instanceof Date ? value : new Date(`${String(value || '').slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime())
+    ? 'Due date unavailable'
+    : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
 // Shared panel shell: icon chip + serif title + optional description.
@@ -117,79 +68,61 @@ function Panel({ icon: Icon, title, description, children, className = '', style
   );
 }
 
-// ── Monthly Scholar Compliance (ring + monthly report status breakdown) ──
-function ComplianceSeal({ loading, rate, submitted, pending, notSubmitted, monthLabel }) {
-  const color = rate === null || rate >= 80 ? SAGE : rate >= 50 ? AMBER : CLAY;
-  const radius = 58, stroke = 12, size = 140;
-  const c = 2 * Math.PI * radius;
-  const pct = Math.min(100, Math.max(0, rate || 0));
-  const offset = c - (pct / 100) * c;
-
-  const stats = [
-    { label: 'Submitted', value: submitted, color: SAGE, icon: CheckCircle },
-    { label: 'Pending', value: pending, color: AMBER, icon: Clock },
-    { label: 'Not Submitted', value: notSubmitted, color: CLAY, icon: AlertTriangle },
-  ];
-  const barTotal = submitted + pending + notSubmitted;
-
+function ComplianceSeal({ loading, error, tasks, monthLabel }) {
   return (
-    <Panel icon={TrendingUp} title="Overall Scholar Compliance" description={`Monthly Report compliance for ${monthLabel}.`} className="h-full">
-      <div className="flex flex-col items-center gap-6 md:flex-row md:items-center">
-        <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
-          <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Compliance rate ${rate}%`}>
-            <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={RULE} strokeWidth={stroke} />
-            {!loading && (
-              <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={color} strokeWidth={stroke}
-                strokeDasharray={c} strokeDashoffset={offset} strokeLinecap="round"
-                transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ transition: 'stroke-dashoffset 0.5s ease' }} />
-            )}
-          </svg>
-          <div className="absolute inset-0 flex flex-col items-center justify-center">
-            {loading ? <SkeletonBox h={26} w={52} /> : (
-              <>
-                <span style={{ ...serif, fontSize: '2rem', fontWeight: 800, color: INK, lineHeight: 1 }}>{rate === null ? '—' : `${rate}%`}</span>
-                <span style={{ ...sans, fontSize: '0.6rem', fontWeight: 700, color: '#a89890', letterSpacing: '0.08em', textTransform: 'uppercase', marginTop: 4 }}>
-                  {rate === null ? 'No tasks due' : 'Submitted'}
-                </span>
-              </>
-            )}
-          </div>
+    <Panel icon={TrendingUp} title="Overall Scholar Compliance" description={`Task status breakdown for ${monthLabel}.`} className="h-full">
+      {loading ? (
+        <div className="space-y-3">
+          <SkeletonBox h={104} />
+          <SkeletonBox h={104} />
         </div>
+      ) : error ? (
+        <p style={{ ...sans, fontSize: '0.8rem', color: CLAY }}>Couldn&apos;t load task compliance. It will retry automatically.</p>
+      ) : tasks.length === 0 ? (
+        <p style={{ ...sans, fontSize: '0.8rem', color: '#a89890' }}>No active tasks due this month.</p>
+      ) : (
+        <div className="grid grid-cols-1 gap-3">
+          {tasks.map(task => {
+            const stats = [
+              { label: 'Submitted', value: task.submitted, color: SAGE },
+              { label: 'Pending', value: task.pending, color: AMBER },
+              { label: 'Not Submitted', value: task.notSubmitted, color: CLAY },
+            ];
+            const total = stats.reduce((sum, stat) => sum + stat.value, 0);
 
-        <div className="w-full min-w-0 flex-1">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            {stats.map(s => (
-              <div key={s.label} className="flex items-center gap-3 rounded-xl p-3.5" style={{ background: `${s.color}12`, border: `1px solid ${s.color}30` }}>
-                <span className="inline-flex flex-shrink-0 items-center justify-center rounded-lg" style={{ width: 34, height: 34, background: `${s.color}1f`, color: s.color }}>
-                  <s.icon size={16} />
-                </span>
-                <div style={{ minWidth: 0 }}>
-                  {loading ? <SkeletonBox h={22} w={32} /> : <p style={{ ...serif, fontSize: '1.4rem', fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.value}</p>}
-                  <p style={{ ...sans, fontSize: '0.72rem', fontWeight: 600, color: '#6b6058', marginTop: 3 }}>{s.label}</p>
+            return (
+              <div key={task.task_id} className="rounded-xl p-3.5" style={{ border: `1px solid ${RULE}`, background: '#fff' }}>
+                <div className="flex min-w-0 items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 style={{ ...serif, fontSize: '0.9rem', fontWeight: 700, color: MAROON, overflowWrap: 'anywhere' }}>
+                      {task.title || task.type}
+                    </h3>
+                    <p style={{ ...sans, fontSize: '0.68rem', color: '#a89890', marginTop: 2 }}>
+                      {task.type} · Due {formatTaskDueDate(task.due_date)} · Task #{task.task_id}
+                    </p>
+                  </div>
+                  <Calendar size={15} style={{ flexShrink: 0, color: GOLD }} />
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {stats.map(stat => (
+                    <div key={stat.label} className="min-w-0 rounded-lg p-2" style={{ background: `${stat.color}12`, border: `1px solid ${stat.color}30` }}>
+                      <p style={{ ...serif, fontSize: '1.2rem', fontWeight: 700, color: stat.color, lineHeight: 1 }}>{stat.value}</p>
+                      <p style={{ ...sans, fontSize: '0.65rem', fontWeight: 600, color: '#6b6058', marginTop: 4, overflowWrap: 'anywhere' }}>{stat.label}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full" style={{ background: RULE }} role="img" aria-label={`${task.title || task.type}: submitted, pending, and not submitted`}>
+                  {total > 0 && stats.map(stat => stat.value > 0 && (
+                    <div key={stat.label} style={{ width: `${(stat.value / total) * 100}%`, background: stat.color }} />
+                  ))}
                 </div>
               </div>
-            ))}
-          </div>
-
-          <div style={{ marginTop: 16 }}>
-            {loading ? <SkeletonBox h={10} radius={999} /> : (
-              <div className="flex h-2.5 w-full overflow-hidden rounded-full" style={{ background: RULE }} role="img" aria-label="Monthly Report submitted, pending, and not submitted breakdown">
-                {barTotal > 0 && stats.map(s => s.value > 0 && (
-                  <div key={s.label} style={{ width: `${(s.value / barTotal) * 100}%`, background: s.color }} />
-                ))}
-              </div>
-            )}
-            <div className="mt-2.5 flex flex-wrap gap-x-5 gap-y-1">
-              {stats.map(s => (
-                <span key={s.label} className="inline-flex items-center gap-1.5" style={{ ...sans, fontSize: '0.74rem', color: '#6b6058' }}>
-                  <span className="rounded-full" style={{ width: 9, height: 9, background: s.color }} />
-                  {s.label} <span style={{ ...mono, fontWeight: 700, color: s.color }}>{loading ? '—' : s.value}</span>
-                </span>
-              ))}
-            </div>
-          </div>
+            );
+          })}
         </div>
-      </div>
+      )}
     </Panel>
   );
 }
@@ -436,6 +369,8 @@ const OfficerDashboard = () => {
   const [submissions, setSubmissions] = useState([]);
   const [validationCounts, setValidationCounts] = useState({ newSubmissions: 0, pendingReviews: 0 });
   const [scholars, setScholars] = useState([]);
+  const [taskCompliance, setTaskCompliance] = useState([]);
+  const [taskComplianceError, setTaskComplianceError] = useState(false);
   const [deadlines, setDeadlines] = useState([]);
   const [complianceReminders, setComplianceReminders] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
@@ -456,11 +391,14 @@ const OfficerDashboard = () => {
     if (showLoading) setLoading(true);
 
     try {
+      const currentDate = new Date();
+      const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
       const endpoints = [
         ['submissions', `${API_BASE}/submission/all`],
         ['validationQueue', `${API_BASE}/submission/scholar-view`],
         ['scholars', `${API_BASE}/staff/pending`],
         ['tasks', `${API_BASE}/tasks`],
+        ['taskCompliance', `${API_BASE}/officer/reports/task-compliance?month=${currentMonth}`],
         ['complianceReminders', `${API_BASE}/officer/notifications/compliance-due`],
         ['announcements', `${API_BASE}/officer/announcements`],
         ['preferences', `${API_BASE}/officer/settings/notifications`],
@@ -480,6 +418,8 @@ const OfficerDashboard = () => {
 
       const announcementsIndex = endpoints.findIndex(([key]) => key === 'announcements');
       setAnnouncementsError(results[announcementsIndex]?.status === 'rejected');
+      const taskComplianceIndex = endpoints.findIndex(([key]) => key === 'taskCompliance');
+      setTaskComplianceError(results[taskComplianceIndex]?.status === 'rejected');
       setNotificationDataError(
         ['validationQueue', 'complianceReminders', 'announcements', 'preferences']
           .some(key => results[endpoints.findIndex(([endpointKey]) => endpointKey === key)]?.status === 'rejected')
@@ -487,6 +427,7 @@ const OfficerDashboard = () => {
 
       if (Array.isArray(data.submissions)) setSubmissions(data.submissions);
       if (Array.isArray(data.scholars)) setScholars(data.scholars);
+      if (Array.isArray(data.taskCompliance)) setTaskCompliance(data.taskCompliance);
       if (Array.isArray(data.announcements)) setAnnouncements(data.announcements);
       if (data.preferences && typeof data.preferences === 'object') setNotificationPreferences(data.preferences);
 
@@ -541,10 +482,9 @@ const OfficerDashboard = () => {
   const pending = submissions.filter(s => s.status === 'pending').length;
   const approved = submissions.filter(s => s.status === 'approved').length;
   const rejected = submissions.filter(s => s.status === 'rejected').length;
-  const monthlyCompliance = getMonthlyCompliance(scholars, submissions);
-  const { submitted, pending: pendingCompliance, notSubmitted, rate: complianceRate, monthLabel } = monthlyCompliance;
 
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const monthLabel = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
     <div className="min-h-screen" style={{ background: IVORY, ...sans }}>
@@ -608,7 +548,7 @@ const OfficerDashboard = () => {
 
         {/* ── Overall Scholar Compliance (left) + Quick Actions (right) ── */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <ComplianceSeal loading={loading} rate={complianceRate} submitted={submitted} pending={pendingCompliance} notSubmitted={notSubmitted} monthLabel={monthLabel} />
+          <ComplianceSeal loading={loading} error={taskComplianceError} tasks={taskCompliance} monthLabel={monthLabel} />
           <QuickActions />
         </div>
 

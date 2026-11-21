@@ -925,6 +925,148 @@ exports.reviewMonthlySubmission = (req, res) => {
     return submissionController.reviewSubmission(req, res);
 };
 
+exports.getTaskComplianceSummary = async (req, res) => {
+    const currentDate = new Date();
+    const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+    const month = String(req.query.month || currentMonth);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
+        return res.status(400).json({ error: 'Month must use YYYY-MM format.' });
+    }
+
+    try {
+        const scholarConditions = ["u.role = 'scholar'", "u.status = 'active'"];
+        const scholarValues = [];
+        await applyOfficerYearLevelFilter(req, scholarConditions, scholarValues, 'u.year_level');
+        const [scholarsResult, tasksResult] = await Promise.all([
+            db.promise().query(
+                `SELECT u.scholar_id, u.year_level
+                 FROM users u
+                 WHERE ${scholarConditions.join(' AND ')}`,
+                scholarValues
+            ),
+            db.promise().query(
+                `SELECT id, title, type, due_date, created_at, target_year_levels
+                 FROM tasks
+                 WHERE is_active = 1
+                   AND due_date IS NOT NULL
+                   AND DATE_FORMAT(due_date, '%Y-%m') = ?
+                 ORDER BY due_date ASC, id ASC`,
+                [month]
+            ),
+        ]);
+        const [scholars] = scholarsResult;
+        const [tasks] = tasksResult;
+        const taskTypes = {
+            'monthly report': ['letter'],
+            'report card': ['report_card', 'grades'],
+            'cor upload': ['cor'],
+            'other documents': ['other'],
+        };
+        const parseLevels = value => {
+            if (Array.isArray(value)) return value;
+            try {
+                const parsed = JSON.parse(value || '[]');
+                return Array.isArray(parsed) ? parsed : [];
+            } catch {
+                return [];
+            }
+        };
+        const timestamp = value => {
+            if (!value) return null;
+            const parsed = value instanceof Date ? value : new Date(String(value).replace(' ', 'T'));
+            const result = parsed.getTime();
+            return Number.isNaN(result) ? null : result;
+        };
+        const eligibleTasks = tasks
+            .map(task => ({
+                ...task,
+                submissionTypes: taskTypes[String(task.type || '').trim().toLowerCase()],
+                createdAt: timestamp(task.created_at),
+                targetLevels: parseLevels(task.target_year_levels).map(normalizeYearLevel),
+            }))
+            .filter(task => task.submissionTypes);
+        if (!scholars.length || !eligibleTasks.length) return res.json([]);
+
+        const scholarIds = scholars.map(scholar => scholar.scholar_id);
+        const [submissionsResult, gradesResult] = await Promise.all([
+            db.promise().query(
+                `SELECT scholar_id, submission_type, status, submitted_at
+                 FROM submissions
+                 WHERE scholar_id IN (?)`,
+                [scholarIds]
+            ),
+            db.promise().query(
+                `SELECT scholar_id, 'grades' AS submission_type,
+                        verification_status AS status, created_at AS submitted_at
+                 FROM grades
+                 WHERE scholar_id IN (?)`,
+                [scholarIds]
+            ),
+        ]);
+        const [submissions] = submissionsResult;
+        const [grades] = gradesResult;
+        const taskCandidatesBySubmissionType = new Map();
+        eligibleTasks.forEach(task => {
+            task.submissionTypes.forEach(submissionType => {
+                const candidates = taskCandidatesBySubmissionType.get(submissionType) || [];
+                candidates.push(task);
+                taskCandidatesBySubmissionType.set(submissionType, candidates);
+            });
+        });
+        taskCandidatesBySubmissionType.forEach(candidates => candidates.sort((a, b) => (
+            (b.createdAt ?? Number.NEGATIVE_INFINITY) - (a.createdAt ?? Number.NEGATIVE_INFINITY)
+            || Number(b.id) - Number(a.id)
+        )));
+
+        const scholarsById = new Map(scholars.map(scholar => [scholar.scholar_id, scholar]));
+        const latestByTask = new Map();
+        [...submissions, ...grades].forEach(record => {
+            const scholar = scholarsById.get(record.scholar_id);
+            const submittedAt = timestamp(record.submitted_at);
+            if (!scholar || submittedAt === null) return;
+            const assignedTask = (taskCandidatesBySubmissionType.get(record.submission_type) || []).find(task => (
+                (task.createdAt === null || submittedAt >= task.createdAt)
+                && (!task.targetLevels.length || task.targetLevels.includes(normalizeYearLevel(scholar.year_level)))
+            ));
+            if (!assignedTask) return;
+
+            const latestForTask = latestByTask.get(assignedTask.id) || new Map();
+            const currentLatest = latestForTask.get(scholar.scholar_id);
+            if (!currentLatest || submittedAt >= currentLatest.submittedAt) {
+                latestForTask.set(scholar.scholar_id, { ...record, submittedAt });
+            }
+            latestByTask.set(assignedTask.id, latestForTask);
+        });
+
+        const acceptedStatuses = new Set(['approved', 'accepted', 'archived']);
+        const pendingStatuses = new Set(['pending', 'under_review', 'under review']);
+        return res.json(eligibleTasks.map(task => {
+            const assignedScholars = task.targetLevels.length
+                ? scholars.filter(scholar => task.targetLevels.includes(normalizeYearLevel(scholar.year_level)))
+                : scholars;
+            const latestForTask = latestByTask.get(task.id) || new Map();
+            const counts = { submitted: 0, pending: 0, notSubmitted: 0 };
+            assignedScholars.forEach(scholar => {
+                const status = String(latestForTask.get(scholar.scholar_id)?.status || '').trim().toLowerCase();
+                if (acceptedStatuses.has(status)) counts.submitted += 1;
+                else if (pendingStatuses.has(status)) counts.pending += 1;
+                else counts.notSubmitted += 1;
+            });
+            return {
+                task_id: task.id,
+                title: task.title,
+                type: task.type,
+                due_date: task.due_date,
+                total: assignedScholars.length,
+                ...counts,
+            };
+        }));
+    } catch (error) {
+        console.error('Failed to fetch officer task compliance summary:', error);
+        return res.status(500).json({ error: 'Failed to fetch task compliance summary.' });
+    }
+};
+
 // ─── GET TASK COMPLETION SUMMARY ───────────────────────────────
 // A task is assigned through tasks.target_year_levels and completed only
 // when the matching submission or grade created after that task is approved.

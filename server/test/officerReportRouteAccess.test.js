@@ -23,6 +23,10 @@ test('officer summary routes allow officers and retain role protection', () => {
   );
   assert.match(
     routes,
+    /router\.get\('\/reports\/task-compliance', verifyToken, requireRole\(\['officer'\]/
+  );
+  assert.match(
+    routes,
     /router\.get\('\/reports\/submission-records', verifyToken, requireRole\(\['officer'\]/
   );
   assert.match(

@@ -36,6 +36,7 @@ router.patch('/attendance/:id/checkout', requireRole(['admin', 'staff'], { actio
 router.get('/reports/compliance-summary', verifyToken, requireRole(['officer'], { action: 'VIEW_ATTENDANCE', resourceType: 'attendance' }), officerController.getComplianceSummary);
 router.get('/assigned-year-levels', verifyToken, requireRole(['officer']), officerController.getAssignedYearLevels);
 router.get('/reports/task-completion', verifyToken, requireRole(['officer'], { action: 'VIEW_SCHOLAR', resourceType: 'submission_report' }), officerController.getTaskCompletionSummary);
+router.get('/reports/task-compliance', verifyToken, requireRole(['officer'], { action: 'VIEW_SCHOLAR', resourceType: 'submission_report' }), officerController.getTaskComplianceSummary);
 router.get('/reports/scholar-submissions', verifyToken, requireRole(['officer'], { action: 'VIEW_SCHOLAR', resourceType: 'submission_report', logAllowed: false }), officerController.getScholarSubmissionSummary);
 router.post('/reports/compliance-summary/pdf', verifyToken, requireRole(['officer']), officerController.generateComplianceSummaryPdf);
 router.get('/reports/monthly-submissions', verifyToken, requireRole(['officer'], { action: 'VIEW_LETTER', resourceType: 'letter' }), officerController.getMonthlySubmissions);
