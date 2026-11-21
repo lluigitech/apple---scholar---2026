@@ -68,9 +68,9 @@ function Panel({ icon: Icon, title, description, children, className = '', style
   );
 }
 
-function ComplianceSeal({ loading, error, tasks, monthLabel }) {
+function ComplianceSeal({ loading, error, tasks }) {
   return (
-    <Panel icon={TrendingUp} title="Overall Scholar Compliance" description={`Task status breakdown for ${monthLabel}.`} className="h-full">
+    <Panel icon={TrendingUp} title="Overall Scholar Compliance" description="Latest Monthly Letter task and active Report Card, COR, and Other Documents tasks." className="h-full">
       {loading ? (
         <div className="space-y-3">
           <SkeletonBox h={104} />
@@ -79,7 +79,7 @@ function ComplianceSeal({ loading, error, tasks, monthLabel }) {
       ) : error ? (
         <p style={{ ...sans, fontSize: '0.8rem', color: CLAY }}>Couldn&apos;t load task compliance. It will retry automatically.</p>
       ) : tasks.length === 0 ? (
-        <p style={{ ...sans, fontSize: '0.8rem', color: '#a89890' }}>No active tasks due this month.</p>
+        <p style={{ ...sans, fontSize: '0.8rem', color: '#a89890' }}>No active tasks.</p>
       ) : (
         <div className="grid grid-cols-1 gap-3">
           {tasks.map(task => {
@@ -98,7 +98,8 @@ function ComplianceSeal({ loading, error, tasks, monthLabel }) {
                       {task.title || task.type}
                     </h3>
                     <p style={{ ...sans, fontSize: '0.68rem', color: '#a89890', marginTop: 2 }}>
-                      {task.type} · Due {formatTaskDueDate(task.due_date)} · Task #{task.task_id}
+                      {task.type === 'Monthly Report' ? 'Monthly Letter · Latest task' : task.type}
+                      {' · '}Due {formatTaskDueDate(task.due_date)} · Task #{task.task_id}
                     </p>
                   </div>
                   <Calendar size={15} style={{ flexShrink: 0, color: GOLD }} />
@@ -391,14 +392,12 @@ const OfficerDashboard = () => {
     if (showLoading) setLoading(true);
 
     try {
-      const currentDate = new Date();
-      const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
       const endpoints = [
         ['submissions', `${API_BASE}/submission/all`],
         ['validationQueue', `${API_BASE}/submission/scholar-view`],
         ['scholars', `${API_BASE}/staff/pending`],
         ['tasks', `${API_BASE}/tasks`],
-        ['taskCompliance', `${API_BASE}/officer/reports/task-compliance?month=${currentMonth}`],
+        ['taskCompliance', `${API_BASE}/officer/reports/task-compliance`],
         ['complianceReminders', `${API_BASE}/officer/notifications/compliance-due`],
         ['announcements', `${API_BASE}/officer/announcements`],
         ['preferences', `${API_BASE}/officer/settings/notifications`],
@@ -484,7 +483,6 @@ const OfficerDashboard = () => {
   const rejected = submissions.filter(s => s.status === 'rejected').length;
 
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-  const monthLabel = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 
   return (
     <div className="min-h-screen" style={{ background: IVORY, ...sans }}>
@@ -548,7 +546,7 @@ const OfficerDashboard = () => {
 
         {/* ── Overall Scholar Compliance (left) + Quick Actions (right) ── */}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <ComplianceSeal loading={loading} error={taskComplianceError} tasks={taskCompliance} monthLabel={monthLabel} />
+          <ComplianceSeal loading={loading} error={taskComplianceError} tasks={taskCompliance} />
           <QuickActions />
         </div>
 

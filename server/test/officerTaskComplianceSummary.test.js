@@ -19,7 +19,7 @@ const fakeDb = {
       }
       if (sql.includes('FROM tasks')) {
         return [tasks
-          .filter(task => String(task.due_date).slice(0, 7) === values[0])
+          .filter(task => task.is_active !== 0)
           .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)) || Number(a.id) - Number(b.id)), []];
       }
       if (sql.includes('FROM submissions')) return [submissions, []];
@@ -63,19 +63,19 @@ const invoke = req => new Promise(resolve => {
   });
 });
 
-test('returns separate status counts for each current-month task and assigns submissions to the latest matching task', async () => {
+test('keeps active non-monthly tasks and resets Monthly Letter counts to the newest task', async () => {
   scholars = [
     { scholar_id: 'S-1', year_level: 'grade_12' },
     { scholar_id: 'S-2', year_level: 'Grade 12' },
     { scholar_id: 'S-3', year_level: 'grade_11' },
   ];
   tasks = [
-    { id: 101, title: 'Monthly Report - First', type: 'Monthly Report', due_date: '2026-11-10', created_at: '2026-11-01 08:00:00', target_year_levels: '["grade_12"]' },
-    { id: 102, title: 'Monthly Report - Second', type: 'Monthly Report', due_date: '2026-11-30', created_at: '2026-11-15 08:00:00', target_year_levels: '["grade_12"]' },
-    { id: 103, title: 'COR Upload', type: 'COR Upload', due_date: '2026-11-22', created_at: '2026-11-03 08:00:00', target_year_levels: '["grade_12"]' },
-    { id: 104, title: 'Other Documents', type: 'Other Documents', due_date: '2026-11-25', created_at: '2026-11-05 08:00:00', target_year_levels: '["grade_12"]' },
-    { id: 105, title: 'Report Card', type: 'Report Card', due_date: '2026-11-28', created_at: '2026-11-06 08:00:00', target_year_levels: '["grade_12"]' },
-    { id: 106, title: 'Next Month', type: 'Monthly Report', due_date: '2026-12-01', created_at: '2026-11-20 08:00:00', target_year_levels: '["grade_12"]' },
+    { id: 101, title: 'Monthly Report - First', type: 'Monthly Report', due_date: '2026-11-10', created_at: '2026-11-01 08:00:00', target_year_levels: '["grade_12"]', is_active: 1 },
+    { id: 102, title: 'Monthly Report - Second', type: 'Monthly Report', due_date: '2026-12-30', created_at: '2026-11-15 08:00:00', target_year_levels: '["grade_12"]', is_active: 1 },
+    { id: 103, title: 'COR Upload', type: 'COR Upload', due_date: '2026-10-22', created_at: '2026-10-03 08:00:00', target_year_levels: '["grade_12"]', is_active: 1 },
+    { id: 104, title: 'Other Documents', type: 'Other Documents', due_date: '2026-11-25', created_at: '2026-11-05 08:00:00', target_year_levels: '["grade_12"]', is_active: 1 },
+    { id: 105, title: 'Report Card', type: 'Report Card', due_date: '2026-12-28', created_at: '2026-11-06 08:00:00', target_year_levels: '["grade_12"]', is_active: 1 },
+    { id: 106, title: 'Closed COR', type: 'COR Upload', due_date: '2026-11-22', created_at: '2026-11-03 08:00:00', target_year_levels: '["grade_12"]', is_active: 0 },
   ];
   submissions = [
     { scholar_id: 'S-1', submission_type: 'letter', status: 'approved', submitted_at: '2026-11-05 09:00:00' },
@@ -87,7 +87,7 @@ test('returns separate status counts for each current-month task and assigns sub
     { scholar_id: 'S-1', submission_type: 'grades', status: 'approved', submitted_at: '2026-11-08 09:00:00' },
   ];
 
-  const response = await invoke({ user: { id: 8, role: 'officer' }, query: { month: '2026-11' } });
+  const response = await invoke({ user: { id: 8, role: 'officer' }, query: {} });
 
   assert.equal(response.status, 200);
   assert.deepEqual(response.body.map(task => ({
@@ -97,15 +97,9 @@ test('returns separate status counts for each current-month task and assigns sub
     pending: task.pending,
     notSubmitted: task.notSubmitted,
   })), [
-    { task_id: 101, total: 2, submitted: 1, pending: 0, notSubmitted: 1 },
     { task_id: 103, total: 2, submitted: 0, pending: 0, notSubmitted: 2 },
     { task_id: 104, total: 2, submitted: 0, pending: 1, notSubmitted: 1 },
     { task_id: 105, total: 2, submitted: 1, pending: 0, notSubmitted: 1 },
     { task_id: 102, total: 2, submitted: 0, pending: 1, notSubmitted: 1 },
   ]);
-});
-
-test('rejects invalid compliance months', async () => {
-  const response = await invoke({ user: { id: 8, role: 'officer' }, query: { month: '2026-13' } });
-  assert.equal(response.status, 400);
 });

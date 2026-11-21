@@ -926,13 +926,6 @@ exports.reviewMonthlySubmission = (req, res) => {
 };
 
 exports.getTaskComplianceSummary = async (req, res) => {
-    const currentDate = new Date();
-    const currentMonth = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
-    const month = String(req.query.month || currentMonth);
-    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
-        return res.status(400).json({ error: 'Month must use YYYY-MM format.' });
-    }
-
     try {
         const scholarConditions = ["u.role = 'scholar'", "u.status = 'active'"];
         const scholarValues = [];
@@ -948,10 +941,7 @@ exports.getTaskComplianceSummary = async (req, res) => {
                 `SELECT id, title, type, due_date, created_at, target_year_levels
                  FROM tasks
                  WHERE is_active = 1
-                   AND due_date IS NOT NULL
-                   AND DATE_FORMAT(due_date, '%Y-%m') = ?
-                 ORDER BY due_date ASC, id ASC`,
-                [month]
+                 ORDER BY due_date ASC, id ASC`
             ),
         ]);
         const [scholars] = scholarsResult;
@@ -977,7 +967,7 @@ exports.getTaskComplianceSummary = async (req, res) => {
             const result = parsed.getTime();
             return Number.isNaN(result) ? null : result;
         };
-        const eligibleTasks = tasks
+        const supportedTasks = tasks
             .map(task => ({
                 ...task,
                 submissionTypes: taskTypes[String(task.type || '').trim().toLowerCase()],
@@ -985,7 +975,20 @@ exports.getTaskComplianceSummary = async (req, res) => {
                 targetLevels: parseLevels(task.target_year_levels).map(normalizeYearLevel),
             }))
             .filter(task => task.submissionTypes);
-        if (!scholars.length || !eligibleTasks.length) return res.json([]);
+        const monthlyLetterTasks = supportedTasks
+            .filter(task => String(task.type || '').trim().toLowerCase() === 'monthly report')
+            .sort((a, b) => (
+                (b.createdAt ?? Number.NEGATIVE_INFINITY) - (a.createdAt ?? Number.NEGATIVE_INFINITY)
+                || Number(b.id) - Number(a.id)
+            ));
+        const tasksToSummarize = [
+            ...supportedTasks.filter(task => String(task.type || '').trim().toLowerCase() !== 'monthly report'),
+            ...(monthlyLetterTasks.length ? [monthlyLetterTasks[0]] : []),
+        ].sort((a, b) => (
+            (timestamp(a.due_date) ?? Number.NEGATIVE_INFINITY) - (timestamp(b.due_date) ?? Number.NEGATIVE_INFINITY)
+            || Number(a.id) - Number(b.id)
+        ));
+        if (!scholars.length || !tasksToSummarize.length) return res.json([]);
 
         const scholarIds = scholars.map(scholar => scholar.scholar_id);
         const [submissionsResult, gradesResult] = await Promise.all([
@@ -1006,7 +1009,7 @@ exports.getTaskComplianceSummary = async (req, res) => {
         const [submissions] = submissionsResult;
         const [grades] = gradesResult;
         const taskCandidatesBySubmissionType = new Map();
-        eligibleTasks.forEach(task => {
+        tasksToSummarize.forEach(task => {
             task.submissionTypes.forEach(submissionType => {
                 const candidates = taskCandidatesBySubmissionType.get(submissionType) || [];
                 candidates.push(task);
@@ -1040,7 +1043,7 @@ exports.getTaskComplianceSummary = async (req, res) => {
 
         const acceptedStatuses = new Set(['approved', 'accepted', 'archived']);
         const pendingStatuses = new Set(['pending', 'under_review', 'under review']);
-        return res.json(eligibleTasks.map(task => {
+        return res.json(tasksToSummarize.map(task => {
             const assignedScholars = task.targetLevels.length
                 ? scholars.filter(scholar => task.targetLevels.includes(normalizeYearLevel(scholar.year_level)))
                 : scholars;
