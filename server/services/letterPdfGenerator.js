@@ -163,8 +163,16 @@ async function generateLetterDocx(submissionId) {
   for (let i = 0; i < Math.min(mediaRows.length, 2); i++) {
     const media = mediaRows[i];
     if (media && media.file_path) {
-      const buffer = await fetchImageBuffer(media.file_path);
-      imageBuffers[`photo${i + 1}`] = buffer ? await normalizeToPng(buffer) : null;
+      try {
+        const buffer = await fetchImageBuffer(media.file_path);
+        imageBuffers[`photo${i + 1}`] = buffer ? await normalizeToPng(buffer) : null;
+      } catch (imageErr) {
+        console.warn(
+          `Failed to embed photo ${i + 1} for submission ${submissionId}:`,
+          imageErr && imageErr.message ? imageErr.message : imageErr
+        );
+        imageBuffers[`photo${i + 1}`] = null;
+      }
     }
   }
 

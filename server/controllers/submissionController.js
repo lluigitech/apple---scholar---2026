@@ -2084,7 +2084,8 @@ exports.getOrGenerateSubmissionPdf = async (req, res) => {
         if (!allowed) return res.status(403).json({ error: 'You are not authorized to access this submission PDF.' });
 
         const existing = submission.generated_pdf_path || null;
-        if (existing) {
+        const forceRegenerate = req.query?.regenerate === '1';
+        if (existing && !forceRegenerate) {
             const isRemote = existing.startsWith('http://') || existing.startsWith('https://');
             if (isRemote || existing.includes('res.cloudinary.com')) return res.json({ path: existing });
 

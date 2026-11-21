@@ -475,7 +475,7 @@ export default function MonthlyReportsTab({
     setGeneratingPdfId(submissionId);
     setPdfError('');
     try {
-      const { data } = await axios.get(`${API}/submission/generate-pdf/${submissionId}`, { headers });
+      const { data } = await axios.get(`${API}/submission/generate-pdf/${submissionId}?regenerate=1`, { headers });
       if (!data?.path) throw new Error('The PDF file path was not returned.');
 
       const pdfResponse = await axios.get(`${API}/submission/preview?url=${encodeURIComponent(data.path)}`, {

@@ -605,7 +605,7 @@ const ScholarProfileView = () => {
         setLetterPdfError('');
         try {
             const token = localStorage.getItem('token');
-            const { data } = await axios.get(`${API_BASE}/submission/generate-pdf/${submission.id}`, {
+            const { data } = await axios.get(`${API_BASE}/submission/generate-pdf/${submission.id}?regenerate=1`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!data?.path) throw new Error('The PDF file path was not returned.');

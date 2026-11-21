@@ -609,7 +609,7 @@ const OfficerManualValidation = () => {
     setGeneratingPdfId(submissionId);
     setLetterViewError('');
     try {
-      const response = await axios.get(`${API}/submission/generate-pdf/${submissionId}`, { headers: authHeader() });
+      const response = await axios.get(`${API}/submission/generate-pdf/${submissionId}?regenerate=1`, { headers: authHeader() });
       const path = response.data?.path;
       if (typeof path !== 'string' || !path.trim()) {
         throw new Error('The server did not return a monthly letter file.');
