@@ -188,7 +188,7 @@ export default function SubmissionRecordsTab({ assignedYearLevels = [], assigned
   };
 
   const statCards = [
-    { label: "Total Submissions", value: submittedRecords.length, note: "Approved submissions for selected filters", Icon: FileText, color: DEEP },
+    { label: "Total Submissions", value: submittedRecords.length, note: "Submitted requirements for selected filters", Icon: FileText, color: DEEP },
     { label: "Accepted", value: acceptedCount, note: totalApplicableRequirements ? `${Math.round((acceptedCount / totalApplicableRequirements) * 100)}% of applicable requirements` : "No requirements due", Icon: CheckCircle2, color: SAGE },
     { label: "Not Submitted", value: notSubmitted, note: "Past-due requirements without a submission", Icon: AlertTriangle, color: CLAY },
     { label: "Submission Rate", value: `${complianceRate}%`, note: `${acceptedCount} of ${totalApplicableRequirements} applicable requirements`, Icon: Users, color: AMBER },
@@ -256,6 +256,9 @@ export default function SubmissionRecordsTab({ assignedYearLevels = [], assigned
           <select value={statusFilter} onChange={event => { setPage(1); setStatusFilter(event.target.value); }} style={{ ...fieldStyle, cursor: "pointer" }}>
             <option value="all">All Statuses</option>
             <option value="accepted">Accepted</option>
+            <option value="pending">Pending</option>
+            <option value="needs revision">Needs Revision</option>
+            <option value="for review">For Review</option>
             <option value="not submitted">Not Submitted</option>
           </select>
         </div>

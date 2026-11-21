@@ -93,7 +93,7 @@ const invoke = (handler, request) => new Promise(resolve => {
   if (result && typeof result.catch === 'function') result.catch(resolve);
 });
 
-test('submission records accept and apply a reporting date range', async () => {
+test('submission records apply reporting date ranges to task due dates', async () => {
   const today = new Date();
   const dateTo = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
   const dateFromValue = new Date(today.getFullYear(), today.getMonth() - 2, 1);
@@ -111,12 +111,9 @@ test('submission records accept and apply a reporting date range', async () => {
   });
 
   assert.equal(response.statusCode, 200);
-  assert.ok(queryLog.some(({ sql, values }) => sql.includes('DATE(s.submitted_at) >= ?')
-    && values.includes(dateFrom) && values.includes(dateTo)));
-  assert.ok(queryLog.some(({ sql, values }) => sql.includes('DATE(g.created_at) >= ?')
-    && values.includes(dateFrom) && values.includes(dateTo)));
   assert.ok(queryLog.some(({ sql, values }) => sql.includes('DATE(t.due_date) >= ?')
     && values.includes(dateFrom) && values.includes(dateTo)));
+  assert.deepEqual(response.body.records, []);
 });
 
 test('submission records reject invalid reporting date ranges', async () => {
@@ -343,7 +340,7 @@ test('adds a missing row for a task due in September even if created in August',
   assert.equal(missing.status, 'not-submitted');
 });
 
-test('shows finalized approved submissions even when no task exists for the selected month', async () => {
+test('does not report approved submissions before a task is due', async () => {
   scholars = [{ scholar_id: 'S-1', full_name: 'Scholar', year_level: 'college_1' }];
   tasks = [];
   submissions = [{
@@ -363,14 +360,10 @@ test('shows finalized approved submissions even when no task exists for the sele
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.body.records.length, 1);
-  assert.equal(response.body.records[0].scholarId, 'S-1');
-  assert.equal(response.body.records[0].requirement, 'Monthly Letter');
-  assert.equal(response.body.records[0].period, currentMonth);
-  assert.equal(response.body.records[0].status, 'approved');
+  assert.deepEqual(response.body.records, []);
 });
 
-test('keeps submitted records but does not invent missing requirements when no task exists', async () => {
+test('does not report submissions or missing requirements when no task is due', async () => {
   scholars = [
     { scholar_id: 'S-1', full_name: 'Submitted Scholar', year_level: 'college_4' },
     { scholar_id: 'S-2', full_name: 'Missing Scholar', year_level: 'college_4' },
@@ -396,16 +389,20 @@ test('keeps submitted records but does not invent missing requirements when no t
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.body.records.length, 1);
-  assert.equal(response.body.records[0].scholarId, 'S-1');
-  assert.equal(response.body.records[0].status, 'approved');
+  assert.deepEqual(response.body.records, []);
   assert.equal(response.body.records.some(record => record.isMissing), false);
 });
 
 test('shows approved submissions in Reports even without a finalization timestamp', async () => {
   scholars = [{ scholar_id: 'S-1', full_name: 'Scholar', year_level: 'college_1' }];
   assignedLevels = [];
-  tasks = [];
+  tasks = [{
+    id: 64,
+    type: 'Monthly Report',
+    due_date: currentMonthFirstDay,
+    created_at: `${currentMonthFirstDay} 08:00:00`,
+    target_year_levels: '["college_1"]',
+  }];
   submissions = [{
     id: 64,
     scholar_id: 'S-1',
@@ -429,7 +426,10 @@ test('shows approved submissions in Reports even without a finalization timestam
 });
 
 test('does not show task records before the task due date', async () => {
-  scholars = [{ scholar_id: 'S-1', full_name: 'Scholar', year_level: 'college_1' }];
+  scholars = [
+    { scholar_id: 'S-1', full_name: 'Approved Scholar', year_level: 'college_1' },
+    { scholar_id: 'S-2', full_name: 'Pending Scholar', year_level: 'college_1' },
+  ];
   const future = new Date();
   future.setDate(future.getDate() + 5);
   const futureDate = `${future.getFullYear()}-${String(future.getMonth() + 1).padStart(2, '0')}-${String(future.getDate()).padStart(2, '0')}`;
@@ -440,7 +440,24 @@ test('does not show task records before the task due date', async () => {
     created_at: `${currentMonthFirstDay} 08:00:00`,
     target_year_levels: '["college_1"]',
   }];
-  submissions = [];
+  submissions = [
+    {
+    id: 71,
+    scholar_id: 'S-1',
+    scholar_name: 'Approved Scholar',
+    submission_type: 'letter',
+    submitted_at: `${currentMonthFirstDay} 09:00:00`,
+    status: 'approved',
+    },
+    {
+    id: 72,
+    scholar_id: 'S-2',
+    scholar_name: 'Pending Scholar',
+    submission_type: 'letter',
+    submitted_at: `${currentMonthFirstDay} 09:00:00`,
+    status: 'pending',
+    },
+  ];
   grades = [];
 
   const response = await invoke(officerController.getSubmissionRecords, {

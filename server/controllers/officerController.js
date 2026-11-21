@@ -554,70 +554,6 @@ exports.getSubmissionRecords = async (req, res) => {
         if (!scholars.length) return res.json({ totalScholars: 0, records: [] });
 
         const scholarIds = scholars.map(scholar => scholar.scholar_id);
-        const submissionConditions = [
-            's.scholar_id IN (?)',
-            'COALESCE(s.archived_at, s.archive_at) IS NULL',
-        ];
-        const submissionValues = [scholarIds];
-        if (document_type === 'letter') submissionConditions.push("s.submission_type = 'letter'");
-        if (document_type === 'grades') submissionConditions.push("s.submission_type = 'report_card'");
-        if (document_type === 'cor') submissionConditions.push("s.submission_type = 'cor'");
-        if (document_type === 'other') submissionConditions.push("s.submission_type = 'other'");
-        if (month) {
-            submissionConditions.push("DATE_FORMAT(s.submitted_at, '%Y-%m') = ?");
-            submissionValues.push(month);
-        }
-        if (date_from) {
-            submissionConditions.push('DATE(s.submitted_at) >= ?');
-            submissionValues.push(date_from);
-        }
-        if (date_to) {
-            submissionConditions.push('DATE(s.submitted_at) <= ?');
-            submissionValues.push(date_to);
-        }
-
-        const [submissions] = await db.promise().query(
-            `SELECT s.*, u.full_name AS scholar_name, u.year_level,
-                    (SELECT sm.file_path FROM submission_media sm
-                     WHERE sm.submission_id = s.id ORDER BY sm.id LIMIT 1) AS media_path
-             FROM submissions s
-             INNER JOIN users u ON u.scholar_id = s.scholar_id
-             WHERE ${submissionConditions.join(' AND ')}
-             ORDER BY s.submitted_at DESC, s.id DESC`,
-            submissionValues
-        );
-
-        let grades = [];
-        if (document_type === 'all' || document_type === 'grades') {
-            const gradeConditions = [
-                'g.scholar_id IN (?)',
-                "(LOWER(COALESCE(g.verification_status, '')) <> 'approved' OR g.finalized_at IS NOT NULL)",
-            ];
-            const gradeValues = [scholarIds];
-            if (month) {
-                gradeConditions.push("DATE_FORMAT(g.created_at, '%Y-%m') = ?");
-                gradeValues.push(month);
-            }
-            if (date_from) {
-                gradeConditions.push('DATE(g.created_at) >= ?');
-                gradeValues.push(date_from);
-            }
-            if (date_to) {
-                gradeConditions.push('DATE(g.created_at) <= ?');
-                gradeValues.push(date_to);
-            }
-            const [gradeRows] = await db.promise().query(
-                `SELECT g.id, g.scholar_id, g.proof_path, g.verification_status AS status,
-                        g.created_at AS submitted_at, u.full_name AS scholar_name, u.year_level
-                 FROM grades g
-                 INNER JOIN users u ON u.scholar_id = g.scholar_id
-                 WHERE ${gradeConditions.join(' AND ')}
-                 ORDER BY g.created_at DESC, g.id DESC`,
-                gradeValues
-            );
-            grades = gradeRows.map(row => ({ ...row, id: `grade-${row.id}`, submission_type: 'grades', file_path: row.proof_path }));
-        }
-
         const taskConditions = ['t.is_active = 1', 't.due_date IS NOT NULL', 't.due_date <= CURDATE()'];
         const taskValues = [];
         if (month) {
@@ -640,13 +576,6 @@ exports.getSubmissionRecords = async (req, res) => {
             taskValues
         );
 
-        const labels = {
-            letter: 'Monthly Letter',
-            report_card: 'Grades',
-            grades: 'Grades',
-            cor: 'COR',
-            other: 'Other Documents',
-        };
         const taskTypes = {
             'monthly report': { submissionType: 'letter', requirement: 'Monthly Letter' },
             'report card': { submissionType: 'report_card', requirement: 'Grades' },
@@ -658,6 +587,80 @@ exports.getSubmissionRecords = async (req, res) => {
             || (document_type === 'grades' && ['grades', 'report_card'].includes(type))
             || type === document_type
         );
+        const dueTasks = tasks.filter(task => {
+            const taskRequirement = taskTypes[String(task.type || '').trim().toLowerCase()];
+            return taskRequirement && matchesSelectedType(taskRequirement.submissionType);
+        });
+        const dateTimeValue = value => {
+            if (!value) return '';
+            if (!(value instanceof Date)) return String(value).replace('T', ' ').slice(0, 19);
+            const pad = part => String(part).padStart(2, '0');
+            return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
+        };
+        const earliestTaskCreatedAt = dueTasks
+            .map(task => dateTimeValue(task.created_at))
+            .filter(Boolean)
+            .sort()[0];
+
+        let submissions = [];
+        let grades = [];
+        if (dueTasks.length) {
+            const submissionConditions = [
+                's.scholar_id IN (?)',
+                'COALESCE(s.archived_at, s.archive_at) IS NULL',
+            ];
+            const submissionValues = [scholarIds];
+            if (document_type === 'letter') submissionConditions.push("s.submission_type = 'letter'");
+            if (document_type === 'grades') submissionConditions.push("s.submission_type = 'report_card'");
+            if (document_type === 'cor') submissionConditions.push("s.submission_type = 'cor'");
+            if (document_type === 'other') submissionConditions.push("s.submission_type = 'other'");
+            if (earliestTaskCreatedAt) {
+                submissionConditions.push('s.submitted_at >= ?');
+                submissionValues.push(earliestTaskCreatedAt);
+            }
+
+            const [submissionRows] = await db.promise().query(
+                `SELECT s.*, u.full_name AS scholar_name, u.year_level,
+                        (SELECT sm.file_path FROM submission_media sm
+                         WHERE sm.submission_id = s.id ORDER BY sm.id LIMIT 1) AS media_path
+                 FROM submissions s
+                 INNER JOIN users u ON u.scholar_id = s.scholar_id
+                 WHERE ${submissionConditions.join(' AND ')}
+                 ORDER BY s.submitted_at DESC, s.id DESC`,
+                submissionValues
+            );
+            submissions = submissionRows;
+
+            if (document_type === 'all' || document_type === 'grades') {
+                const gradeConditions = [
+                    'g.scholar_id IN (?)',
+                    "(LOWER(COALESCE(g.verification_status, '')) <> 'approved' OR g.finalized_at IS NOT NULL)",
+                ];
+                const gradeValues = [scholarIds];
+                if (earliestTaskCreatedAt) {
+                    gradeConditions.push('g.created_at >= ?');
+                    gradeValues.push(earliestTaskCreatedAt);
+                }
+                const [gradeRows] = await db.promise().query(
+                    `SELECT g.id, g.scholar_id, g.proof_path, g.verification_status AS status,
+                            g.created_at AS submitted_at, u.full_name AS scholar_name, u.year_level
+                     FROM grades g
+                     INNER JOIN users u ON u.scholar_id = g.scholar_id
+                     WHERE ${gradeConditions.join(' AND ')}
+                     ORDER BY g.created_at DESC, g.id DESC`,
+                    gradeValues
+                );
+                grades = gradeRows.map(row => ({ ...row, id: `grade-${row.id}`, submission_type: 'grades', file_path: row.proof_path }));
+            }
+        }
+
+        const labels = {
+            letter: 'Monthly Letter',
+            report_card: 'Grades',
+            grades: 'Grades',
+            cor: 'COR',
+            other: 'Other Documents',
+        };
         const allSubmittedRows = [...submissions, ...grades].map(row => ({
             id: row.id,
             scholarId: row.scholar_id,
@@ -670,17 +673,14 @@ exports.getSubmissionRecords = async (req, res) => {
             qualityStatus: row.quality_status || null,
             filePath: row.file_path || row.generated_pdf_path || row.report_card_path || row.cor_path || row.media_path || null,
         }));
-        const submittedRows = allSubmittedRows.filter(row => matchesSelectedType(row.submissionType));
-        const dateTimeValue = value => {
-            if (!value) return '';
-            if (!(value instanceof Date)) return String(value).replace('T', ' ').slice(0, 19);
-            const pad = part => String(part).padStart(2, '0');
-            return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())} ${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`;
-        };
-        const reportRecords = submittedRows.map(row => ({
-            ...row,
-            period: dateTimeValue(row.submittedAt).slice(0, 7) || month || '—',
-        }));
+        const submittedByScholarAndType = new Map();
+        for (const row of allSubmittedRows) {
+            const submissionType = row.submissionType === 'grades' ? 'report_card' : row.submissionType;
+            const key = `${row.scholarId}:${submissionType}`;
+            const rows = submittedByScholarAndType.get(key) || [];
+            rows.push(row);
+            submittedByScholarAndType.set(key, rows);
+        }
         const parseTargetLevels = value => {
             if (Array.isArray(value)) return value;
             if (typeof value !== 'string' || !value.trim()) return [];
@@ -691,11 +691,11 @@ exports.getSubmissionRecords = async (req, res) => {
                 return [];
             }
         };
+        const reportRecords = [];
         const missingRecords = [];
         const processedRequirementKeys = new Set();
-        for (const task of tasks) {
+        for (const task of dueTasks) {
             const taskRequirement = taskTypes[String(task.type || '').trim().toLowerCase()];
-            if (!taskRequirement || !matchesSelectedType(taskRequirement.submissionType)) continue;
 
             const targetLevels = parseTargetLevels(task.target_year_levels).map(normalizeYearLevel);
             const dueDate = task.due_date instanceof Date
@@ -713,13 +713,13 @@ exports.getSubmissionRecords = async (req, res) => {
                 if (processedRequirementKeys.has(requirementKey)) continue;
                 processedRequirementKeys.add(requirementKey);
 
-                const matchingSubmissions = submittedRows.filter(row => {
-                    const rowType = row.submissionType === 'grades' ? 'report_card' : row.submissionType;
-                    return row.scholarId === scholar.scholar_id
-                        && rowType === keyType
-                        && dateTimeValue(row.submittedAt) >= taskCreatedAt;
-                });
-                if (matchingSubmissions.length) continue;
+                const matchingSubmissions = (submittedByScholarAndType.get(`${scholar.scholar_id}:${keyType}`) || [])
+                    .filter(row => dateTimeValue(row.submittedAt) >= taskCreatedAt)
+                    .sort((a, b) => dateTimeValue(b.submittedAt).localeCompare(dateTimeValue(a.submittedAt)));
+                if (matchingSubmissions.length) {
+                    reportRecords.push({ ...matchingSubmissions[0], period });
+                    continue;
+                }
 
                 missingRecords.push({
                     id: `missing-${scholar.scholar_id}-${task.id}`,
