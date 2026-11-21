@@ -554,7 +554,7 @@ exports.getSubmissionRecords = async (req, res) => {
         if (!scholars.length) return res.json({ totalScholars: 0, records: [] });
 
         const scholarIds = scholars.map(scholar => scholar.scholar_id);
-        const taskConditions = ['t.is_active = 1', 't.due_date IS NOT NULL', 't.due_date <= CURDATE()'];
+        const taskConditions = ['t.is_active = 1', 't.due_date IS NOT NULL'];
         const taskValues = [];
         if (month) {
             taskConditions.push("DATE_FORMAT(t.due_date, '%Y-%m') = ?");
@@ -569,7 +569,8 @@ exports.getSubmissionRecords = async (req, res) => {
             taskValues.push(date_to);
         }
         const [tasks] = await db.promise().query(
-            `SELECT t.id, t.type, t.due_date, t.created_at, t.target_year_levels
+            `SELECT t.id, t.type, t.due_date, t.created_at, t.target_year_levels,
+                    CASE WHEN t.due_date <= CURDATE() THEN 1 ELSE 0 END AS is_due
              FROM tasks t
              WHERE ${taskConditions.join(' AND ')}
              ORDER BY t.due_date ASC, t.id ASC`,
@@ -717,9 +718,14 @@ exports.getSubmissionRecords = async (req, res) => {
                     .filter(row => dateTimeValue(row.submittedAt) >= taskCreatedAt)
                     .sort((a, b) => dateTimeValue(b.submittedAt).localeCompare(dateTimeValue(a.submittedAt)));
                 if (matchingSubmissions.length) {
-                    reportRecords.push({ ...matchingSubmissions[0], period });
+                    const latestSubmission = matchingSubmissions[0];
+                    const accepted = ['approved', 'accepted', 'archived'].includes(latestSubmission.status);
+                    if (accepted || Number(task.is_due) === 1) {
+                        reportRecords.push({ ...latestSubmission, period });
+                    }
                     continue;
                 }
+                if (Number(task.is_due) !== 1) continue;
 
                 missingRecords.push({
                     id: `missing-${scholar.scholar_id}-${task.id}`,

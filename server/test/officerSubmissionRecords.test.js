@@ -29,11 +29,11 @@ const fakeDb = {
         let filteredTasks = sql.includes("DATE_FORMAT(t.due_date, '%Y-%m') = ?")
           ? tasks.filter(task => String(task.due_date || '').slice(0, 7) === values[values.length - 1])
           : tasks;
-        if (sql.includes('t.due_date <= CURDATE()')) {
-          const today = new Date().toISOString().slice(0, 10);
-          filteredTasks = filteredTasks.filter(task => String(task.due_date || '').slice(0, 10) <= today);
-        }
-        return [filteredTasks, []];
+        const today = new Date().toISOString().slice(0, 10);
+        return [filteredTasks.map(task => ({
+          ...task,
+          is_due: String(task.due_date || '').slice(0, 10) <= today ? 1 : 0,
+        })), []];
       }
       if (sql.includes('FROM tasks')) {
         const today = new Date().toISOString().slice(0, 10);
@@ -340,7 +340,7 @@ test('adds a missing row for a task due in September even if created in August',
   assert.equal(missing.status, 'not-submitted');
 });
 
-test('does not report approved submissions before a task is due', async () => {
+test('does not report approved submissions without an associated task', async () => {
   scholars = [{ scholar_id: 'S-1', full_name: 'Scholar', year_level: 'college_1' }];
   tasks = [];
   submissions = [{
@@ -425,7 +425,7 @@ test('shows approved submissions in Reports even without a finalization timestam
   assert.equal(response.body.records[0].isMissing, undefined);
 });
 
-test('does not show task records before the task due date', async () => {
+test('shows accepted submissions early but withholds pending and missing rows until the due date', async () => {
   scholars = [
     { scholar_id: 'S-1', full_name: 'Approved Scholar', year_level: 'college_1' },
     { scholar_id: 'S-2', full_name: 'Pending Scholar', year_level: 'college_1' },
@@ -510,5 +510,8 @@ test('does not show task records before the task due date', async () => {
   });
 
   assert.equal(response.statusCode, 200);
-  assert.deepEqual(response.body.records, []);
+  assert.equal(response.body.records.length, 1);
+  assert.equal(response.body.records[0].scholarId, 'S-1');
+  assert.equal(response.body.records[0].status, 'approved');
+  assert.equal(response.body.records.some(record => record.scholarId === 'S-2' || record.isMissing), false);
 });
