@@ -129,7 +129,7 @@ function StatisticsCards({ loading, totalScholars, pending, approved, rejected, 
 function QuickActions({ onNavigate }) {
   const actions = [
     { label: 'Manual Validation', hint: 'Review pending submissions', icon: FileCheck, path: '/officer/validation', color: PRIMARY },
-    { label: 'Task Assignment', hint: 'Manage tasks and deadlines', icon: Calendar, path: '/officer/task-assignment', color: WARNING },
+    { label: 'Task Progress', hint: 'Track deadlines and scholar submissions', icon: Calendar, path: '/officer/task-assignment', color: WARNING },
     { label: 'Reports', hint: 'Open compliance reports', icon: BarChart3, path: '/officer/reports', color: BRONZE },
     { label: 'Summary Report', hint: 'Generate a summary', icon: FileText, path: '/officer/summary-report', color: SUCCESS },
   ];

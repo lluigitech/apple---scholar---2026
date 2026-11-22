@@ -614,10 +614,10 @@ const TaskAssignmentBoard = ({ title, subtitle, role, storageKey }) => {
               {role ? `${role} Portal` : 'Officer Portal'}
             </p>
             <h1 style={{ ...display, fontSize: 'clamp(1.6rem, 4vw, 2rem)', fontWeight: 700, color: PRIMARY, lineHeight: 1.15, marginTop: 3 }}>
-              {title || 'Task Assignment'}
+              {title || 'Task Progress'}
             </h1>
             <p style={{ ...body, fontSize: '0.9rem', color: MUTED, marginTop: 6, lineHeight: 1.55 }}>
-              {subtitle || 'Create and manage document submission tasks for your assigned scholars.'}
+              {subtitle || 'Track assigned document requirements and scholar submission progress.'}
             </p>
           </div>
         </header>
@@ -676,7 +676,7 @@ const TaskAssignmentBoard = ({ title, subtitle, role, storageKey }) => {
               <span className="flex items-center justify-center rounded-full" style={{ width: 30, height: 30, background: `${PRIMARY}10`, color: PRIMARY }}>
                 <ClipboardList size={14} />
               </span>
-              <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK }}>Task Assignment List</h2>
+              <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK }}>Assigned Tasks</h2>
               {!loading && <span style={{ ...mono, fontSize: '0.68rem', fontWeight: 700, color: PRIMARY, background: `${PRIMARY}10`, borderRadius: 999, padding: '2px 9px' }}>{filteredTasks.length}</span>}
             </div>
 

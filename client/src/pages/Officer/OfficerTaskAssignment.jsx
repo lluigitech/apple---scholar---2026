@@ -3,8 +3,8 @@ import TaskAssignmentBoard from './TaskAssignment/TaskAssignmentBoard';
 const OfficerTaskAssignment = () => {
   return (
     <TaskAssignmentBoard
-      title="Officer Task Center"
-      subtitle="Follow the submission process and review which scholars have passed their requirements"
+      title="Task Progress"
+      subtitle="Track assigned requirements and review scholar submission progress"
       role="Officer"
       storageKey="officer-task-board"
       canManageTasks={false}

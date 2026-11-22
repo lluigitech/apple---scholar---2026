@@ -69,7 +69,7 @@ const OfficerSidebar = ({ isOpen, onClose, collapsed = false }) => {
             group: 'Management',
             items: [
                 { name: 'Manual Validation', path: '/officer/validation', icon: ClipboardCheck },
-                { name: 'Task Assignment', path: '/officer/task-assignment', icon: ClipboardList },
+                { name: 'Task Progress', path: '/officer/task-assignment', icon: ClipboardList },
             ]
         },
         {
