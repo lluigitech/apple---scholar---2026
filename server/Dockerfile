@@ -15,6 +15,7 @@ WORKDIR /app/server
 
 COPY server/package*.json ./
 RUN npm ci --omit=dev
+RUN npx puppeteer browsers install chrome --install-deps
 
 COPY server/ ./
 COPY shared/ /app/shared/
