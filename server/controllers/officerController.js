@@ -554,7 +554,7 @@ exports.getSubmissionRecords = async (req, res) => {
         if (!scholars.length) return res.json({ totalScholars: 0, records: [] });
 
         const scholarIds = scholars.map(scholar => scholar.scholar_id);
-        const taskConditions = ['t.is_active = 1', 't.due_date IS NOT NULL'];
+        const taskConditions = ['t.due_date IS NOT NULL'];
         const taskValues = [];
         if (month) {
             taskConditions.push("DATE_FORMAT(t.due_date, '%Y-%m') = ?");
@@ -940,7 +940,6 @@ exports.getTaskComplianceSummary = async (req, res) => {
             db.promise().query(
                 `SELECT id, title, type, due_date, created_at, target_year_levels
                  FROM tasks
-                 WHERE is_active = 1
                  ORDER BY due_date ASC, id ASC`
             ),
         ]);
@@ -1088,9 +1087,9 @@ exports.getTaskCompletionSummary = (req, res) => {
             if (!scholars.length) return res.json([]);
 
             const taskValues = [];
-            let taskSql = 'SELECT id, title, type, due_date, created_at, target_year_levels FROM tasks WHERE is_active = 1';
+            let taskSql = 'SELECT id, title, type, due_date, created_at, target_year_levels FROM tasks';
             if (range) {
-                taskSql += ' AND DATE(COALESCE(due_date, created_at)) BETWEEN ? AND ?';
+                taskSql += ' WHERE DATE(COALESCE(due_date, created_at)) BETWEEN ? AND ?';
                 taskValues.push(range.start, range.end);
             }
 

@@ -10,17 +10,17 @@ let scholars = [];
 let tasks = [];
 let submissions = [];
 let grades = [];
+const queryLog = [];
 
 const fakeDb = {
   promise: () => ({
     query: async (sql, values = []) => {
+      queryLog.push(sql);
       if (sql.includes('SELECT u.scholar_id')) {
         return [scholars.filter(scholar => String(scholar.year_level).toLowerCase().replace(/[_\s-]+/g, '') === 'grade12'), []];
       }
       if (sql.includes('FROM tasks')) {
-        return [tasks
-          .filter(task => task.is_active !== 0)
-          .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)) || Number(a.id) - Number(b.id)), []];
+        return [tasks.sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)) || Number(a.id) - Number(b.id)), []];
       }
       if (sql.includes('FROM submissions')) return [submissions, []];
       if (sql.includes('FROM grades')) return [grades, []];
@@ -63,7 +63,7 @@ const invoke = req => new Promise(resolve => {
   });
 });
 
-test('keeps active non-monthly tasks and resets Monthly Letter counts to the newest task', async () => {
+test('keeps deleted task history and resets Monthly Letter counts to the newest task', async () => {
   scholars = [
     { scholar_id: 'S-1', year_level: 'grade_12' },
     { scholar_id: 'S-2', year_level: 'Grade 12' },
@@ -87,9 +87,13 @@ test('keeps active non-monthly tasks and resets Monthly Letter counts to the new
     { scholar_id: 'S-1', submission_type: 'grades', status: 'approved', submitted_at: '2026-11-08 09:00:00' },
   ];
 
+  queryLog.length = 0;
   const response = await invoke({ user: { id: 8, role: 'officer' }, query: {} });
 
   assert.equal(response.status, 200);
+  const tasksQuery = queryLog.find(sql => sql.includes('FROM tasks'));
+  assert.ok(tasksQuery);
+  assert.doesNotMatch(tasksQuery, /WHERE\s+is_active\s*=\s*1/i);
   assert.deepEqual(response.body.map(task => ({
     task_id: task.task_id,
     total: task.total,
@@ -98,6 +102,7 @@ test('keeps active non-monthly tasks and resets Monthly Letter counts to the new
     notSubmitted: task.notSubmitted,
   })), [
     { task_id: 103, total: 2, submitted: 0, pending: 0, notSubmitted: 2 },
+    { task_id: 106, total: 2, submitted: 0, pending: 0, notSubmitted: 2 },
     { task_id: 104, total: 2, submitted: 0, pending: 1, notSubmitted: 1 },
     { task_id: 105, total: 2, submitted: 1, pending: 0, notSubmitted: 1 },
     { task_id: 102, total: 2, submitted: 0, pending: 1, notSubmitted: 1 },

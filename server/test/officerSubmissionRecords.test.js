@@ -192,6 +192,42 @@ test('shows submitted records and creates a typed missing row after the requirem
   assert.equal(missing.filePath, null);
 });
 
+test('keeps submitted and missing records for a deleted task in historical reports', async () => {
+  scholars = [
+    { scholar_id: 'S-1', full_name: 'Submitted Scholar', year_level: 'grade_12' },
+    { scholar_id: 'S-2', full_name: 'Missing Scholar', year_level: 'grade_12' },
+  ];
+  tasks = [{
+    id: 33,
+    type: 'Monthly Report',
+    due_date: currentMonthFirstDay,
+    created_at: `${currentMonthFirstDay} 08:00:00`,
+    target_year_levels: '["grade_12"]',
+    is_active: 0,
+  }];
+  submissions = [{
+    id: 19,
+    scholar_id: 'S-1',
+    scholar_name: 'Submitted Scholar',
+    submission_type: 'letter',
+    submitted_at: `${currentMonthFirstDay} 09:00:00`,
+    status: 'approved',
+  }];
+  grades = [];
+  queryLog.length = 0;
+
+  const response = await invoke(officerController.getSubmissionRecords, {
+    user: { id: 4, role: 'admin' },
+    query: { document_type: 'letter', month: currentMonth },
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.deepEqual(response.body.records.map(record => record.status).sort(), ['approved', 'not-submitted']);
+  const tasksQuery = queryLog.find(({ sql }) => sql.includes('FROM tasks t'))?.sql;
+  assert.ok(tasksQuery);
+  assert.doesNotMatch(tasksQuery, /t\.is_active\s*=\s*1/i);
+});
+
 test('includes pending submissions for a requirement due in September even if its task was created in August', async () => {
   scholars = [{ scholar_id: 'S-1', full_name: 'September Scholar', year_level: 'grade_12' }];
   tasks = [{

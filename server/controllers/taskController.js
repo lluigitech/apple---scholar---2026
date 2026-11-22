@@ -124,8 +124,7 @@ exports.getTaskProgressSummary = async (req, res) => {
       db.promise().query(
         `SELECT id, type, created_at, target_year_levels
          FROM tasks
-         WHERE is_active = 1
-           AND type IN ('Monthly Report', 'Report Card', 'COR Upload', 'Other Documents')`
+           WHERE type IN ('Monthly Report', 'Report Card', 'COR Upload', 'Other Documents')`
       ),
       db.promise().query(
         `SELECT scholar_id, year_level

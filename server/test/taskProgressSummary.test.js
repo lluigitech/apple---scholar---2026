@@ -33,6 +33,7 @@ test('task progress counts latest approved submissions for assigned active schol
       { id: 11, type: 'Monthly Report', created_at: taskCreatedAt, target_year_levels: '["Grade 7"]' },
       { id: 12, type: 'Monthly Report', created_at: taskCreatedAt, target_year_levels: '["Grade 8"]' },
       { id: 13, type: 'Monthly Report', created_at: new Date('2026-11-01T00:00:00.000Z'), target_year_levels: '["Grade 7"]' },
+      { id: 14, type: 'Monthly Report', created_at: new Date('2026-11-15T00:00:00.000Z'), target_year_levels: '["Grade 7"]', is_active: 0 },
     ]],
     [[
       { scholar_id: 'S1', year_level: 'grade_7' },
@@ -42,6 +43,7 @@ test('task progress counts latest approved submissions for assigned active schol
     [[
       { scholar_id: 'S1', submission_type: 'letter', status: 'approved', submitted_at: new Date('2026-10-05T00:00:00.000Z'), finalized_at: new Date('2026-10-06T00:00:00.000Z') },
       { scholar_id: 'S1', submission_type: 'letter', status: 'pending', submitted_at: new Date('2026-11-05T00:00:00.000Z') },
+      { scholar_id: 'S1', submission_type: 'letter', status: 'approved', submitted_at: new Date('2026-11-20T00:00:00.000Z') },
       { scholar_id: 'S2', submission_type: 'letter', status: 'approved', submitted_at: new Date('2026-09-30T00:00:00.000Z') },
       { scholar_id: 'S2', submission_type: 'letter', status: 'pending', submitted_at: new Date('2026-10-06T00:00:00.000Z') },
       { scholar_id: 'S3', submission_type: 'letter', status: 'approved', submitted_at: new Date('2026-10-05T00:00:00.000Z'), finalized_at: new Date('2026-10-06T00:00:00.000Z') },
@@ -74,7 +76,11 @@ test('task progress counts latest approved submissions for assigned active schol
     { task_id: 11, total: 2, submitted: 1 },
     { task_id: 12, total: 1, submitted: 1 },
     { task_id: 13, total: 2, submitted: 0 },
+    { task_id: 14, total: 2, submitted: 1 },
   ]);
+  const tasksQuery = queryLog.find((sql) => sql.includes('FROM tasks'));
+  assert.ok(tasksQuery);
+  assert.doesNotMatch(tasksQuery, /is_active\s*=\s*1/i);
   const submissionsQuery = queryLog.find((sql) => sql.includes('FROM submissions'));
   assert.ok(submissionsQuery);
   assert.doesNotMatch(submissionsQuery, /finalized_at\s+IS\s+NULL/i);
