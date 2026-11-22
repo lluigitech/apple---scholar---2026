@@ -670,16 +670,21 @@ const OfficerManualValidation = () => {
 
       <div className="px-5 sm:px-8 pt-8 flex flex-col gap-5" style={{ paddingBottom: selectedEntry ? 110 : 32 }}>
 
-        {/* ── Standard Officer header ── */}
-        <div>
-          <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: '20px 24px', boxShadow: SHADOW_CARD }}>
-            <p style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', color: GOLD }}>OFFICER PORTAL</p>
-            <h1 style={{ ...serif, fontSize: '1.75rem', fontWeight: 700, color: INK, marginTop: 4 }}>Scholar Submissions</h1>
-            <p style={{ ...sans, fontSize: '0.84rem', color: MUTED, marginTop: 6, maxWidth: 640 }}>
+        {/* ── Page header — same layout as Announcements and Dashboard ── */}
+        <header
+          className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
+          style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 'clamp(14px, 3vw, 20px)', boxShadow: '0 12px 28px -20px rgba(36,21,18,0.22)' }}
+        >
+          <div className="min-w-0">
+            <p style={{ ...sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', color: GOLD }}>OFFICER PORTAL</p>
+            <h1 style={{ ...serif, fontSize: 'clamp(1.6rem, 4vw, 2rem)', fontWeight: 700, color: MAROON, lineHeight: 1.15, marginTop: 3 }}>
+              Scholar Submissions
+            </h1>
+            <p style={{ ...sans, fontSize: '0.9rem', color: MUTED, marginTop: 6, lineHeight: 1.55 }}>
               Review and validate scholar submissions for compliance.
             </p>
           </div>
-        </div>
+        </header>
 
         {loading ? (
           <div className="flex items-center gap-2 text-sm" style={{ color: MUTED, ...sans }}>

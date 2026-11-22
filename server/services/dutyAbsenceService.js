@@ -40,7 +40,7 @@ const notifyDutyAbsences = async (connection, sweepStartedAt) => {
           AND da.marked_at >= ?
           AND LOWER(COALESCE(d.status, '')) <> 'cancelled'
           AND TIMESTAMP(d.duty_date, COALESCE(d.time_start, '00:00:00'))
-              <= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 1 HOUR)
+              <= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 3 HOUR)
         ORDER BY d.id, scholar.full_name
     `, [sweepStartedAt]);
     if (!rows.length) return { sentCount: 0, failedCount: 0 };
@@ -183,7 +183,7 @@ exports.markEndedDutyAbsences = async () => {
                 AND u.role = 'scholar' AND u.status = 'active'
             WHERE LOWER(COALESCE(d.status, '')) <> 'cancelled'
               AND TIMESTAMP(d.duty_date, COALESCE(d.time_start, '00:00:00'))
-                  <= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 1 HOUR)
+                  <= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 3 HOUR)
               AND NOT EXISTS (
                   SELECT 1
                   FROM duty_attendance existing

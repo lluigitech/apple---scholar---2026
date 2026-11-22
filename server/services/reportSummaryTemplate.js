@@ -53,7 +53,7 @@ const buildReportSummaryHTML = ({
         <td>${escapeHtml(row.requirement || '—')}</td>
         <td>${escapeHtml(row.period || '—')}</td>
         <td>${escapeHtml(formatDate(row.submittedAt))}</td>
-        <td class="${row.reviewStatus === 'Not Submitted' ? 'muted' : 'submitted'}">${escapeHtml(row.reviewStatus || '—')}</td>
+        <td><span class="status-pill ${row.reviewStatus === 'Not Submitted' ? 'muted' : 'good'}">${escapeHtml(row.reviewStatus || '—')}</span></td>
       </tr>`).join('') : '';
   const monthlyLetterReviewRows = isMonthlyLetterReview ? detailRows.map(row => `
       <tr>
@@ -67,15 +67,22 @@ const buildReportSummaryHTML = ({
   const attendanceRows = isAttendanceReport ? detailRows.map(row => `
       <tr>
         <td>${escapeHtml(row.scholarName || '—')}</td>
-        <td>${escapeHtml(row.studentId || '—')}</td>
+        <td class="nowrap">${escapeHtml(row.studentId || '—')}</td>
         <td>${escapeHtml(row.groupName || 'Unassigned')}</td>
         <td>${escapeHtml(row.assignedStaff || 'Unassigned')}</td>
         <td>${escapeHtml(row.duty || '—')}</td>
         <td>${escapeHtml(formatDateTime(row.attendanceTime))}</td>
-        <td class="${row.attendanceStatus === 'present' ? 'submitted' : 'muted'}">${escapeHtml(row.attendanceStatus || '—')}</td>
+        <td>${(() => {
+          const status = String(row.attendanceStatus || '').toLowerCase();
+          const pillClass = status === 'present' ? 'pill-good' : status === 'late' ? 'pill-late' : 'pill-bad';
+          return `<span class="pill ${pillClass}">${escapeHtml(row.attendanceStatus || '—')}</span>`;
+        })()}</td>
       </tr>`).join('') : '';
   const attendancePresentCount = isAttendanceReport
     ? detailRows.filter(row => String(row.attendanceStatus).toLowerCase() === 'present').length
+    : 0;
+  const attendanceLateCount = isAttendanceReport
+    ? detailRows.filter(row => String(row.attendanceStatus).toLowerCase() === 'late').length
     : 0;
   const attendanceAbsentCount = isAttendanceReport
     ? detailRows.filter(row => String(row.attendanceStatus).toLowerCase() === 'absent').length
@@ -88,7 +95,7 @@ const buildReportSummaryHTML = ({
         <td>${escapeHtml(formatDate(row.deadline))}</td>
         <td>${escapeHtml(formatDate(row.submittedAt))}</td>
         <td>${escapeHtml(formatDate(row.approvedAt))}</td>
-        <td class="${row.reviewStatus === 'Not Submitted' ? 'muted' : 'submitted'}">${escapeHtml(row.reviewStatus || 'Not Submitted')}</td>
+        <td><span class="status-pill ${row.reviewStatus === 'Not Submitted' ? 'muted' : 'good'}">${escapeHtml(row.reviewStatus || 'Not Submitted')}</span></td>
       </tr>`).join('');
   const exportGroups = isExportReport ? (() => {
     const monthGroups = new Map();
@@ -133,6 +140,53 @@ const buildReportSummaryHTML = ({
   }).join('') : '';
   const lowRiskCount = isComplianceSummary ? detailRows.filter(row => String(row.riskStatus || 'low').toLowerCase() === 'low').length : 0;
   const highRiskCount = isComplianceSummary ? detailRows.filter(row => String(row.riskStatus || '').toLowerCase() === 'high').length : 0;
+  const generatedDate = escapeHtml(new Date().toLocaleDateString('en-PH'));
+  const submissionRecordSubmittedCount = isSubmissionRecords
+    ? detailRows.filter(row => row.reviewStatus !== 'Not Submitted').length
+    : 0;
+  const submissionRecordMissingCount = isSubmissionRecords
+    ? detailRows.filter(row => row.reviewStatus === 'Not Submitted').length
+    : 0;
+  const submissionRecordMissingNames = isSubmissionRecords
+    ? detailRows.filter(row => row.reviewStatus === 'Not Submitted').map(row => row.scholarName)
+    : [];
+  const summaryHTML = isExportReport
+    ? `<section class="summary summary-breakdown">${exportGroups.map(group => {
+        const submitted = group.rows.filter(row => row.reviewStatus !== 'Not Submitted').length;
+        const missing = group.rows.length - submitted;
+        return `<div class="summary-card" style="border-top-color:var(--bronze)">
+          <span class="summary-label">${escapeHtml(group.title)}</span>
+          <strong>${submitted}/${group.rows.length}</strong>
+          <span class="breakdown-detail">${submitted} accepted${missing ? ` · ${missing} not submitted` : ''}</span>
+        </div>`;
+      }).join('') || '<div class="summary-card" style="border-top-color:var(--bronze)"><span class="summary-label">REPORT BREAKDOWN</span><strong>0</strong></div>'}</section>`
+    : isComplianceSummary
+      ? `<section class="summary compliance-summary">
+          <div class="summary-card" style="border-top-color:var(--good)"><span class="summary-label">LOW RISK</span><strong>${lowRiskCount}</strong></div>
+          <div class="summary-card" style="border-top-color:var(--maroon)"><span class="summary-label">HIGH RISK</span><strong>${highRiskCount}</strong></div>
+        </section>`
+      : isTaskCompletion
+        ? `<section class="summary task-summary">
+            <div class="summary-card" style="border-top-color:var(--bronze)"><span class="summary-label">ASSIGNED</span><strong>${taskTotals.assigned}</strong></div>
+            <div class="summary-card" style="border-top-color:var(--good)"><span class="summary-label">COMPLETED</span><strong>${taskTotals.completed}</strong></div>
+            <div class="summary-card" style="border-top-color:var(--maroon)"><span class="summary-label">MISSING</span><strong>${taskTotals.missing}</strong></div>
+            <div class="summary-card" style="border-top-color:var(--bronze)"><span class="summary-label">PENDING</span><strong>${taskTotals.pending}</strong></div>
+          </section>`
+        : isAttendanceReport
+          ? `<section class="summary attendance-summary">
+              <div class="summary-card" style="border-top-color:var(--good)"><span class="summary-label">PRESENT</span><strong>${attendancePresentCount}</strong></div>
+              <div class="summary-card" style="border-top-color:var(--bronze)"><span class="summary-label">LATE</span><strong>${attendanceLateCount}</strong></div>
+              <div class="summary-card" style="border-top-color:var(--maroon)"><span class="summary-label">ABSENT</span><strong>${attendanceAbsentCount}</strong></div>
+              <div class="summary-card" style="border-top-color:var(--ink-soft)"><span class="summary-label">TOTAL RECORDS</span><strong>${detailRows.length}</strong></div>
+            </section>`
+          : detailRows.length
+            ? `<section class="summary">
+                <div class="summary-card" style="border-top-color:var(--good)"><span class="summary-label">${isSubmissionRecords ? 'SUBMITTED' : 'SUBMITTED'}</span><strong>${isSubmissionRecords ? submissionRecordSubmittedCount : submittedScholars.length}/${isSubmissionRecords ? detailRows.length : totalScholars}</strong></div>
+                <div class="summary-card" style="border-top-color:var(--maroon)"><span class="summary-label">${isSubmissionRecords ? 'NOT SUBMITTED' : 'NOT SUBMITTED'}</span><strong>${isSubmissionRecords ? submissionRecordMissingCount : missingScholars.length}</strong></div>
+                <div class="summary-card" style="border-top-color:var(--bronze)"><span class="summary-label">TOTAL</span><strong>${detailRows.length}</strong></div>
+              </section>
+              ${(isSubmissionRecords ? submissionRecordMissingNames : missingScholars).length ? `<section class="missing-names-card"><span class="summary-label">SCHOLARS WITHOUT SUBMISSION</span><span>${escapeHtml((isSubmissionRecords ? submissionRecordMissingNames : missingScholars).join(', ') || 'None')}</span></section>` : ''}`
+            : '';
   const safeRows = isAttendanceReport
     ? attendanceRows
     : isMonthlyLetterReview
@@ -155,7 +209,7 @@ const buildReportSummaryHTML = ({
         <td>${escapeHtml(row.scholarName)}</td>
         <td>${escapeHtml(row.studentId || '—')}</td>
         <td>${escapeHtml(Array.isArray(row.submissionTypes) && row.submissionTypes.length ? row.submissionTypes.join(', ') : '—')}</td>
-        <td class="${row.submitted > 0 ? 'submitted' : 'muted'}">${row.submitted > 0 ? 'Submitted' : 'Not Submitted'}</td>
+        <td><span class="status-pill ${row.submitted > 0 ? 'good' : 'muted'}">${row.submitted > 0 ? 'Submitted' : 'Not Submitted'}</span></td>
         <td>${escapeHtml(row.submitted)}</td>
         ${isMonthlyReport ? `<td>${escapeHtml(row.submittedAt ? new Date(row.submittedAt).toLocaleDateString('en-PH') : '—')}</td><td>${escapeHtml(row.qualityStatus || '—')}</td>` : ''}
         <td>${escapeHtml(row.reviewStatus || (row.submitted > 0 ? 'Pending Review' : 'No Submission'))}</td>
@@ -169,8 +223,6 @@ const buildReportSummaryHTML = ({
         </tr>`;
   }).join('');
 
-  const recipients = endorsedTo.map((name) => `<div>${escapeHtml(name)}</div>`).join('');
-
   return `<!doctype html>
 <html lang="en">
   <head>
@@ -179,64 +231,80 @@ const buildReportSummaryHTML = ({
     <title>${safeReportTitle}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
     <style>
       @page { size: A4; margin: 0; }
-      :root { --ivory: #F0F0EE; --maroon: #7F2D3A; --gold: #B98B4E; --ink: #2B2320; --muted: #817875; }
+      :root {
+        --cream:#F7F4EE; --surface:#FFFDF9; --sand-row:#F4EBDD; --border:#E7D8C7;
+        --maroon:#6D2140; --maroon-deep:#4A1730; --bronze:#A9784E;
+        --ink:#241512; --ink-soft:#5C4E42; --good:#2F6B4F;
+      }
       * { box-sizing: border-box; }
       html, body { margin: 0; min-height: 100%; }
-      body { background: var(--ivory); color: var(--ink); font-family: 'DM Sans', sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .top-bar { position: fixed; z-index: 10; top: 0; right: 0; left: 0; height: 12px; background: var(--maroon); }
-      .page { min-height: 297mm; padding: 25mm 22mm 18mm; display: flex; flex-direction: column; }
-      .eyebrow { margin: 0 0 8px; color: var(--maroon); font-size: 9px; font-weight: 700; letter-spacing: 2.1px; }
-      .header { position: relative; min-height: 64mm; padding-right: 48mm; }
-      h1 { margin: 0; max-width: 125mm; font-family: 'Playfair Display', Georgia, serif; font-size: 30px; line-height: 1.12; font-weight: 700; }
+      body { background: var(--cream); color: var(--ink); font-family: 'Inter', system-ui, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .top-bar { width:100%; height:14px; background: var(--maroon-deep); }
+      .page { min-height: 283mm; padding: 10mm 13mm 13mm; display: flex; flex-direction: column; }
+      .eyebrow { margin: 0; color: var(--maroon); font-size: 10px; font-weight: 700; letter-spacing: 2.4px; }
+      .header { display:flex; justify-content:space-between; align-items:center; padding-top:10mm; }
+      .header-copy { min-width:0; }
+      h1 { margin: 8px 0 4px; font-family: 'Playfair Display', Georgia, serif; font-size:36px; line-height:1.1; font-weight:700; }
       .period { margin: 10px 0 0; color: var(--maroon); font-family: 'Playfair Display', Georgia, serif; font-size: 16px; font-style: italic; }
-      .seal { position: absolute; top: 2mm; right: 0; width: 37mm; height: 37mm; border: 2px solid var(--gold); border-radius: 50%; display: flex; align-items: center; justify-content: center; }
-      .seal::before { content: ''; position: absolute; inset: 3px; border: 1px solid var(--gold); border-radius: 50%; }
-      .seal img { position: relative; width: 27mm; height: 27mm; object-fit: contain; }
-      .divider { height: 1px; background: var(--gold); margin: 0 0 12mm; }
+      .seal { position:relative; flex-shrink:0; width:84px; height:84px; border:2px solid var(--bronze); border-radius:50%; display:flex; align-items:center; justify-content:center; }
+      .seal::before { content:''; position:absolute; inset:3px; border:1px solid var(--bronze); border-radius:50%; }
+      .seal img { position:relative; width:60px; height:60px; object-fit:contain; }
+      .divider { height:1px; background:var(--bronze); margin:24px 0 0; }
       .export-group { margin: 0 0 10mm; page-break-inside: avoid; }
       .export-group h2 { margin: 0 0 5mm; color: var(--maroon); font-family: 'Playfair Display', Georgia, serif; font-size: 16px; }
-      table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 10px; }
+      table { width:100%; border-collapse:collapse; table-layout:fixed; font-size:11px; margin-top:28px; border:1px solid var(--border); }
       col.batch { width: 31%; } col.compliance { width: 25%; } col.missing { width: 44%; }
       thead { display: table-header-group; }
       tr { page-break-inside: avoid; break-inside: avoid; }
-      th { padding: 0 5px 8px; border-bottom: 2px solid var(--ink); color: var(--maroon); font-size: 8px; font-weight: 700; letter-spacing: 1.2px; text-align: left; }
-      td { padding: 12px 5px; border-bottom: 1px solid #D8D3D0; vertical-align: top; line-height: 1.45; overflow-wrap: anywhere; }
+      th { background:var(--maroon-deep); padding:10px; color:#fff; font-size:9px; font-weight:700; letter-spacing:1.2px; text-align:left; }
+      td { padding:12px 10px; border-bottom:1px solid var(--border); vertical-align:top; line-height:1.45; overflow-wrap:anywhere; }
+      tbody tr:nth-child(odd) td { background:var(--surface); }
+      tbody tr:nth-child(even) td { background:var(--sand-row); }
       td:first-child { font-weight: 700; }
       td.compliance { color: var(--maroon); font-weight: 600; }
-      td.muted { color: var(--muted); }
-      .empty { color: var(--muted); font-style: italic; }
-      .summary { display: grid; grid-template-columns: 32mm 32mm 1fr; gap: 8mm; margin: 22mm 0 10mm; padding: 6mm; border: 1px solid #D8D3D0; background: #F8F7F5; }
-      .compliance-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .summary-breakdown { display: block; }
-      .task-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-      .breakdown-heading > .summary-label { margin-bottom: 8px; }
-      .breakdown-heading { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8mm; }
-      .breakdown-heading > .summary-label { grid-column: 1 / -1; }
-      .breakdown-heading > div { min-width: 0; }
-      .breakdown-detail { display: block; color: var(--muted); font-size: 9px; line-height: 1.4; }
-      .summary-label { display: block; margin-bottom: 4px; color: var(--maroon); font-size: 8px; font-weight: 700; letter-spacing: 1px; }
-      .summary strong { display: block; color: var(--ink); font-family: 'Playfair Display', Georgia, serif; font-size: 19px; }
-      .missing-names span:last-child { display: block; color: var(--ink); font-size: 10px; line-height: 1.4; }
-      .footer { display: flex; gap: 26mm; margin-top: auto; padding-top: 22mm; page-break-inside: avoid; break-inside: avoid; }
-      .signature-block { width: 55mm; }
-      .signature-label { margin-bottom: 13px; color: var(--muted); font-size: 8px; font-weight: 700; letter-spacing: 1.4px; }
+      .nowrap { white-space: nowrap; }
+      .status-pill { display:inline-block; padding:3px 10px; border-radius:99px; border:1px solid currentColor; font-size:10px; font-weight:700; white-space:nowrap; }
+      .status-pill.good { color:var(--good); }
+      .status-pill.muted { color:var(--maroon); }
+      .pill { display:inline-block; padding:3px 10px; border-radius:99px; border:1px solid currentColor; font-size:10px; font-weight:700; white-space:nowrap; text-transform:capitalize; }
+      .pill-good { color:var(--good); }
+      .pill-late { color:var(--bronze-dark, #8A5E38); }
+      .pill-bad { color:var(--maroon); }
+      .empty { color:var(--ink-soft); font-style:italic; text-align:center; }
+      .summary { display:flex; gap:16px; margin-top:24px; }
+      .summary-card { flex:1; min-width:0; background:var(--surface); border:1px solid var(--border); border-top:3px solid var(--bronze); padding:14px 16px; }
+      .attendance-summary { gap:12px; }
+      .attendance-summary .summary-card { flex:1 1 0; }
+      .attendance-table td:last-child { padding-right:10px; }
+      .compliance-summary, .task-summary, .summary-breakdown, .attendance-summary { grid-template-columns:none; }
+      .breakdown-detail { display:block; color:var(--ink-soft); font-size:9px; line-height:1.4; margin-top:4px; }
+      .summary-label { display:block; margin-bottom:4px; color:var(--ink-soft); font-size:9px; font-weight:700; letter-spacing:1.4px; }
+      .summary strong { display:block; color:var(--ink); font-family:'Playfair Display', Georgia, serif; font-size:30px; line-height:1; font-weight:700; margin-top:4px; }
+      .missing-names-card { width:100%; margin-top:16px; background:var(--surface); border:1px solid var(--border); border-top:3px solid var(--maroon); padding:14px 16px; color:var(--ink); font-size:10px; line-height:1.4; }
+      .footer { display:flex; align-items:flex-end; justify-content:space-between; gap:26mm; margin-top:auto; padding-top:22mm; page-break-inside:avoid; break-inside:avoid; }
+      .signature-block { width:200px; }
+      .signature-label { margin-bottom:13px; color:var(--ink-soft); font-size:9px; font-weight:700; letter-spacing:1.4px; }
       .signature-line { border-bottom: 1px solid var(--ink); height: 1px; margin-bottom: 8px; }
       .signature-name { font-size: 10px; line-height: 1.35; }
+      .generated-date { color:var(--ink-soft); font-size:9px; text-align:right; }
     </style>
   </head>
   <body>
     <div class="top-bar"></div>
     <main class="page">
       <header class="header">
-        <p class="eyebrow">APPLE SCHOLAR FOUNDATION</p>
-        <h1>${safeReportTitle}</h1>
-        <p class="period">${escapeHtml(periodLabel)}</p>
+        <div class="header-copy">
+          <p class="eyebrow">APPLE SCHOLAR FOUNDATION</p>
+          <h1>${safeReportTitle}</h1>
+          <p class="period">${escapeHtml(periodLabel)}</p>
+        </div>
         <div class="seal" aria-label="Apple Scholar seal"><img src="${escapeHtml(logoBase64)}" alt="Apple Scholar"></div>
       </header>
       <div class="divider"></div>
+      ${summaryHTML}
       ${isSubmissionRecords ? `<table>
         <colgroup><col style="width:20%"><col style="width:14%"><col style="width:13%"><col style="width:15%"><col style="width:13%"><col style="width:13%"><col style="width:12%"></colgroup>
         <thead><tr><th>SCHOLAR</th><th>STUDENT ID</th><th>YEAR LEVEL</th><th>REQUIREMENT</th><th>PERIOD</th><th>SUBMITTED AT</th><th>STATUS</th></tr></thead>
@@ -249,8 +317,8 @@ const buildReportSummaryHTML = ({
         <colgroup><col style="width:20%"><col style="width:17%"><col style="width:13%"><col style="width:15%"><col style="width:15%"><col style="width:20%"></colgroup>
         <thead><tr><th>SCHOLAR</th><th>STUDENT ID</th><th>YEAR LEVEL</th><th>QUALITY SCORE</th><th>SENTIMENT</th><th>SUBMITTED AT</th></tr></thead>
         <tbody>${safeRows || '<tr><td colspan="6" class="empty">No monthly letters available</td></tr>'}</tbody>
-      </table>` : isAttendanceReport ? `<table>
-        <colgroup><col style="width:17%"><col style="width:13%"><col style="width:14%"><col style="width:15%"><col style="width:15%"><col style="width:18%"><col style="width:8%"></colgroup>
+      </table>` : isAttendanceReport ? `<table class="attendance-table">
+        <colgroup><col style="width:14%"><col style="width:17%"><col style="width:9%"><col style="width:13%"><col style="width:13%"><col style="width:20%"><col style="width:14%"></colgroup>
         <thead><tr><th>SCHOLAR</th><th>STUDENT ID</th><th>GROUP</th><th>ASSIGNED STAFF</th><th>DUTY</th><th>ATTENDANCE TIME</th><th>STATUS</th></tr></thead>
         <tbody>${safeRows || '<tr><td colspan="7" class="empty">No attendance records available</td></tr>'}</tbody>
       </table>` : isExportReport ? exportGroups.map(group => `
@@ -271,31 +339,13 @@ const buildReportSummaryHTML = ({
           : '<colgroup><col class="batch"><col class="compliance"><col class="missing"></colgroup><thead><tr><th>BATCH</th><th>COMPLIANCE</th><th>MISSING</th></tr></thead>'}
         <tbody>${safeRows || '<tr><td colspan="3" class="empty">No report rows available</td></tr>'}</tbody>
       </table>`}
-      ${detailRows.length && !isAttendanceReport && !isSubmissionRecords && !isMonthlyLetterReview ? `<section class="summary ${isComplianceSummary ? 'compliance-summary' : isExportReport ? 'summary-breakdown' : isTaskCompletion ? 'task-summary' : ''}">
-        ${isComplianceSummary ? `<div><span class="summary-label">LOW RISK</span><strong>${lowRiskCount}</strong></div>
-        <div><span class="summary-label">HIGH RISK</span><strong>${highRiskCount}</strong></div>` : isExportReport ? `<div class="breakdown-heading"><span class="summary-label">REPORT BREAKDOWN</span>${exportBreakdown}</div>` : isTaskCompletion ? `<div><span class="summary-label">ASSIGNED</span><strong>${taskTotals.assigned}</strong></div>
-        <div><span class="summary-label">COMPLETED</span><strong>${taskTotals.completed}</strong></div>
-        <div><span class="summary-label">MISSING</span><strong>${taskTotals.missing}</strong></div>
-        <div><span class="summary-label">PENDING</span><strong>${taskTotals.pending}</strong></div>` : `<div><span class="summary-label">SUBMITTED</span><strong>${submittedScholars.length}/${totalScholars}</strong></div>
-        <div><span class="summary-label">NOT SUBMITTED</span><strong>${missingScholars.length}</strong></div>
-        <div class="missing-names"><span class="summary-label">SCHOLARS WITHOUT SUBMISSION</span><span>${escapeHtml(missingScholars.length ? missingScholars.join(', ') : 'None')}</span></div>`}
-      </section>` : ''}
-      ${isAttendanceReport ? `<section class="summary attendance-summary">
-        <div><span class="summary-label">PRESENT</span><strong>${attendancePresentCount}</strong></div>
-        <div><span class="summary-label">ABSENT</span><strong>${attendanceAbsentCount}</strong></div>
-        <div><span class="summary-label">TOTAL RECORDS</span><strong>${detailRows.length}</strong></div>
-      </section>` : ''}
       <footer class="footer">
         <section class="signature-block">
           <div class="signature-label">CERTIFIED BY</div>
           <div class="signature-line"></div>
           <div class="signature-name">${escapeHtml(certifiedByName)}</div>
         </section>
-        <section class="signature-block">
-          <div class="signature-label">ENDORSED TO</div>
-          <div class="signature-line"></div>
-          <div class="signature-name">${recipients || '<span class="muted">None</span>'}</div>
-        </section>
+        <div class="generated-date">Generated ${generatedDate}</div>
       </footer>
     </main>
   </body>

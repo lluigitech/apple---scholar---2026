@@ -591,16 +591,19 @@ const AdminSettings = () => {
             </section>
 
             {/* Action bar */}
-            <div className="flex items-center justify-end gap-2 flex-wrap" style={{ marginTop: 16 }}>
-              {saved && <span className="flex items-center gap-1" role="status" style={{ fontSize: '0.78rem', fontWeight: 600, color: c.success, marginRight: 6 }}><Check size={15} /> Settings saved.</span>}
-              <button type="button" onClick={resetChanges} disabled={!dirty} className="flex items-center gap-2"
-                style={{ minHeight: 40, padding: '9px 16px', border: `1px solid ${c.border}`, borderRadius: 11, background: c.surface, color: c.primary, fontSize: '0.8rem', fontWeight: 600, cursor: dirty ? 'pointer' : 'not-allowed', opacity: dirty ? 1 : 0.55 }}>
-                <RotateCcw size={14} /> Reset Changes
-              </button>
-              <button type="button" onClick={() => requestProtected('save')} disabled={saving} className="flex items-center gap-2"
-                style={{ minHeight: 40, padding: '9px 18px', border: 0, borderRadius: 11, background: saved ? c.success : c.primary, color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.65 : 1, transition: 'background 150ms ease' }}>
-                {saving && confirmKind === null ? <RefreshCw size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />} {saved ? 'Saved' : 'Save Settings'}
-              </button>
+            <div role="region" aria-label="Settings actions" className="flex items-center justify-end"
+              style={{ position: 'sticky', bottom: 16, zIndex: 20, ...card, marginTop: 20, padding: '12px 16px', boxShadow: '0 16px 36px -16px rgba(36,21,18,0.35)' }}>
+              {saved && <span className="mr-3 flex items-center gap-1" role="status" style={{ fontSize: '0.78rem', fontWeight: 600, color: c.success }}><Check size={15} /> Settings saved.</span>}
+              <div className="grid w-full grid-cols-2 gap-2.5 sm:flex sm:w-auto sm:items-center">
+                <button type="button" onClick={resetChanges} disabled={!dirty} className="flex items-center justify-center gap-2"
+                  style={{ minHeight: 40, padding: '9px 16px', border: `1px solid ${c.border}`, borderRadius: 11, background: c.surface, color: c.primary, fontSize: '0.8rem', fontWeight: 600, cursor: dirty ? 'pointer' : 'not-allowed', opacity: dirty ? 1 : 0.55 }}>
+                  <RotateCcw size={14} /> Reset Changes
+                </button>
+                <button type="button" onClick={() => requestProtected('save')} disabled={saving} className="flex items-center justify-center gap-2"
+                  style={{ minHeight: 40, padding: '9px 18px', border: 0, borderRadius: 11, background: saved ? c.success : c.primary, color: '#fff', fontSize: '0.8rem', fontWeight: 700, cursor: saving ? 'wait' : 'pointer', opacity: saving ? 0.65 : 1, transition: 'background 150ms ease' }}>
+                  {saving && confirmKind === null ? <RefreshCw size={14} className="animate-spin" /> : saved ? <Check size={14} /> : <Save size={14} />} {saved ? 'Saved' : 'Save Settings'}
+                </button>
+              </div>
             </div>
           </>
         )}

@@ -604,14 +604,23 @@ const TaskAssignmentBoard = ({ title, subtitle, role, storageKey }) => {
       <GlobalStyle />
       <div className="mx-auto flex flex-col gap-5" style={{ maxWidth: 1560 }}>
 
-        {/* ── Standard Officer header ── */}
-        <div>
-          <Card style={{ padding: '20px 24px' }}>
-            <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: GOLD }}>{role ? `${role} Portal` : 'Officer Portal'}</p>
-            <h1 style={{ ...display, fontSize: '1.9rem', fontWeight: 700, color: INK, marginTop: 4, lineHeight: 1.15 }}>{title || 'Task Assignment'}</h1>
-            <p style={{ ...body, fontSize: '0.85rem', color: MUTED, marginTop: 6 }}>{subtitle || 'Create and manage document submission tasks for your assigned scholars.'}</p>
-          </Card>
-        </div>
+        {/* ── Page header, same layout as Announcements, Dashboard and Manual Validation ── */}
+        <header
+          className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
+          style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 'clamp(14px, 3vw, 20px)', boxShadow: '0 12px 28px -20px rgba(36,21,18,0.22)' }}
+        >
+          <div className="min-w-0">
+            <p style={{ ...body, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: GOLD }}>
+              {role ? `${role} Portal` : 'Officer Portal'}
+            </p>
+            <h1 style={{ ...display, fontSize: 'clamp(1.6rem, 4vw, 2rem)', fontWeight: 700, color: PRIMARY, lineHeight: 1.15, marginTop: 3 }}>
+              {title || 'Task Assignment'}
+            </h1>
+            <p style={{ ...body, fontSize: '0.9rem', color: MUTED, marginTop: 6, lineHeight: 1.55 }}>
+              {subtitle || 'Create and manage document submission tasks for your assigned scholars.'}
+            </p>
+          </div>
+        </header>
 
         {/* ── KPI cards ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

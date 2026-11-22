@@ -673,7 +673,7 @@ exports.checkInToDuty = (req, res) => {
                TIMESTAMP(duty_date, COALESCE(time_end, '23:59:59'))
                    <= DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR) AS duty_ended,
                TIMESTAMP(duty_date, COALESCE(time_start, '00:00:00'))
-                   <= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 1 HOUR) AS checkin_locked,
+                   <= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 3 HOUR) AS checkin_locked,
                time_start IS NOT NULL AND DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR) > DATE_ADD(
                    TIMESTAMP(duty_date, time_start),
                    INTERVAL 15 MINUTE
@@ -763,7 +763,7 @@ exports.checkInToDuty = (req, res) => {
                     return res.status(410).json({ error: 'Duty has ended. Contact staff to arrange a makeup duty.' });
                 }
                 if (Number(duty.checkin_locked) === 1) {
-                    return res.status(410).json({ error: 'The check-in window is closed one hour after the scheduled start. Contact the admin about a make-up duty.' });
+                    return res.status(410).json({ error: 'The check-in window is closed three hours after the scheduled start. Contact the admin about a make-up duty.' });
                 }
 
                 // Step 4: Check kung nasa loob pa ng 7-day makeup window

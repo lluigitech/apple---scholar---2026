@@ -482,21 +482,7 @@ const ScholarSettings = () => {
 
         {/* ── Notification Preferences ── */}
         <Card id="notifications" icon={Bell} title="Notification Preferences"
-          description="Choose which alerts you want to receive. Saved on this browser only."
-          footer={
-            <>
-              <button type="button" className="ss-btn" disabled={!settingsDirty || settingsSaving} onClick={resetSettings} style={ghostBtn(!settingsDirty || settingsSaving)}>Reset to Saved</button>
-              <button
-                type="button"
-                className="ss-btn"
-                disabled={!canSave}
-                onClick={() => { setConfirmOpen(true); setConfirmPassword(''); setConfirmError(''); }}
-                style={primaryBtn(!canSave)}
-              >
-                <Save size={14} /> Save Preferences
-              </button>
-            </>
-          }>
+          description="Choose which alerts you want to receive. Saved on this browser only.">
           <div className="grid grid-cols-1 gap-x-10 lg:grid-cols-2">
             {NOTIF_EVENTS.map(ev => (
               <div key={ev.key} className="ss-nrow flex items-center gap-3 py-2.5">
@@ -511,6 +497,16 @@ const ScholarSettings = () => {
             ))}
           </div>
         </Card>
+
+        <div role="region" aria-label="Settings actions" className="flex justify-end"
+          style={{ position: 'sticky', bottom: 16, zIndex: 20, ...tile, marginTop: 4, padding: '12px 16px', boxShadow: '0 16px 36px -16px rgba(36,21,18,0.35)' }}>
+          <div className="grid w-full grid-cols-2 gap-2.5 sm:flex sm:w-auto sm:items-center">
+            <button type="button" className="ss-btn" onClick={resetSettings} disabled={!settingsDirty || settingsSaving} style={ghostBtn(!settingsDirty || settingsSaving)}>Reset Changes</button>
+            <button type="button" className="ss-btn" disabled={!canSave} onClick={() => { setConfirmOpen(true); setConfirmPassword(''); setConfirmError(''); }} style={primaryBtn(!canSave)}>
+              <Save size={14} /> {settingsSaving ? 'Saving…' : 'Save Settings'}
+            </button>
+          </div>
+        </div>
       </div>
 
       {confirmOpen && (

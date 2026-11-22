@@ -25,7 +25,7 @@ router.get('/pending', requireRole(['staff', 'admin', 'officer']), staff.getPend
 // Announcements
 router.get('/announcements', staff.getAnnouncements);
 router.post('/announcements', staff.createAnnouncement);
-router.post('/announcements/:id/notify', staff.notifyAnnouncement);
+router.post('/announcements/:id/notify', requireRole(['admin']), staff.notifyAnnouncement);
 router.get('/deadlines', staff.getDeadlines);
 router.get('/activities', staff.reportActivities);
 

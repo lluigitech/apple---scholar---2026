@@ -1,10 +1,10 @@
 import { API_ORIGIN } from '../../utils/apiConfig.js';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
   QrCode, CheckCircle2, X, Users, ListChecks,
   Search, Clock, Hourglass, XCircle,
-  RefreshCw, Printer, CalendarClock, CalendarDays, MapPin, AlertCircle, ChevronDown, LogOut,
+  RefreshCw, Printer, CalendarClock, CalendarDays, MapPin, AlertCircle, ChevronDown, LogOut, UserX,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { formatYearLevelLabel } from '../../utils/yearLevelLabels';
@@ -18,7 +18,6 @@ const BG = '#F3EEE6';
 const CARD = '#FFFDF9';
 const BORDER = '#E7D8C7';
 const MAROON = '#6D2140';
-const MAROON_DEEP = '#4A1730';
 const GOLD = '#A9784E';
 const INK = '#241512';
 const MUTED = '#8A7A68';
@@ -36,12 +35,11 @@ const mono = { fontFamily: "'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Men
 
 const cardShadow = { boxShadow: '0 12px 28px -20px rgba(36,21,18,0.22)' };
 const cardWrap = { background: CARD, border: `1px solid ${BORDER}`, borderRadius: RADIUS, ...cardShadow, overflow: 'hidden' };
-const subCard = { background: CARD, border: `1px solid ${BORDER}`, borderRadius: 14 };
-const bordField = { width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 10, background: '#fff', ...body, fontSize: '0.85rem', color: INK, outline: 'none', appearance: 'none', cursor: 'pointer' };
-const fieldLabel = { ...body, fontSize: '0.7rem', color: MUTED, display: 'block', marginBottom: 6 };
-const filledBtn  = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 0', border: 'none', borderRadius: 10, background: `linear-gradient(120deg, ${MAROON} 0%, ${MAROON_DEEP} 100%)`, color: '#fff', ...body, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', width: '100%' };
+const bordField = { width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 10, backgroundColor: '#fff', ...body, fontSize: '0.85rem', color: INK, outline: 'none', appearance: 'none', cursor: 'pointer' };
+const fieldLabel = { ...body, fontSize: '0.72rem', fontWeight: 600, color: INK, display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 };
+const solidBtn = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 0', border: 'none', borderRadius: 10, background: MAROON, color: '#fff', ...body, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', width: '100%' };
 
-const iconBadge = (color) => ({ width: 38, height: 38, borderRadius: 12, background: `${color}16`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 });
+const iconBadge = (color) => ({ width: 36, height: 36, borderRadius: 11, background: `${color}16`, color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 });
 
 const initials = (name = '') =>
   name.trim().split(/\s+/).slice(0, 2).map(w => w[0]).join('').toUpperCase();
@@ -96,13 +94,13 @@ const getCheckInLockTimestamp = (duty) => {
     dutyDate.getDate(),
     hours,
     minutes,
-    seconds + 60 * 60
+    seconds + 3 * 60 * 60
   ).getTime();
   return Number.isFinite(lockTime) ? lockTime : null;
 };
 
 const hasDutyEnded = (duty, now = Date.now()) => {
-  const lockTime = getDutyEndTimestamp(duty, 1);
+  const lockTime = getDutyEndTimestamp(duty, 3);
   return lockTime !== null && now >= lockTime;
 };
 
@@ -125,8 +123,8 @@ const CHECKOUT_WINDOW_DAYS = 3;
 const KPICard = ({ icon: Icon, label, value, accent, sub, progress }) => (
   <div className="min-w-0 h-full" style={{ ...cardWrap, padding: 'clamp(14px, 3vw, 18px)' }}>
     <div className="flex items-center gap-3 sm:gap-4">
-      <div className="flex items-center justify-center flex-shrink-0" style={{ width: 48, height: 48, borderRadius: 14, background: `${accent}16`, color: accent }}>
-        <Icon size={21} />
+      <div className="flex items-center justify-center flex-shrink-0" style={{ width: 46, height: 46, borderRadius: 13, background: `${accent}16`, color: accent }}>
+        <Icon size={20} />
       </div>
       <div className="min-w-0 flex-1">
         <p style={{ ...display, fontSize: 'clamp(1.35rem, 4vw, 1.7rem)', fontWeight: 700, color: MAROON, lineHeight: 1 }}>{value}</p>
@@ -134,13 +132,13 @@ const KPICard = ({ icon: Icon, label, value, accent, sub, progress }) => (
       </div>
     </div>
     {sub && (
-      <div style={{ marginTop: 10 }}>
-        <p style={{ ...body, fontSize: '0.7rem', color: accent, fontWeight: 600 }}>{sub}</p>
+      <div style={{ marginTop: 12 }}>
         {progress !== undefined && (
-          <div style={{ height: 5, background: `${accent}1f`, borderRadius: 3, marginTop: 5, overflow: 'hidden' }}>
+          <div style={{ height: 5, background: `${accent}1f`, borderRadius: 3, overflow: 'hidden', marginBottom: 5 }}>
             <div style={{ height: '100%', width: `${progress}%`, background: accent, borderRadius: 3, transition: 'width 0.5s' }} />
           </div>
         )}
+        <p style={{ ...body, fontSize: '0.7rem', color: accent, fontWeight: 600 }}>{sub}</p>
       </div>
     )}
   </div>
@@ -168,15 +166,49 @@ const SectionHead = ({ icon: Icon, title, subtitle, color = MAROON }) => (
   <div className="flex items-center gap-3 min-w-0">
     <span style={iconBadge(color)}><Icon size={17} /></span>
     <div className="min-w-0">
-      <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: MAROON }}>{title}</h2>
+      <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: INK }}>{title}</h2>
       {subtitle && <p style={{ ...body, fontSize: '0.74rem', color: MUTED, marginTop: 2 }}>{subtitle}</p>}
     </div>
+  </div>
+);
+
+const Banner = ({ tone = 'warning', icon: Icon, children }) => {
+  const map = { danger: [CLAY, CLAY_BG], success: [SUCCESS, SUCCESS_BG], warning: [AMBER, AMBER_BG] };
+  const [color, bg] = map[tone] || map.warning;
+  return (
+    <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 14px', borderRadius: 10, borderLeft: `3px solid ${color}`, background: bg, color, ...body, fontSize: '0.78rem', fontWeight: 600, lineHeight: 1.5 }}>
+      {Icon && <Icon size={15} style={{ flexShrink: 0, marginTop: 2 }} />}
+      <span>{children}</span>
+    </div>
+  );
+};
+
+const EmptyBlock = ({ icon: Icon, title, hint, pad = 48 }) => (
+  <div className="da-empty" style={{ padding: `${pad}px 20px` }}>
+    <span className="da-empty-icon"><Icon size={22} /></span>
+    <p style={{ ...body, fontSize: '0.88rem', fontWeight: 700, color: INK }}>{title}</p>
+    {hint && <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 3 }}>{hint}</p>}
+  </div>
+);
+
+const StatTile = ({ label, value, color }) => (
+  <div style={{ background: `${color}10`, border: `1px solid ${color}30`, borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+    <span style={{ ...body, fontSize: '0.74rem', fontWeight: 600, color }}>{label}</span>
+    <span style={{ ...display, fontSize: '1.3rem', fontWeight: 700, color }}>{value}</span>
+  </div>
+);
+
+const MetaCell = ({ label, value }) => (
+  <div className="min-w-0">
+    <p style={{ ...body, fontSize: '0.64rem', fontWeight: 600, color: MUTED }}>{label}</p>
+    <p className="truncate" style={{ ...mono, fontSize: '0.72rem', color: INK, marginTop: 2 }}>{value}</p>
   </div>
 );
 
 const StaffDutyAttendance = () => {
   const [duties, setDuties] = useState([]);
   const [recentCompleted, setRecentCompleted] = useState([]);
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [subTab, setSubTab] = useState('qr');
 
   const [qrDuty, setQrDuty] = useState('');
@@ -266,6 +298,10 @@ const StaffDutyAttendance = () => {
         setRecentCompleted(all.filter(d => d.status === 'completed' && (getDutyEndTimestamp(d) ?? 0) >= cutoff));
       })
       .catch(err => console.error('Failed to fetch duties:', err));
+
+    axios.get(`${API}/staff/reports/duty-attendance`, authHeaders())
+      .then(res => setAttendanceRecords(Array.isArray(res.data) ? res.data : []))
+      .catch(err => console.error('Failed to fetch attendance follow-up records:', err));
   }, []);
 
   useEffect(() => {
@@ -515,7 +551,7 @@ const StaffDutyAttendance = () => {
   const manualDuties = [...duties, ...recentCompleted];
 
   const dutySelect = (value, onChange, ariaLabel, placeholder = '-- Select a duty --', list = duties) => (
-    <select value={value} onChange={e => onChange(e.target.value)} aria-label={ariaLabel} style={bordField}>
+    <select value={value} onChange={e => onChange(e.target.value)} aria-label={ariaLabel} className="da-select" style={bordField}>
       <option value="">{placeholder}</option>
       {list.map(d => (
         <option key={d.id} value={d.id}>
@@ -569,7 +605,7 @@ const StaffDutyAttendance = () => {
   const selectedOutDuty = manualDuties.find(d => String(d.id) === String(outDuty));
   const outOpensAt = getDutyEndTimestamp(selectedOutDuty, 0);
   const outIsOpen = currentTime > 0 && outOpensAt !== null && currentTime >= outOpensAt;
-  const outLocksAt = getDutyEndTimestamp(selectedOutDuty, 2);
+  const outLocksAt = getDutyEndTimestamp(selectedOutDuty, 3);
   const outIsLocked = currentTime > 0 && outLocksAt !== null && currentTime >= outLocksAt;
   const outCheckedIn = outScholars.filter(s => ['present', 'late'].includes(s.attendance_status));
   const outDoneCount = outCheckedIn.filter(s => s.check_out_at).length;
@@ -579,18 +615,55 @@ const StaffDutyAttendance = () => {
     s.scholar_id?.toLowerCase().includes(outSearch.toLowerCase())
   );
 
-  const thStyle = { ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.04em', color: MUTED, textAlign: 'left', padding: '11px 12px', borderBottom: `1px solid ${BORDER}`, background: BG, whiteSpace: 'nowrap' };
+  const followUp = useMemo(() => {
+    const counts = new Map();
+    attendanceRecords.forEach(record => {
+      if (String(record.status || '').toLowerCase() !== 'absent') return;
+      const key = `${record.scholar || 'Unknown'}::${record.scholar_id || '—'}`;
+      if (!counts.has(key)) {
+        counts.set(key, {
+          name: record.scholar || 'Unknown Scholar',
+          scholarId: record.scholar_id || '—',
+          count: 0,
+        });
+      }
+      counts.get(key).count += 1;
+    });
+    return [...counts.values()].sort((a, b) => b.count - a.count).slice(0, 4);
+  }, [attendanceRecords]);
+
+  const thStyle = { ...body, fontSize: '0.72rem', fontWeight: 600, color: MUTED, textAlign: 'left', padding: '11px 12px', borderBottom: `1px solid ${BORDER}`, background: '#FCFAF5', whiteSpace: 'nowrap' };
   const tdStyle = { ...body, fontSize: '0.78rem', color: INK, padding: '10px 12px', borderBottom: `1px solid ${BORDER}`, verticalAlign: 'middle' };
 
-  const tabStyle = (active) => ({
-    ...body, fontSize: '0.84rem', fontWeight: 700, borderRadius: 12, padding: '11px 22px', cursor: 'pointer', border: 'none',
-    background: active ? MAROON : 'transparent', color: active ? '#fff' : MAROON,
-    transition: 'background-color 160ms ease, color 160ms ease',
-  });
+  const searchBox = (value, onChange, label) => (
+    <div className="da-search">
+      <Search size={14} style={{ color: MUTED, flexShrink: 0 }} aria-hidden="true" />
+      <input
+        type="text"
+        value={value}
+        onChange={onChange}
+        placeholder="Name or scholar ID…"
+        aria-label={label}
+        style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.85rem', color: INK }}
+      />
+    </div>
+  );
+
+  const iconBtn = (onClick, label, spinning) => (
+    <button type="button" onClick={onClick} aria-label={label} className="da-icon-btn">
+      <RefreshCw size={15} className={spinning ? 'animate-spin' : ''} />
+    </button>
+  );
+
+  const TABS = [
+    { key: 'qr',       label: 'QR check-in / out', short: 'QR',        icon: QrCode },
+    { key: 'manual',   label: 'Manual check-in',   short: 'Check-in',  icon: ListChecks },
+    { key: 'checkout', label: 'Manual check-out',  short: 'Check-out', icon: LogOut },
+  ];
 
   return (
-    <div className="min-h-screen" style={{ background: BG, ...body, overflowX: 'hidden' }}>
-      <div className="w-full px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+    <div className="da-hub" style={{ background: BG, ...body }}>
+      <div className="da-inner">
 
         {/* ── Standard Staff page header ── */}
         <div className="mb-5">
@@ -608,576 +681,579 @@ const StaffDutyAttendance = () => {
 
         {/* ── KPI cards (real counts from the loaded roster) ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-5">
-          <KPICard icon={Users} label="Assigned Scholars" value={qrScholars.length || '—'} accent={MAROON} />
-          <KPICard icon={CheckCircle2} label="Checked In" value={qrScholars.length ? checkedIn.length : '—'} accent={SUCCESS}
+          <KPICard icon={Users} label="Assigned scholars" value={qrScholars.length || '—'} accent={MAROON}
+            sub={qrScholars.length ? 'On the selected duty' : 'Select a duty to load'} />
+          <KPICard icon={CheckCircle2} label="Checked in" value={qrScholars.length ? checkedIn.length : '—'} accent={SUCCESS}
             sub={qrScholars.length ? `${qrPercent}% attendance rate` : undefined} progress={qrScholars.length ? qrPercent : undefined} />
           <KPICard icon={Hourglass} label="Late" value={qrScholars.length ? lateCount : '—'} accent={AMBER}
-            sub={qrScholars.length ? `${pct(lateCount)}%` : undefined} progress={qrScholars.length ? pct(lateCount) : undefined} />
+            sub={qrScholars.length ? `${pct(lateCount)}% of roster` : undefined} progress={qrScholars.length ? pct(lateCount) : undefined} />
           <KPICard icon={XCircle} label="Absent" value={qrScholars.length ? absentCount : '—'} accent={CLAY}
-            sub={qrScholars.length ? `${pct(absentCount)}%` : undefined} progress={qrScholars.length ? pct(absentCount) : undefined} />
+            sub={qrScholars.length ? `${pct(absentCount)}% of roster` : undefined} progress={qrScholars.length ? pct(absentCount) : undefined} />
         </div>
 
-        {/* ── Workspace card: tabs + content ── */}
-        <section style={{ ...cardWrap, padding: 'clamp(12px, 2.5vw, 18px)' }}>
-          <div role="tablist" aria-label="Check-in mode" className="flex flex-wrap gap-2" style={{ marginBottom: 'clamp(12px, 2.5vw, 16px)' }}>
-            <button type="button" role="tab" id="tab-qr" aria-selected={subTab === 'qr'} aria-controls="panel-qr" onClick={() => setSubTab('qr')} className="flex items-center gap-2" style={tabStyle(subTab === 'qr')}>
-              <QrCode size={15} /> QR Check-In / Out
-            </button>
-            <button type="button" role="tab" id="tab-manual" aria-selected={subTab === 'manual'} aria-controls="panel-manual" onClick={() => setSubTab('manual')} className="flex items-center gap-2" style={tabStyle(subTab === 'manual')}>
-              <ListChecks size={15} /> Manual Check-In
-            </button>
-            <button type="button" role="tab" id="tab-checkout" aria-selected={subTab === 'checkout'} aria-controls="panel-checkout" onClick={() => setSubTab('checkout')} className="flex items-center gap-2" style={tabStyle(subTab === 'checkout')}>
-              <LogOut size={15} /> Manual Check-Out
-            </button>
+        {/* ── Workspace: underline tabs, then a duty bar, then the work area ── */}
+        <section style={{ ...cardWrap }}>
+          <div role="tablist" aria-label="Attendance mode" className="da-tabs">
+            {TABS.map(t => {
+              const Icon = t.icon;
+              const active = subTab === t.key;
+              return (
+                <button key={t.key} type="button" role="tab" id={`tab-${t.key}`} aria-selected={active} aria-controls={`panel-${t.key}`}
+                  onClick={() => setSubTab(t.key)} className={`da-tab ${active ? 'da-tab-active' : ''}`}>
+                  <Icon size={16} />
+                  <span className="da-tab-long">{t.label}</span>
+                  <span className="da-tab-short">{t.short}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* ═════════ QR CHECK-IN TAB ═════════ */}
-          {subTab === 'qr' && (
-            <div id="panel-qr" role="tabpanel" aria-labelledby="tab-qr" className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4 items-start">
+          <div className="da-body">
 
-              {/* LEFT — 1. Select duty, 2. Duty QR code */}
-              <div className="flex flex-col gap-4 min-w-0">
-                <div style={{ ...subCard, padding: 'clamp(14px, 3vw, 18px)' }}>
-                  <SectionHead icon={CalendarClock} title="1. Select Duty Schedule" subtitle="Choose a duty to generate the QR code for check-in and check-out." />
-                  <div style={{ marginTop: 14 }}>{dutySelect(qrDuty, loadQRDuty, 'Select duty for QR code')}</div>
-                  {qrCheckInLocked && (
-                    <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginTop: 12, padding: '10px 12px', border: `1px solid ${CLAY}55`, borderRadius: 9, background: CLAY_BG, color: CLAY, ...body, fontSize: '0.76rem', fontWeight: 600, lineHeight: 1.5 }}>
-                      <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} />
-                      QR check-in is locked one hour after the scheduled start. Scholars without attendance are automatically marked Absent and become available for admin make-up assignment.
-                    </div>
-                  )}
+            {/* ═════════ QR CHECK-IN TAB ═════════ */}
+            {subTab === 'qr' && (
+              <div id="panel-qr" role="tabpanel" aria-labelledby="tab-qr" className="flex flex-col gap-4">
+                <div className="da-bar">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={fieldLabel}><CalendarClock size={13} style={{ color: GOLD }} /> Duty schedule</span>
+                    {dutySelect(qrDuty, loadQRDuty, 'Select duty for QR code')}
+                  </div>
                 </div>
 
-                <div style={{ ...subCard, padding: 'clamp(14px, 3vw, 18px)' }}>
-                  <SectionHead icon={QrCode} title="2. Duty QR Code" subtitle="Scholars scan this code to check in, then scan it again to check out." />
+                {qrCheckInLocked && (
+                  <Banner tone="danger" icon={AlertCircle}>
+                    QR check-in is locked three hours after the scheduled start. Scholars without attendance are automatically marked Absent and become available for admin make-up assignment.
+                  </Banner>
+                )}
 
-                  <div style={{ marginTop: 14 }}>
-                    {qrLoading ? (
-                      <div className="animate-pulse" style={{ background: `${BORDER}88`, height: 220, borderRadius: 10 }} />
-                    ) : dutyQR ? (
-                      <>
-                        <div className="flex flex-col sm:flex-row gap-3 items-stretch">
-                          <div className="flex items-center justify-center flex-shrink-0" style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 12, padding: 16 }}>
-                            <QRCodeSVG id="duty-qr-svg" value={dutyQR.qr_token} size={168} fgColor={GOLD} />
+                <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] gap-4 items-start">
+
+                  {/* LEFT — QR code and duty information */}
+                  <div className="da-card min-w-0">
+                    <SectionHead icon={QrCode} title="Duty QR code" subtitle="Scholars scan to check in, then scan again to check out." />
+                    <div style={{ marginTop: 16 }}>
+                      {qrLoading ? (
+                        <div className="animate-pulse" style={{ background: `${BORDER}88`, height: 260, borderRadius: 12 }} />
+                      ) : dutyQR ? (
+                        <>
+                          <div className="da-qr-frame">
+                            <QRCodeSVG id="duty-qr-svg" value={dutyQR.qr_token} size={176} fgColor={GOLD} />
                           </div>
 
                           {/* Duty information (only fields returned by the existing endpoints) */}
-                          <div className="min-w-0 flex-1" style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '14px 16px' }}>
-                            <p style={{ ...mono, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.06em', color: GOLD }}>DUTY INFORMATION</p>
-                            <p style={{ ...display, fontSize: '1rem', fontWeight: 600, color: INK, marginTop: 6, wordBreak: 'break-word' }}>{dutyQR.title}</p>
-                            <div className="flex flex-col gap-2" style={{ marginTop: 10, ...body, fontSize: '0.78rem', color: INK }}>
+                          <div style={{ marginTop: 14 }}>
+                            <p style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK, wordBreak: 'break-word' }}>{dutyQR.title}</p>
+                            <div className="da-info">
                               {dutyQR.duty_date && (
-                                <span className="flex items-center gap-2">
-                                  <CalendarDays size={13} style={{ color: GOLD, flexShrink: 0 }} />
+                                <span className="da-info-row">
+                                  <CalendarDays size={14} style={{ color: GOLD, flexShrink: 0 }} />
                                   {new Date(dutyQR.duty_date).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' })}
                                 </span>
                               )}
                               {selectedDuty?.time_start && (
-                                <span className="flex items-center gap-2">
-                                  <Clock size={13} style={{ color: GOLD, flexShrink: 0 }} />
+                                <span className="da-info-row">
+                                  <Clock size={14} style={{ color: GOLD, flexShrink: 0 }} />
                                   {formatTime(selectedDuty.time_start)}{selectedDuty.time_end ? ` – ${formatTime(selectedDuty.time_end)}` : ''}
                                 </span>
                               )}
                               {dutyQR.location && (
-                                <span className="flex items-start gap-2">
-                                  <MapPin size={13} style={{ color: GOLD, flexShrink: 0, marginTop: 2 }} />
+                                <span className="da-info-row" style={{ alignItems: 'flex-start' }}>
+                                  <MapPin size={14} style={{ color: GOLD, flexShrink: 0, marginTop: 2 }} />
                                   <span style={{ wordBreak: 'break-word' }}>{dutyQR.location}</span>
                                 </span>
                               )}
                             </div>
                           </div>
-                        </div>
 
-                        <p style={{ ...body, fontSize: '0.74rem', color: MUTED, marginTop: 14, textAlign: 'center', lineHeight: 1.55 }}>
-                          I-print at i-post ito sa duty location. Ang scholar ang mag-sscan nito para mag-check-in.
-                        </p>
-                        <button type="button" onClick={handlePrintQR} style={{ ...filledBtn, marginTop: 14 }}>
-                          <Printer size={15} /> Print QR Code
-                        </button>
-                      </>
-                    ) : (
-                      <div className="text-center" style={{ background: '#fff', border: `1.5px dashed ${GOLD}`, borderRadius: 12, padding: '44px 20px' }}>
-                        <QrCode size={26} style={{ margin: '0 auto 12px', color: BORDER }} />
-                        <p style={{ ...body, fontSize: '0.85rem', fontWeight: 600, color: MUTED }}>Select a duty first</p>
-                        <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>Generate a QR code to begin attendance.</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* RIGHT — Live Attendance */}
-              <div className="min-w-0" style={{ ...subCard, padding: 'clamp(14px, 3vw, 18px)' }}>
-                <div className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between gap-3">
-                  <SectionHead icon={Users} title="Live Attendance" subtitle="Scholars assigned to the selected duty" />
-                  {qrDuty && qrScholars.length > 0 && (
-                    <div className="flex items-center gap-2 w-full 2xl:w-auto">
-                      <div className="flex items-center gap-1.5 flex-1 2xl:flex-none" style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 999, padding: '7px 12px' }}>
-                        <Search size={13} style={{ color: MUTED, flexShrink: 0 }} />
-                        <input
-                          type="text"
-                          value={rosterSearch}
-                          onChange={e => { setRosterSearch(e.target.value); setRosterPage(1); }}
-                          placeholder="Search scholar name or ID…"
-                          aria-label="Search live roster by name or ID"
-                          className="min-w-0 flex-1 2xl:w-52 2xl:flex-none"
-                          style={{ border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.78rem', color: INK }}
-                        />
-                      </div>
-                      <button type="button" onClick={refreshQRScholars} aria-label="Refresh live roster" style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', lineHeight: 0, padding: 6 }}>
-                        <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {qrScholars.length === 0 ? (
-                  <div className="text-center" style={{ background: '#fff', border: `1.5px dashed ${GOLD}`, borderRadius: 12, padding: '56px 20px', marginTop: 16 }}>
-                    <QrCode size={26} style={{ margin: '0 auto 12px', color: BORDER }} />
-                    <p style={{ ...body, fontSize: '0.85rem', fontWeight: 600, color: MUTED }}>Select a duty first</p>
-                    <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>Generate a QR code to begin attendance.</p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Status filters */}
-                    <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Filter roster by status" style={{ marginTop: 16 }}>
-                      {ROSTER_FILTERS.map(f => {
-                        const active = f.key === activeFilter.key;
-                        return (
-                          <button
-                            key={f.key}
-                            type="button"
-                            aria-pressed={active}
-                            onClick={() => { setRosterFilter(f.key); setRosterPage(1); }}
-                            className="flex items-center gap-2 flex-shrink-0"
-                            style={{
-                              ...body, fontSize: '0.74rem', fontWeight: 600, borderRadius: 999, padding: '6px 14px', cursor: 'pointer', whiteSpace: 'nowrap',
-                              border: `1px solid ${active ? MAROON : BORDER}`,
-                              background: active ? MAROON : '#fff',
-                              color: active ? '#fff' : INK,
-                            }}
-                          >
-                            <span style={{ width: 7, height: 7, borderRadius: '50%', background: active ? '#fff' : f.dot, flexShrink: 0 }} />
-                            {f.label} ({f.count})
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {/* Table */}
-                    <div style={{ marginTop: 14, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', background: '#fff' }}>
-                      {rosterRows.length === 0 ? (
-                        <div className="text-center" style={{ padding: '36px 16px' }}>
-                          <p style={{ ...body, fontSize: '0.8rem', color: MUTED }}>
-                            {rosterSearch.trim() ? `No scholars match "${rosterSearch}".` : 'No scholars in this status.'}
+                          <p style={{ ...body, fontSize: '0.74rem', color: MUTED, marginTop: 14, lineHeight: 1.55 }}>
+                            I-print at i-post ito sa duty location. Ang scholar ang mag-sscan nito para mag-check-in.
                           </p>
-                        </div>
+                          <button type="button" onClick={handlePrintQR} style={{ ...solidBtn, marginTop: 14 }} className="da-hover">
+                            <Printer size={15} /> Print QR code
+                          </button>
+                        </>
                       ) : (
-                        <div style={{ overflowX: 'auto' }}>
-                          <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr>
-                                <th scope="col" style={{ ...thStyle, width: 40 }}>#</th>
-                                <th scope="col" style={thStyle}>Scholar</th>
-                                <th scope="col" style={thStyle}>Year Level</th>
-                                <th scope="col" style={thStyle}>Time In</th>
-                                <th scope="col" style={thStyle}>Time Out</th>
-                                <th scope="col" style={thStyle}>Status</th>
-                                <th scope="col" style={thStyle}>Make-up</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {pagedRows.map((s, i) => {
-                                const hasTime = (s.attendance_status === 'present' || s.attendance_status === 'late') && s.marked_at;
-                                const checked = s.attendance_status === 'present' || s.attendance_status === 'late';
-                                return (
-                                  <tr key={s.scholar_id}>
-                                    <td style={{ ...tdStyle, color: MUTED }}>{pageStart + i + 1}</td>
-                                    <td style={{ ...tdStyle, minWidth: 190 }}>
-                                      <div className="flex items-center gap-3 min-w-0">
-                                        <span style={{ width: 34, height: 34, borderRadius: '50%', background: checked ? MAROON : BG, color: checked ? '#fff' : MUTED, ...body, fontSize: '0.64rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                                          {initials(s.full_name)}
-                                        </span>
-                                        <div className="min-w-0">
-                                          <p style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: checked ? INK : MUTED }} className="truncate">{s.full_name}</p>
-                                          <p style={{ ...mono, fontSize: '0.64rem', color: MUTED }}>{s.scholar_id}</p>
-                                        </div>
-                                      </div>
-                                    </td>
-                                    <td style={{ ...tdStyle, color: MUTED, whiteSpace: 'nowrap' }}>{s.year_level ? formatYearLevelLabel(s.year_level) : '—'}</td>
-                                    <td style={{ ...tdStyle, ...mono, fontSize: '0.72rem', color: MUTED, whiteSpace: 'nowrap' }}>
-                                      {hasTime ? formatAttendanceTime(s.marked_at) : '—'}
-                                    </td>
-                                    <td style={{ ...tdStyle, ...mono, fontSize: '0.72rem', color: MUTED, whiteSpace: 'nowrap' }}>
-                                      {formatAttendanceTime(s.check_out_at)}
-                                    </td>
-                                    <td style={tdStyle}><StatusBadge status={s.attendance_status} checkedOut={Boolean(s.check_out_at)} /></td>
-                                    <td style={{ ...tdStyle, color: MUTED }}>{Number(s.is_makeup) === 1 ? 'Make-up' : '—'}</td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
+                        <EmptyBlock icon={QrCode} title="Select a duty first" hint="Generate a QR code to begin attendance." pad={40} />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* RIGHT — Live attendance */}
+                  <div className="da-card min-w-0">
+                    <div className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between gap-3">
+                      <SectionHead icon={Users} title="Live attendance" subtitle="Scholars assigned to the selected duty" />
+                      {qrDuty && qrScholars.length > 0 && (
+                        <div className="flex items-center gap-2 w-full 2xl:w-auto">
+                          <div className="da-search flex-1 2xl:flex-none 2xl:w-64">
+                            <Search size={14} style={{ color: MUTED, flexShrink: 0 }} aria-hidden="true" />
+                            <input
+                              type="text"
+                              value={rosterSearch}
+                              onChange={e => { setRosterSearch(e.target.value); setRosterPage(1); }}
+                              placeholder="Search scholar name or ID…"
+                              aria-label="Search live roster by name or ID"
+                              style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.82rem', color: INK }}
+                            />
+                          </div>
+                          {iconBtn(refreshQRScholars, 'Refresh live roster', refreshing)}
                         </div>
                       )}
                     </div>
 
-                    {/* Pagination (client-side over the loaded roster) */}
-                    {rosterRows.length > 0 && (
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" style={{ marginTop: 14 }}>
-                        <p style={{ ...body, fontSize: '0.74rem', color: MUTED }}>
-                          Showing {pageStart + 1} – {Math.min(pageStart + ROSTER_PAGE_SIZE, rosterRows.length)} of {rosterRows.length} scholars
-                        </p>
-                        {totalPages > 1 && (
-                          <nav aria-label="Roster pages" className="flex items-center gap-1.5 flex-wrap">
-                            <button type="button" aria-label="Previous page" disabled={currentPage === 1} onClick={() => setRosterPage(currentPage - 1)}
-                              style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', color: MAROON, cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1 }}>‹</button>
-                            {Array.from({ length: totalPages }, (_, idx) => idx + 1).map(n => (
-                              <button key={n} type="button" aria-label={`Page ${n}`} aria-current={n === currentPage ? 'page' : undefined} onClick={() => setRosterPage(n)}
-                                style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${n === currentPage ? MAROON : BORDER}`, background: n === currentPage ? MAROON : '#fff', color: n === currentPage ? '#fff' : INK, ...body, fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer' }}>{n}</button>
-                            ))}
-                            <button type="button" aria-label="Next page" disabled={currentPage === totalPages} onClick={() => setRosterPage(currentPage + 1)}
-                              style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', color: MAROON, cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1 }}>›</button>
-                          </nav>
-                        )}
+                    {qrScholars.length === 0 ? (
+                      <div style={{ marginTop: 16 }}>
+                        <EmptyBlock icon={Users} title="No roster yet" hint="Select a duty to see who is assigned." pad={56} />
                       </div>
-                    )}
-                  </>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ═════════ MANUAL CHECK-IN TAB ═════════ */}
-          {subTab === 'manual' && (
-            <div id="panel-manual" role="tabpanel" aria-labelledby="tab-manual" className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4 items-start">
-
-              {/* LEFT — duty, search, counts, save */}
-              <div className="min-w-0" style={{ ...subCard, padding: 'clamp(14px, 3vw, 18px)' }}>
-                <SectionHead icon={ListChecks} title="Manual Check-In / Out" subtitle="Mark each scholar’s attendance. Check-out is done in the Check-Out tab." />
-                <p style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 8 }}>
-                  Check-in after 15 minutes from the scheduled start is automatically recorded as Late.
-                </p>
-                <div style={{ marginTop: 14 }}>
-                  <span style={fieldLabel}>Select duty</span>
-                  {dutySelect(manualDuty, loadScholars, 'Select duty for manual check-in', undefined, manualDuties)}
-                </div>
-                {manualCheckInLocked && (
-                  <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '10px 12px', border: `1px solid ${CLAY}55`, borderRadius: 9, background: CLAY_BG, color: CLAY, ...body, fontSize: '0.76rem', fontWeight: 600 }}>
-                    <AlertCircle size={15} />
-                    Manual check-in is locked one hour after the scheduled start. Use the Check-Out tab when the duty ends.
-                  </div>
-                )}
-
-                {manualLoading ? (
-                  <div className="animate-pulse space-y-3" style={{ marginTop: 18 }}>
-                    <div style={{ background: `${BORDER}88`, height: 40, borderRadius: 8 }} />
-                    <div style={{ background: `${BORDER}88`, height: 60, borderRadius: 8 }} />
-                  </div>
-                ) : scholars.length > 0 ? (
-                  <>
-                    <div style={{ marginTop: 16 }}>
-                      <span style={fieldLabel}>Search scholar</span>
-                      <div className="flex items-center gap-2" style={{ ...bordField, cursor: 'text' }}>
-                        <Search size={13} style={{ color: MUTED, flexShrink: 0 }} />
-                        <input
-                          type="text"
-                          value={searchQuery}
-                          onChange={e => setSearchQuery(e.target.value)}
-                          placeholder="Name or scholar ID…"
-                          aria-label="Search scholar by name or ID"
-                          style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.85rem', color: INK }}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 xl:grid-cols-4 gap-2" style={{ marginTop: 16 }}>
-                      {[
-                        { label: 'Present', count: scholarCounts.present, color: SUCCESS },
-                        { label: 'Late',    count: scholarCounts.late,    color: AMBER },
-                        { label: 'Absent',  count: scholarCounts.absent,  color: CLAY },
-                      ].map(c => (
-                        <div key={c.label} className="text-center" style={{ background: `${c.color}12`, border: `1px solid ${c.color}30`, borderRadius: 8, padding: '10px 4px' }}>
-                          <p style={{ ...display, fontSize: '1.2rem', fontWeight: 700, color: c.color }}>{c.count}</p>
-                          <p style={{ ...body, fontSize: '0.66rem', fontWeight: 600, color: c.color, marginTop: 1 }}>{c.label}</p>
+                    ) : (
+                      <>
+                        {/* Status filters */}
+                        <div className="flex items-center gap-2 flex-wrap" role="group" aria-label="Filter roster by status" style={{ marginTop: 16 }}>
+                          {ROSTER_FILTERS.map(f => {
+                            const active = f.key === activeFilter.key;
+                            return (
+                              <button
+                                key={f.key}
+                                type="button"
+                                aria-pressed={active}
+                                onClick={() => { setRosterFilter(f.key); setRosterPage(1); }}
+                                className="flex items-center gap-2 flex-shrink-0"
+                                style={{
+                                  ...body, fontSize: '0.74rem', fontWeight: 600, borderRadius: 999, padding: '6px 14px', cursor: 'pointer', whiteSpace: 'nowrap',
+                                  border: `1px solid ${active ? MAROON : BORDER}`,
+                                  background: active ? MAROON : '#fff',
+                                  color: active ? '#fff' : INK,
+                                }}
+                              >
+                                <span style={{ width: 7, height: 7, borderRadius: '50%', background: active ? '#fff' : f.dot, flexShrink: 0 }} />
+                                {f.label} ({f.count})
+                              </button>
+                            );
+                          })}
                         </div>
-                      ))}
-                    </div>
 
-                    <p style={{ ...mono, fontSize: '0.7rem', color: MUTED, textAlign: 'center', margin: '14px 0 16px' }}>
-                      {scholars.filter(s => s.attendance_status).length} of {scholars.length} marked
-                    </p>
-                    <p style={{ ...body, fontSize: '0.72rem', color: MUTED, textAlign: 'center', marginBottom: 10 }}>
-                      Choose a status to save it immediately. Saved attendance cannot be changed.
-                    </p>
-                    {saveMsg && (
-                      <p role="status" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, textAlign: 'center', marginTop: 12, color: saveMsg.startsWith('Error') || saveMsg.startsWith('Walang') ? CLAY : SUCCESS }}>
-                        {saveMsg}
-                      </p>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center" style={{ background: BG, border: `1.5px dashed ${GOLD}88`, borderRadius: 12, padding: '40px 20px', marginTop: 18 }}>
-                    <ListChecks size={24} style={{ margin: '0 auto 12px', color: BORDER }} />
-                    <p style={{ ...body, fontSize: '0.85rem', fontWeight: 600, color: MUTED }}>Select a duty first</p>
-                    <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>to begin manual attendance.</p>
-                  </div>
-                )}
-              </div>
-
-              {/* RIGHT — scholar list with P / L / A / E controls and check-out */}
-              <div className="min-w-0" style={{ ...subCard, padding: 'clamp(14px, 3vw, 18px)' }}>
-                <SectionHead icon={Users} title="Scholar Roll Call" subtitle="Mark each scholar Present, Late or Absent" color={SUCCESS} />
-                {scholars.length === 0 ? (
-                  <div className="text-center" style={{ background: '#fff', border: `1.5px dashed ${GOLD}`, borderRadius: 12, padding: '56px 20px', marginTop: 16 }}>
-                    <Users size={26} style={{ margin: '0 auto 12px', color: BORDER }} />
-                    <p style={{ ...body, fontSize: '0.85rem', fontWeight: 600, color: MUTED }}>No scholars loaded</p>
-                    <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>Select a duty to see its scholars.</p>
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 14, maxHeight: 520, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 12, background: '#fff' }}>
-                    {filteredScholars.length === 0 ? (
-                      <div className="text-center" style={{ padding: '28px 16px' }}>
-                        <p style={{ ...body, fontSize: '0.8rem', color: MUTED }}>No results for "{searchQuery}"</p>
-                      </div>
-                    ) : filteredScholars.map(s => {
-                      const status = attendance[s.scholar_id];
-                      const isMakeup = Number(s.is_makeup) === 1;
-                      const isCheckedOut = Boolean(s.check_out_at);
-                      const isAttendanceSaved = Boolean(s.attendance_status);
-                      return (
-                        <div key={s.scholar_id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2" style={{ padding: '10px 14px', borderBottom: `1px solid ${BORDER}` }}>
-                          <div className="flex items-center gap-3 min-w-0 flex-1" style={{ minWidth: 200 }}>
-                            <span style={{ width: 30, height: 30, borderRadius: '50%', background: BG, color: MUTED, ...body, fontSize: '0.6rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              {initials(s.full_name)}
-                            </span>
-                            <div className="min-w-0">
-                              <p style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: INK }} className="truncate">{s.full_name}</p>
-                              <p style={{ ...mono, fontSize: '0.64rem', color: MUTED }}>
-                                {s.scholar_id}{isMakeup ? ' · Make-up' : ''}
-                              </p>
-                              <p style={{ ...mono, fontSize: '0.62rem', color: MUTED, marginTop: 2 }}>
-                                In {formatAttendanceTime(s.marked_at)}
+                        {/* Table */}
+                        <div className="da-list" style={{ marginTop: 14 }}>
+                          {rosterRows.length === 0 ? (
+                            <div className="text-center" style={{ padding: '36px 16px' }}>
+                              <p style={{ ...body, fontSize: '0.8rem', color: MUTED }}>
+                                {rosterSearch.trim() ? `No scholars match "${rosterSearch}".` : 'No scholars in this status.'}
                               </p>
                             </div>
-                          </div>
+                          ) : (
+                            <>
+                            <div className="hidden md:block" style={{ overflowX: 'auto' }}>
+                              <table style={{ width: '100%', minWidth: 600, borderCollapse: 'collapse' }}>
+                                <thead>
+                                  <tr>
+                                    <th scope="col" style={{ ...thStyle, width: 40 }}>#</th>
+                                    <th scope="col" style={thStyle}>Scholar</th>
+                                    <th scope="col" style={thStyle}>Year level</th>
+                                    <th scope="col" style={thStyle}>Time in</th>
+                                    <th scope="col" style={thStyle}>Time out</th>
+                                    <th scope="col" style={thStyle}>Status</th>
+                                    <th scope="col" style={thStyle}>Make-up</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {pagedRows.map((s, i) => {
+                                    const hasTime = (s.attendance_status === 'present' || s.attendance_status === 'late') && s.marked_at;
+                                    const checked = s.attendance_status === 'present' || s.attendance_status === 'late';
+                                    return (
+                                      <tr key={s.scholar_id} className="da-tr">
+                                        <td style={{ ...tdStyle, color: MUTED }}>{pageStart + i + 1}</td>
+                                        <td style={{ ...tdStyle, minWidth: 190 }}>
+                                          <div className="flex items-center gap-3 min-w-0">
+                                            <span style={{ width: 34, height: 34, borderRadius: '50%', background: checked ? `${MAROON}12` : BG, color: checked ? MAROON : MUTED, border: checked ? `1px solid ${MAROON}26` : `1px solid ${BORDER}`, ...body, fontSize: '0.64rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                              {initials(s.full_name)}
+                                            </span>
+                                            <div className="min-w-0">
+                                              <p style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: checked ? INK : MUTED }} className="truncate">{s.full_name}</p>
+                                              <p style={{ ...mono, fontSize: '0.64rem', color: MUTED }}>{s.scholar_id}</p>
+                                            </div>
+                                          </div>
+                                        </td>
+                                        <td style={{ ...tdStyle, color: MUTED, whiteSpace: 'nowrap' }}>{s.year_level ? formatYearLevelLabel(s.year_level) : '—'}</td>
+                                        <td style={{ ...tdStyle, ...mono, fontSize: '0.72rem', color: MUTED, whiteSpace: 'nowrap' }}>
+                                          {hasTime ? formatAttendanceTime(s.marked_at) : '—'}
+                                        </td>
+                                        <td style={{ ...tdStyle, ...mono, fontSize: '0.72rem', color: MUTED, whiteSpace: 'nowrap' }}>
+                                          {formatAttendanceTime(s.check_out_at)}
+                                        </td>
+                                        <td style={tdStyle}><StatusBadge status={s.attendance_status} checkedOut={Boolean(s.check_out_at)} /></td>
+                                        <td style={{ ...tdStyle, color: MUTED }}>{Number(s.is_makeup) === 1 ? 'Make-up' : '—'}</td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            </div>
 
-                          <div className="flex flex-wrap items-center justify-end gap-2" style={{ marginLeft: 'auto' }}>
-                            {isCheckedOut && (
-                              <span className="inline-flex items-center gap-1" style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: MAROON, background: `${MAROON}12`, borderRadius: 999, padding: '4px 10px', whiteSpace: 'nowrap' }}>
-                                <LogOut size={11} /> Checked out
-                              </span>
-                            )}
-
-                            <div className="flex gap-1.5">
-                              {STATUS_STAMPS.map(stamp => {
-                                const active = status === stamp.key;
-                                const isSaving = savingScholarId === s.scholar_id;
-                                const disabled = manualCheckInLocked || isAttendanceSaved || isCheckedOut || Boolean(savingScholarId);
+                            {/* Mobile: one card per scholar */}
+                            <div className="md:hidden">
+                              {pagedRows.map((s) => {
+                                const checked = s.attendance_status === 'present' || s.attendance_status === 'late';
+                                const hasTime = checked && s.marked_at;
                                 return (
-                                  <button
-                                    key={stamp.key}
-                                    type="button"
-                                    onClick={() => setScholarStatus(s.scholar_id, stamp.key)}
-                                    disabled={disabled}
-                                    title={stamp.label}
-                                    aria-label={`Mark ${s.full_name} ${stamp.label}`}
-                                    aria-pressed={active}
-                                    className="flex items-center gap-1"
-                                    style={{
-                                      padding: '5px 8px', borderRadius: 8,
-                                      border: `1.5px solid ${active ? stamp.color : BORDER}`,
-                                      background: active ? stamp.color : 'transparent',
-                                      color: active ? '#fff' : MUTED,
-                                      ...body, fontSize: '0.66rem', fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer',
-                                      opacity: disabled ? 0.55 : 1,
-                                    }}
-                                  >
-                                    {isSaving ? '…' : <>{stamp.icon} {stamp.short}</>}
-                                  </button>
+                                  <div key={s.scholar_id} className="da-row">
+                                    <div className="flex items-start justify-between gap-3">
+                                      <div className="flex items-center gap-3 min-w-0">
+                                        <span style={{ width: 34, height: 34, borderRadius: '50%', background: checked ? `${MAROON}12` : BG, color: checked ? MAROON : MUTED, border: checked ? `1px solid ${MAROON}26` : `1px solid ${BORDER}`, ...body, fontSize: '0.64rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                          {initials(s.full_name)}
+                                        </span>
+                                        <div className="min-w-0">
+                                          <p style={{ ...body, fontSize: '0.84rem', fontWeight: 600, color: checked ? INK : MUTED }} className="truncate">{s.full_name}</p>
+                                          <p style={{ ...mono, fontSize: '0.64rem', color: MUTED }}>{s.scholar_id}</p>
+                                        </div>
+                                      </div>
+                                      <StatusBadge status={s.attendance_status} checkedOut={Boolean(s.check_out_at)} />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3" style={{ marginTop: 10 }}>
+                                      <MetaCell label="Time in" value={hasTime ? formatAttendanceTime(s.marked_at) : '—'} />
+                                      <MetaCell label="Time out" value={formatAttendanceTime(s.check_out_at)} />
+                                      <MetaCell label="Year level" value={s.year_level ? formatYearLevelLabel(s.year_level) : '—'} />
+                                      <MetaCell label="Make-up" value={Number(s.is_makeup) === 1 ? 'Make-up' : '—'} />
+                                    </div>
+                                  </div>
                                 );
                               })}
                             </div>
-                            {isAttendanceSaved && (
-                              <span style={{ ...body, fontSize: '0.65rem', fontWeight: 700, color: SUCCESS, whiteSpace: 'nowrap' }}>
-                                Attendance saved
-                              </span>
+                            </>
+                          )}
+                        </div>
+
+                        {/* Pagination (client-side over the loaded roster) */}
+                        {rosterRows.length > 0 && (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" style={{ marginTop: 14 }}>
+                            <p style={{ ...body, fontSize: '0.74rem', color: MUTED }}>
+                              Showing {pageStart + 1} – {Math.min(pageStart + ROSTER_PAGE_SIZE, rosterRows.length)} of {rosterRows.length} scholars
+                            </p>
+                            {totalPages > 1 && (
+                              <nav aria-label="Roster pages" className="flex items-center gap-1.5 flex-wrap">
+                                <button type="button" aria-label="Previous page" disabled={currentPage === 1} onClick={() => setRosterPage(currentPage - 1)}
+                                  style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', color: MAROON, cursor: currentPage === 1 ? 'not-allowed' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1 }}>‹</button>
+                                {Array.from({ length: totalPages }, (_, idx) => idx + 1).map(n => (
+                                  <button key={n} type="button" aria-label={`Page ${n}`} aria-current={n === currentPage ? 'page' : undefined} onClick={() => setRosterPage(n)}
+                                    style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${n === currentPage ? MAROON : BORDER}`, background: n === currentPage ? MAROON : '#fff', color: n === currentPage ? '#fff' : INK, ...body, fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer' }}>{n}</button>
+                                ))}
+                                <button type="button" aria-label="Next page" disabled={currentPage === totalPages} onClick={() => setRosterPage(currentPage + 1)}
+                                  style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${BORDER}`, background: '#fff', color: MAROON, cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1 }}>›</button>
+                              </nav>
                             )}
                           </div>
-                        </div>
-                      );
-                    })}
+                        )}
+                      </>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* ═════════ CHECK-OUT TAB ═════════ */}
-          {subTab === 'checkout' && (
-            <div id="panel-checkout" role="tabpanel" aria-labelledby="tab-checkout" className="grid grid-cols-1 xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-4 items-start">
-
-              {/* LEFT — pick the duty, see the rules and the totals */}
-              <div className="min-w-0" style={{ ...subCard, padding: 'clamp(14px, 3vw, 18px)' }}>
-                <SectionHead icon={LogOut} title="Manual Check-Out" subtitle="Record when scholars leave after their duty." />
-                <div style={{ marginTop: 14 }}>
-                  <span style={fieldLabel}>Select duty</span>
-                  {dutySelect(outDuty, loadOutScholars, 'Select duty for check-out', undefined, manualDuties)}
                 </div>
-
-                <div style={{ marginTop: 14, background: BG, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 14px' }}>
-                  <p style={{ ...mono, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.06em', color: GOLD }}>HOW CHECK-OUT WORKS</p>
-                  <ol style={{ ...body, fontSize: '0.76rem', color: INK, margin: '8px 0 0', paddingLeft: 18, lineHeight: 1.6 }}>
-                    <li>The scholar must already be checked in (Present or Late).</li>
-                    <li>Check-out opens when the scheduled duty ends.</li>
-                    <li>For a make-up duty, it opens one hour after the scheduled end.</li>
-                    <li>If not manually checked out, it is recorded automatically 15 minutes after check-out opens, using the scheduled check-out time.</li>
-                    <li>Manual check-out closes two hours after the scheduled duty end.</li>
-                  </ol>
-                </div>
-
-                {selectedOutDuty && (
-                  <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '10px 12px', borderRadius: 9, ...body, fontSize: '0.76rem', fontWeight: 600,
-                    border: `1px solid ${outIsLocked ? CLAY : outIsOpen ? SUCCESS : AMBER}55`, background: outIsLocked ? CLAY_BG : outIsOpen ? SUCCESS_BG : AMBER_BG, color: outIsLocked ? CLAY : outIsOpen ? SUCCESS : AMBER }}>
-                    {outIsLocked ? <AlertCircle size={15} /> : outIsOpen ? <CheckCircle2 size={15} /> : <Clock size={15} />}
-                    {outIsLocked
-                      ? 'The manual check-out window is closed.'
-                      : outIsOpen
-                        ? `Check-out is open. Any remaining check-ins will be automatically checked out after 15 minutes.`
-                      : `Check-out opens at ${outOpensAt !== null ? formatAttendanceTime(outOpensAt) : 'the end of the duty'}.`}
-                  </div>
-                )}
-
-                {outLoading ? (
-                  <div className="animate-pulse space-y-3" style={{ marginTop: 18 }}>
-                    <div style={{ background: `${BORDER}88`, height: 40, borderRadius: 8 }} />
-                    <div style={{ background: `${BORDER}88`, height: 60, borderRadius: 8 }} />
-                  </div>
-                ) : outCheckedIn.length > 0 && (
-                  <div className="grid grid-cols-3 gap-2" style={{ marginTop: 16 }}>
-                    {[
-                      { label: 'Checked in',  count: outCheckedIn.length,                 color: SUCCESS },
-                      { label: 'Checked out', count: outDoneCount,                        color: MAROON },
-                      { label: 'Still inside', count: outCheckedIn.length - outDoneCount, color: AMBER },
-                    ].map(c => (
-                      <div key={c.label} className="text-center" style={{ background: `${c.color}12`, border: `1px solid ${c.color}30`, borderRadius: 8, padding: '10px 4px' }}>
-                        <p style={{ ...display, fontSize: '1.2rem', fontWeight: 700, color: c.color }}>{c.count}</p>
-                        <p style={{ ...body, fontSize: '0.66rem', fontWeight: 600, color: c.color, marginTop: 1 }}>{c.label}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {outFeedback && (
-                  <p role="status" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, textAlign: 'center', marginTop: 12, color: outFeedback.tone === 'error' ? CLAY : SUCCESS }}>
-                    {outFeedback.text}
-                  </p>
-                )}
               </div>
+            )}
 
-              {/* RIGHT — only scholars who are checked in appear here */}
-              <div className="min-w-0" style={{ ...subCard, padding: 'clamp(14px, 3vw, 18px)' }}>
-                <div className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between gap-3">
-                  <SectionHead icon={Users} title="Scholars to Check Out" subtitle="Scholars who are checked in for the selected duty" color={SUCCESS} />
-                  {outDuty && outCheckedIn.length > 0 && (
-                    <div className="flex items-center gap-2 w-full 2xl:w-auto">
-                      <div className="flex items-center gap-1.5 flex-1 2xl:flex-none" style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 999, padding: '7px 12px' }}>
-                        <Search size={13} style={{ color: MUTED, flexShrink: 0 }} />
-                        <input
-                          type="text"
-                          value={outSearch}
-                          onChange={e => setOutSearch(e.target.value)}
-                          placeholder="Search scholar name or ID…"
-                          aria-label="Search scholars to check out"
-                          className="min-w-0 flex-1 2xl:w-52 2xl:flex-none"
-                          style={{ border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.78rem', color: INK }}
-                        />
-                      </div>
-                      <button type="button" onClick={reloadOutScholars} aria-label="Refresh check-out list" style={{ background: 'none', border: 'none', color: MUTED, cursor: 'pointer', lineHeight: 0, padding: 6 }}>
-                        <RefreshCw size={15} className={outRefreshing ? 'animate-spin' : ''} />
-                      </button>
+            {/* ═════════ MANUAL CHECK-IN TAB ═════════ */}
+            {subTab === 'manual' && (
+              <div id="panel-manual" role="tabpanel" aria-labelledby="tab-manual" className="flex flex-col gap-4">
+                <div className="da-bar">
+                  <div style={{ flex: '1 1 280px', minWidth: 0 }}>
+                    <span style={fieldLabel}><CalendarClock size={13} style={{ color: GOLD }} /> Duty schedule</span>
+                    {dutySelect(manualDuty, loadScholars, 'Select duty for manual check-in', undefined, manualDuties)}
+                  </div>
+                  {scholars.length > 0 && (
+                    <div style={{ flex: '1 1 240px', minWidth: 0 }}>
+                      <span style={fieldLabel}><Search size={13} style={{ color: GOLD }} /> Search scholar</span>
+                      {searchBox(searchQuery, e => setSearchQuery(e.target.value), 'Search scholar by name or ID')}
                     </div>
                   )}
                 </div>
 
-                {!outDuty ? (
-                  <div className="text-center" style={{ background: '#fff', border: `1.5px dashed ${GOLD}`, borderRadius: 12, padding: '56px 20px', marginTop: 16 }}>
-                    <LogOut size={26} style={{ margin: '0 auto 12px', color: BORDER }} />
-                    <p style={{ ...body, fontSize: '0.85rem', fontWeight: 600, color: MUTED }}>Select a duty first</p>
-                    <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>to see who can be checked out.</p>
-                  </div>
-                ) : outCheckedIn.length === 0 && !outLoading ? (
-                  <div className="text-center" style={{ background: '#fff', border: `1.5px dashed ${GOLD}`, borderRadius: 12, padding: '56px 20px', marginTop: 16 }}>
-                    <Users size={26} style={{ margin: '0 auto 12px', color: BORDER }} />
-                    <p style={{ ...body, fontSize: '0.85rem', fontWeight: 600, color: MUTED }}>No one is checked in yet</p>
-                    <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>Check scholars in first, by QR or in the Manual Check-In tab.</p>
-                  </div>
-                ) : (
-                  <div style={{ marginTop: 14, maxHeight: 520, overflowY: 'auto', border: `1px solid ${BORDER}`, borderRadius: 12, background: '#fff' }}>
-                    {outRows.length === 0 ? (
-                      <div className="text-center" style={{ padding: '28px 16px' }}>
-                        <p style={{ ...body, fontSize: '0.8rem', color: MUTED }}>No results for "{outSearch}"</p>
-                      </div>
-                    ) : outRows.map(s => {
-                      const isMakeup = Number(s.is_makeup) === 1;
-                      const opensAt = getDutyEndTimestamp(selectedOutDuty, isMakeup ? 1 : 0);
-                      const lockAt = getDutyEndTimestamp(selectedOutDuty, 2);
-                      const canCheckOut = currentTime > 0 && opensAt !== null && lockAt !== null
-                        && currentTime >= opensAt && currentTime < lockAt;
-                      const isOut = Boolean(s.check_out_at);
-                      const busy = checkingOutScholar === s.scholar_id;
-                      return (
-                        <div key={s.scholar_id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2" style={{ padding: '10px 14px', borderBottom: `1px solid ${BORDER}` }}>
-                          <div className="flex items-center gap-3 min-w-0 flex-1" style={{ minWidth: 200 }}>
-                            <span style={{ width: 30, height: 30, borderRadius: '50%', background: isOut ? `${MAROON}12` : BG, color: isOut ? MAROON : MUTED, ...body, fontSize: '0.6rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                              {initials(s.full_name)}
-                            </span>
-                            <div className="min-w-0">
-                              <p style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: INK }} className="truncate">{s.full_name}</p>
-                              <p style={{ ...mono, fontSize: '0.64rem', color: MUTED }}>{s.scholar_id}{isMakeup ? ' · Make-up' : ''}</p>
-                              <p style={{ ...mono, fontSize: '0.62rem', color: MUTED, marginTop: 2 }}>
-                                In {formatAttendanceTime(s.marked_at)} · Out {formatAttendanceTime(s.check_out_at)}
-                              </p>
-                            </div>
-                          </div>
+                <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: -4 }}>
+                  Choose a status to save it immediately. Saved attendance cannot be changed. Check-in after 15 minutes from the scheduled start is automatically recorded as Late. Check-out is done in the Manual check-out tab.
+                </p>
 
-                          <div className="flex items-center justify-end" style={{ marginLeft: 'auto' }}>
-                            {isOut ? (
-                              <span className="inline-flex items-center gap-1" style={{ ...body, fontSize: '0.68rem', fontWeight: 700, color: MAROON, background: `${MAROON}12`, borderRadius: 999, padding: '5px 12px', whiteSpace: 'nowrap' }}>
-                                <CheckCircle2 size={12} /> Checked out
-                              </span>
-                            ) : canCheckOut ? (
-                              <button
-                                type="button"
-                                onClick={() => checkOutScholar(s.scholar_id)}
-                                disabled={busy}
-                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, border: 'none', background: MAROON, color: '#fff', ...body, fontSize: '0.72rem', fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1, whiteSpace: 'nowrap' }}
-                              >
-                                <LogOut size={13} /> {busy ? 'Checking out…' : 'Check Out'}
-                              </button>
-                            ) : outIsLocked ? (
-                              <span className="inline-flex items-center gap-1" title="The manual check-out window closed two hours after the scheduled duty end." style={{ ...mono, fontSize: '0.64rem', color: MUTED, whiteSpace: 'nowrap' }}>
-                                <Clock size={12} /> Check-out locked
-                              </span>
-                            ) : null}
-                          </div>
-                        </div>
-                      );
-                    })}
+                {manualCheckInLocked && (
+                  <Banner tone="danger" icon={AlertCircle}>
+                    Manual check-in is locked three hours after the scheduled start. Use the Manual check-out tab when the duty ends.
+                  </Banner>
+                )}
+                {saveMsg && (
+                  <Banner tone={saveMsg.startsWith('Error') || saveMsg.startsWith('Walang') ? 'danger' : 'success'}>{saveMsg}</Banner>
+                )}
+
+                {manualLoading ? (
+                  <div className="animate-pulse space-y-3">
+                    <div style={{ background: `${BORDER}88`, height: 52, borderRadius: 12 }} />
+                    <div style={{ background: `${BORDER}88`, height: 220, borderRadius: 12 }} />
                   </div>
+                ) : scholars.length > 0 ? (
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                      <StatTile label="Present" value={scholarCounts.present} color={SUCCESS} />
+                      <StatTile label="Late" value={scholarCounts.late} color={AMBER} />
+                      <StatTile label="Absent" value={scholarCounts.absent} color={CLAY} />
+                      <StatTile label="Marked" value={`${scholars.filter(s => s.attendance_status).length}/${scholars.length}`} color={MAROON} />
+                    </div>
+
+                    <div className="da-card min-w-0">
+                      <SectionHead icon={Users} title="Scholar roll call" subtitle="Mark each scholar Present, Late or Absent" color={SUCCESS} />
+                      <div className="da-list" style={{ marginTop: 14, maxHeight: 560, overflowY: 'auto' }}>
+                        {filteredScholars.length === 0 ? (
+                          <div className="text-center" style={{ padding: '28px 16px' }}>
+                            <p style={{ ...body, fontSize: '0.8rem', color: MUTED }}>No results for "{searchQuery}"</p>
+                          </div>
+                        ) : filteredScholars.map(s => {
+                          const status = attendance[s.scholar_id];
+                          const isMakeup = Number(s.is_makeup) === 1;
+                          const isCheckedOut = Boolean(s.check_out_at);
+                          const isAttendanceSaved = Boolean(s.attendance_status);
+                          return (
+                            <div key={s.scholar_id} className="da-row flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                              <div className="flex items-center gap-3 min-w-0 flex-1" style={{ minWidth: 200 }}>
+                                <span style={{ width: 34, height: 34, borderRadius: '50%', background: isAttendanceSaved ? `${MAROON}12` : BG, color: isAttendanceSaved ? MAROON : MUTED, border: `1px solid ${isAttendanceSaved ? `${MAROON}26` : BORDER}`, ...body, fontSize: '0.64rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  {initials(s.full_name)}
+                                </span>
+                                <div className="min-w-0">
+                                  <p style={{ ...body, fontSize: '0.84rem', fontWeight: 600, color: INK }} className="truncate">{s.full_name}</p>
+                                  <p style={{ ...mono, fontSize: '0.64rem', color: MUTED }}>
+                                    {s.scholar_id}{isMakeup ? ' · Make-up' : ''}
+                                  </p>
+                                  <p style={{ ...mono, fontSize: '0.62rem', color: MUTED, marginTop: 2 }}>
+                                    In {formatAttendanceTime(s.marked_at)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="da-actions flex flex-wrap items-center justify-end gap-2" style={{ marginLeft: 'auto' }}>
+                                {isCheckedOut && (
+                                  <span className="inline-flex items-center gap-1" style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: MAROON, background: `${MAROON}12`, borderRadius: 999, padding: '4px 10px', whiteSpace: 'nowrap' }}>
+                                    <LogOut size={11} /> Checked out
+                                  </span>
+                                )}
+                                {isAttendanceSaved && (
+                                  <span style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: SUCCESS, whiteSpace: 'nowrap' }}>
+                                    Attendance saved
+                                  </span>
+                                )}
+
+                                <div className="da-seg" role="group" aria-label={`Attendance for ${s.full_name}`}>
+                                  {STATUS_STAMPS.map(stamp => {
+                                    const active = status === stamp.key;
+                                    const isSaving = savingScholarId === s.scholar_id;
+                                    const disabled = manualCheckInLocked || isAttendanceSaved || isCheckedOut || Boolean(savingScholarId);
+                                    return (
+                                      <button
+                                        key={stamp.key}
+                                        type="button"
+                                        onClick={() => setScholarStatus(s.scholar_id, stamp.key)}
+                                        disabled={disabled}
+                                        title={stamp.label}
+                                        aria-label={`Mark ${s.full_name} ${stamp.label}`}
+                                        aria-pressed={active}
+                                        className="da-seg-btn"
+                                        style={{
+                                          background: active ? stamp.color : 'transparent',
+                                          color: active ? '#fff' : MUTED,
+                                          cursor: disabled ? 'not-allowed' : 'pointer',
+                                          opacity: disabled && !active ? 0.5 : 1,
+                                        }}
+                                      >
+                                        {isSaving ? '…' : <>{stamp.icon} {stamp.short}</>}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <EmptyBlock icon={ListChecks} title="Select a duty first" hint="to begin manual attendance." pad={56} />
                 )}
               </div>
+            )}
+
+            {/* ═════════ CHECK-OUT TAB ═════════ */}
+            {subTab === 'checkout' && (
+              <div id="panel-checkout" role="tabpanel" aria-labelledby="tab-checkout" className="flex flex-col gap-4">
+                <div className="da-bar">
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <span style={fieldLabel}><CalendarClock size={13} style={{ color: GOLD }} /> Duty schedule</span>
+                    {dutySelect(outDuty, loadOutScholars, 'Select duty for check-out', undefined, manualDuties)}
+                  </div>
+                </div>
+
+                {selectedOutDuty && (
+                  <Banner tone={outIsLocked ? 'danger' : outIsOpen ? 'success' : 'warning'} icon={outIsLocked ? AlertCircle : outIsOpen ? CheckCircle2 : Clock}>
+                    {outIsLocked
+                      ? 'The manual check-out window is closed.'
+                      : outIsOpen
+                        ? 'Check-out is open. Any remaining check-ins will be automatically checked out after 15 minutes.'
+                        : `Check-out opens at ${outOpensAt !== null ? formatAttendanceTime(outOpensAt) : 'the end of the duty'}.`}
+                  </Banner>
+                )}
+                {outFeedback && (
+                  <Banner tone={outFeedback.tone === 'error' ? 'danger' : 'success'}>{outFeedback.text}</Banner>
+                )}
+
+                <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,4fr)_minmax(0,8fr)] gap-4 items-start">
+
+                  {/* LEFT — totals and the rules */}
+                  <div className="flex flex-col gap-4 min-w-0">
+                    {outLoading ? (
+                      <div className="animate-pulse" style={{ background: `${BORDER}88`, height: 120, borderRadius: 12 }} />
+                    ) : outCheckedIn.length > 0 && (
+                      <div className="grid grid-cols-3 xl:grid-cols-1 gap-2.5">
+                        <StatTile label="Checked in" value={outCheckedIn.length} color={SUCCESS} />
+                        <StatTile label="Checked out" value={outDoneCount} color={MAROON} />
+                        <StatTile label="Still inside" value={outCheckedIn.length - outDoneCount} color={AMBER} />
+                      </div>
+                    )}
+
+                    <div className="da-card">
+                      <SectionHead icon={LogOut} title="How check-out works" color={GOLD} />
+                      <ol style={{ ...body, fontSize: '0.78rem', color: INK, margin: '12px 0 0', paddingLeft: 18, lineHeight: 1.65 }}>
+                        <li>The scholar must already be checked in (Present or Late).</li>
+                        <li>Check-out opens when the scheduled duty ends.</li>
+                        <li>For a make-up duty, it opens one hour after the scheduled end.</li>
+                        <li>If not manually checked out, it is recorded automatically 15 minutes after check-out opens, using the scheduled check-out time.</li>
+                        <li>Manual check-out closes three hours after the scheduled duty end.</li>
+                      </ol>
+                    </div>
+                  </div>
+
+                  {/* RIGHT — only scholars who are checked in appear here */}
+                  <div className="da-card min-w-0">
+                    <div className="flex flex-col 2xl:flex-row 2xl:items-center 2xl:justify-between gap-3">
+                      <SectionHead icon={Users} title="Scholars to check out" subtitle="Scholars who are checked in for the selected duty" color={SUCCESS} />
+                      {outDuty && outCheckedIn.length > 0 && (
+                        <div className="flex items-center gap-2 w-full 2xl:w-auto">
+                          <div className="da-search flex-1 2xl:flex-none 2xl:w-64">
+                            <Search size={14} style={{ color: MUTED, flexShrink: 0 }} aria-hidden="true" />
+                            <input
+                              type="text"
+                              value={outSearch}
+                              onChange={e => setOutSearch(e.target.value)}
+                              placeholder="Search scholar name or ID…"
+                              aria-label="Search scholars to check out"
+                              style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.82rem', color: INK }}
+                            />
+                          </div>
+                          {iconBtn(reloadOutScholars, 'Refresh check-out list', outRefreshing)}
+                        </div>
+                      )}
+                    </div>
+
+                    {!outDuty ? (
+                      <div style={{ marginTop: 16 }}>
+                        <EmptyBlock icon={LogOut} title="Select a duty first" hint="to see who can be checked out." pad={56} />
+                      </div>
+                    ) : outCheckedIn.length === 0 && !outLoading ? (
+                      <div style={{ marginTop: 16 }}>
+                        <EmptyBlock icon={Users} title="No one is checked in yet" hint="Check scholars in first, by QR or in the Manual check-in tab." pad={56} />
+                      </div>
+                    ) : (
+                      <div className="da-list" style={{ marginTop: 14, maxHeight: 560, overflowY: 'auto' }}>
+                        {outRows.length === 0 ? (
+                          <div className="text-center" style={{ padding: '28px 16px' }}>
+                            <p style={{ ...body, fontSize: '0.8rem', color: MUTED }}>No results for "{outSearch}"</p>
+                          </div>
+                        ) : outRows.map(s => {
+                          const isMakeup = Number(s.is_makeup) === 1;
+                          const opensAt = getDutyEndTimestamp(selectedOutDuty, isMakeup ? 1 : 0);
+                          const lockAt = getDutyEndTimestamp(selectedOutDuty, 3);
+                          const canCheckOut = currentTime > 0 && opensAt !== null && lockAt !== null
+                            && currentTime >= opensAt && currentTime < lockAt;
+                          const isOut = Boolean(s.check_out_at);
+                          const busy = checkingOutScholar === s.scholar_id;
+                          return (
+                            <div key={s.scholar_id} className="da-row flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                              <div className="flex items-center gap-3 min-w-0 flex-1" style={{ minWidth: 200 }}>
+                                <span style={{ width: 34, height: 34, borderRadius: '50%', background: isOut ? `${MAROON}12` : BG, color: isOut ? MAROON : MUTED, border: `1px solid ${isOut ? `${MAROON}26` : BORDER}`, ...body, fontSize: '0.64rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                  {initials(s.full_name)}
+                                </span>
+                                <div className="min-w-0">
+                                  <p style={{ ...body, fontSize: '0.84rem', fontWeight: 600, color: INK }} className="truncate">{s.full_name}</p>
+                                  <p style={{ ...mono, fontSize: '0.64rem', color: MUTED }}>{s.scholar_id}{isMakeup ? ' · Make-up' : ''}</p>
+                                  <p style={{ ...mono, fontSize: '0.62rem', color: MUTED, marginTop: 2 }}>
+                                    In {formatAttendanceTime(s.marked_at)} · Out {formatAttendanceTime(s.check_out_at)}
+                                  </p>
+                                </div>
+                              </div>
+
+                              <div className="da-actions flex items-center justify-end" style={{ marginLeft: 'auto' }}>
+                                {isOut ? (
+                                  <span className="inline-flex items-center gap-1" style={{ ...body, fontSize: '0.68rem', fontWeight: 700, color: MAROON, background: `${MAROON}12`, borderRadius: 999, padding: '5px 12px', whiteSpace: 'nowrap' }}>
+                                    <CheckCircle2 size={12} /> Checked out
+                                  </span>
+                                ) : canCheckOut ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => checkOutScholar(s.scholar_id)}
+                                    disabled={busy}
+                                    className="da-hover"
+                                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '8px 16px', borderRadius: 10, border: 'none', background: MAROON, color: '#fff', ...body, fontSize: '0.74rem', fontWeight: 700, cursor: busy ? 'wait' : 'pointer', opacity: busy ? 0.6 : 1, whiteSpace: 'nowrap' }}
+                                  >
+                                    <LogOut size={13} /> {busy ? 'Checking out…' : 'Check out'}
+                                  </button>
+                                ) : outIsLocked ? (
+                                  <span className="inline-flex items-center gap-1" title="The manual check-out window closed three hours after the scheduled duty end." style={{ ...body, fontSize: '0.7rem', color: MUTED, whiteSpace: 'nowrap' }}>
+                                    <Clock size={12} /> Check-out locked
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ── Needs follow-up ── */}
+        <section className="mt-5 min-w-0" style={{ ...cardWrap, padding: 'clamp(14px, 3vw, 22px)' }}>
+          <div className="flex items-center gap-3" style={{ marginBottom: 14 }}>
+            <span className="flex items-center justify-center flex-shrink-0" style={{ width: 36, height: 36, borderRadius: 11, background: `${AMBER}18`, color: AMBER }}>
+              <UserX size={16} />
+            </span>
+            <div className="min-w-0">
+              <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: INK, margin: 0 }}>Needs follow-up</h2>
+              <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>Scholars with the most absences in attendance records.</p>
+            </div>
+          </div>
+          {followUp.length === 0 ? (
+            <div className="flex items-center gap-2" style={{ padding: 18, border: `1.5px dashed ${BORDER}`, borderRadius: 12, background: CARD, fontSize: '0.8rem', color: MUTED }}>
+              <Users size={16} style={{ color: GOLD }} /> No repeat absences found.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+              {followUp.map(s => (
+                <div key={`${s.name}-${s.scholarId}`} className="flex min-w-0 items-center gap-2.5" style={{ padding: 12, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12 }}>
+                  <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full" style={{ background: `${MAROON}12`, border: `1px solid ${MAROON}26`, ...body, fontSize: '0.68rem', fontWeight: 700, color: MAROON }}>
+                    {String(s.name).split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]).join('').toUpperCase() || '?'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate" style={{ ...body, fontSize: '0.82rem', fontWeight: 700, color: INK }}>{s.name}</p>
+                    <p className="truncate" style={{ ...mono, fontSize: '0.68rem', color: MUTED, marginTop: 2 }}>{s.scholarId}</p>
+                  </div>
+                  <span className="flex-shrink-0" style={{ ...body, fontSize: '0.7rem', fontWeight: 700, color: CLAY, background: `${CLAY}16`, borderRadius: 999, padding: '4px 10px' }}>{s.count}x absent</span>
+                </div>
+              ))}
             </div>
           )}
         </section>
 
+        {/* ── Make-up duty requests ── */}
         <section className="mt-5 min-w-0" style={{ ...cardWrap }}>
           <div className="flex flex-wrap items-center gap-3" style={{ padding: 'clamp(14px, 3vw, 20px)' }}>
             <div className="flex items-center justify-center flex-shrink-0" style={{ width: 42, height: 42, borderRadius: 12, background: `${CLAY}16`, color: CLAY }}>
               <AlertCircle size={18} />
             </div>
             <div className="min-w-0 flex-1">
-              <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: MAROON }}>Make-up Duty Requests</h2>
+              <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: INK }}>Make-up duty requests</h2>
               <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 3 }}>
                 Absent attendance awaiting an admin-assigned make-up duty.
               </p>
@@ -1185,24 +1261,16 @@ const StaffDutyAttendance = () => {
             <span style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color: MAROON, background: `${MAROON}12`, borderRadius: 999, padding: '5px 10px' }}>
               {makeupSources.length} awaiting assignment
             </span>
-            <button
-              type="button"
-              onClick={() => fetchMakeupRequestData(true)}
-              aria-label="Refresh make-up duty requests"
-              disabled={makeupRefreshing}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8, border: `1px solid ${BORDER}`, borderRadius: 10, background: '#fff', color: MAROON, cursor: makeupRefreshing ? 'wait' : 'pointer' }}
-            >
-              <RefreshCw size={14} className={makeupRefreshing ? 'animate-spin' : ''} />
-            </button>
+            {iconBtn(() => fetchMakeupRequestData(true), 'Refresh make-up duty requests', makeupRefreshing)}
             <button
               type="button"
               onClick={() => setMakeupOpen(open => !open)}
               aria-expanded={makeupOpen}
               aria-controls="attendance-makeup-panel"
               aria-label={makeupOpen ? 'Collapse make-up duty requests' : 'Expand make-up duty requests'}
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 8, border: 'none', background: 'transparent', color: MAROON, cursor: 'pointer' }}
+              className="da-icon-btn"
             >
-              <ChevronDown size={19} style={{ transform: makeupOpen ? 'rotate(180deg)' : 'none', transition: 'transform 180ms ease' }} />
+              <ChevronDown size={18} style={{ transform: makeupOpen ? 'rotate(180deg)' : 'none', transition: 'transform 180ms ease' }} />
             </button>
           </div>
           {makeupOpen && (
@@ -1210,35 +1278,44 @@ const StaffDutyAttendance = () => {
               {makeupLoading ? (
                 <p style={{ ...body, fontSize: '0.8rem', color: MUTED }}>Loading make-up duty requests…</p>
               ) : makeupError ? (
-                <p role="alert" style={{ ...body, fontSize: '0.8rem', color: CLAY }}>{makeupError}</p>
+                <Banner tone="danger" icon={AlertCircle}>{makeupError}</Banner>
               ) : makeupSources.length === 0 ? (
-                <p style={{ ...body, fontSize: '0.8rem', color: MUTED, textAlign: 'center', padding: '20px 12px', background: BG, borderRadius: 10 }}>
-                  No absent scholars are awaiting a make-up duty assignment.
-                </p>
+                <EmptyBlock icon={CheckCircle2} title="Nothing awaiting assignment" hint="No absent scholars are waiting for a make-up duty." pad={32} />
               ) : (
                 <>
                   <p className="mb-4" style={{ ...body, fontSize: '0.76rem', color: MUTED }}>
                     These absences were recorded for your assigned groups. Admin chooses and assigns the make-up duty.
                   </p>
-                  <div className="overflow-x-auto" style={{ border: `1px solid ${BORDER}`, borderRadius: 10, background: '#fff' }}>
+                  <div className="da-list hidden md:block overflow-x-auto">
                     <table style={{ width: '100%', minWidth: 560, borderCollapse: 'collapse' }}>
                       <thead>
                         <tr>
-                          <th scope="col" style={{ ...body, fontSize: '0.68rem', textAlign: 'left', color: MUTED, padding: '10px 12px', background: BG }}>Scholar</th>
-                          <th scope="col" style={{ ...body, fontSize: '0.68rem', textAlign: 'left', color: MUTED, padding: '10px 12px', background: BG }}>Missed Duty</th>
-                          <th scope="col" style={{ ...body, fontSize: '0.68rem', textAlign: 'left', color: MUTED, padding: '10px 12px', background: BG }}>Status</th>
+                          <th scope="col" style={thStyle}>Scholar</th>
+                          <th scope="col" style={thStyle}>Missed duty</th>
+                          <th scope="col" style={thStyle}>Status</th>
                         </tr>
                       </thead>
                       <tbody>
                         {makeupSources.map(source => (
-                          <tr key={`${source.scholar_id}-${source.source_duty_id}`}>
-                            <td style={{ ...body, fontSize: '0.78rem', color: INK, padding: '11px 12px', borderTop: `1px solid ${BORDER}` }}>{source.scholar_name}</td>
-                            <td style={{ ...body, fontSize: '0.78rem', color: INK, padding: '11px 12px', borderTop: `1px solid ${BORDER}` }}>{source.source_duty_title}</td>
-                            <td style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color: CLAY, padding: '11px 12px', borderTop: `1px solid ${BORDER}`, textTransform: 'capitalize' }}>{source.source_status}</td>
+                          <tr key={`${source.scholar_id}-${source.source_duty_id}`} className="da-tr">
+                            <td style={tdStyle}>{source.scholar_name}</td>
+                            <td style={tdStyle}>{source.source_duty_title}</td>
+                            <td style={{ ...tdStyle, fontSize: '0.72rem', fontWeight: 700, color: CLAY, textTransform: 'capitalize' }}>{source.source_status}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="da-list md:hidden">
+                    {makeupSources.map(source => (
+                      <div key={`m-${source.scholar_id}-${source.source_duty_id}`} className="da-row">
+                        <div className="flex items-start justify-between gap-3">
+                          <p style={{ ...body, fontSize: '0.84rem', fontWeight: 600, color: INK }}>{source.scholar_name}</p>
+                          <span style={{ ...body, fontSize: '0.68rem', fontWeight: 700, color: CLAY, background: CLAY_BG, borderRadius: 999, padding: '3px 10px', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{source.source_status}</span>
+                        </div>
+                        <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 4 }}>Missed: {source.source_duty_title}</p>
+                      </div>
+                    ))}
                   </div>
                 </>
               )}
@@ -1246,6 +1323,90 @@ const StaffDutyAttendance = () => {
           )}
         </section>
       </div>
+
+      <style>{`
+        .da-hub { width: 100%; min-height: 100vh; overflow-x: hidden; }
+        .da-inner { box-sizing: border-box; padding: 16px 16px 48px; width: 100%; max-width: none; margin: 0; }
+        @media (min-width: 640px) { .da-inner { padding: 24px 24px 48px; } }
+        @media (min-width: 1024px) { .da-inner { padding: 32px 32px 48px; } }
+
+        .da-hub button:focus-visible, .da-hub input:focus-visible, .da-hub select:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
+
+        /* Same class names as the other Staff pages. :where() keeps these at zero specificity,
+           so the shared staff-page-* styles win whenever they are loaded. */
+        :where(.staff-page-eyebrow) { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; color: ${GOLD}; }
+        :where(.staff-page-title) { font-family: 'Lora', Georgia, 'Times New Roman', serif; font-size: clamp(1.6rem, 4vw, 2rem); font-weight: 700; color: ${MAROON}; line-height: 1.15; margin-top: 3px; }
+        :where(.staff-page-description) { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 0.9rem; color: ${MUTED}; margin-top: 6px; line-height: 1.55; }
+
+        /* Tabs: underline style, scrolls sideways on small screens */
+        .da-tabs { display: flex; width: 100%; border-bottom: 1px solid ${BORDER}; overflow: hidden; background: #FCFAF5; }
+        .da-tab {
+          flex: 1 1 0; min-width: 0; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+          padding: 16px 10px; margin-bottom: -1px; border: none; border-bottom: 2px solid transparent; background: none;
+          font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 0.86rem; font-weight: 600; color: ${MUTED}; cursor: pointer;
+          transition: color 150ms ease, border-color 150ms ease, background-color 150ms ease;
+        }
+        .da-tab:hover { color: ${MAROON}; background: ${BG}66; }
+        .da-tab-active { color: ${MAROON}; border-bottom-color: ${MAROON}; font-weight: 700; background: ${CARD}; }
+        .da-tab-short { display: none; }
+        @media (max-width: 639px) {
+          .da-tab { flex-direction: column; gap: 4px; padding: 10px 4px 11px; font-size: 0.7rem; }
+          .da-tab-long { display: none; }
+          .da-tab-short { display: inline; }
+        }
+        .da-body { padding: clamp(14px, 3vw, 22px); }
+
+        /* Duty bar + cards */
+        .da-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 14px; padding: clamp(12px, 2.5vw, 16px); background: ${BG}; border: 1px solid ${BORDER}; border-radius: 14px; }
+        .da-card { background: ${CARD}; border: 1px solid ${BORDER}; border-radius: 14px; padding: clamp(14px, 3vw, 18px); }
+        .da-select {
+          padding-right: 34px !important;
+          background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238A7A68' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+          background-repeat: no-repeat; background-position: right 12px center;
+        }
+        .da-search { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #fff; border: 1px solid ${BORDER}; border-radius: 10px; }
+        .da-search:focus-within { border-color: ${GOLD}; }
+        .da-icon-btn { display: flex; align-items: center; justify-content: center; width: 36px; height: 36px; flex-shrink: 0; border: 1px solid ${BORDER}; border-radius: 10px; background: #fff; color: ${MAROON}; cursor: pointer; }
+        .da-icon-btn:hover { background: ${BG}; }
+        .da-hover { transition: opacity 160ms ease; }
+        .da-hover:hover:not(:disabled) { opacity: 0.9; }
+
+        /* QR */
+        .da-qr-frame { display: flex; align-items: center; justify-content: center; padding: 20px; background: #fff; border: 1.5px dashed ${GOLD}; border-radius: 14px; }
+        .da-info { margin-top: 10px; border-top: 1px solid ${BORDER}; }
+        .da-info-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid ${BORDER}; font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 0.8rem; color: ${INK}; }
+
+        /* Lists and tables: one bordered block, hairline dividers */
+        .da-list { background: #fff; border: 1px solid ${BORDER}; border-radius: 14px; overflow: hidden; }
+        .da-row { padding: 11px 14px; border-bottom: 1px solid ${BORDER}; transition: background-color 150ms ease; }
+        .da-row:last-child { border-bottom: none; }
+        .da-row:hover { background: #FCFAF5; }
+        .da-tr:hover td { background: #FCFAF5; }
+        .da-tr:last-child td { border-bottom: none; }
+
+        /* Segmented P / L / A control */
+        .da-seg { display: inline-flex; border: 1px solid ${BORDER}; border-radius: 10px; overflow: hidden; background: #fff; }
+        .da-seg-btn { display: inline-flex; align-items: center; gap: 4px; padding: 7px 12px; border: none; border-right: 1px solid ${BORDER}; font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 0.7rem; font-weight: 700; }
+        .da-seg-btn:last-child { border-right: none; }
+
+        .da-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; background: #fff; border: 1.5px dashed ${BORDER}; border-radius: 14px; }
+        .da-empty-icon { width: 48px; height: 48px; border-radius: 14px; background: ${GOLD}18; color: ${GOLD}; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+
+        @media (max-width: 639px) {
+          .da-bar { padding: 12px; gap: 12px; }
+          .da-card { padding: 14px 12px; }
+          .da-actions { width: 100%; margin-left: 0 !important; justify-content: space-between; }
+          .da-seg { width: 100%; }
+          .da-seg-btn { flex: 1; justify-content: center; padding: 9px 12px; }
+          .da-actions > .da-hover { flex: 1; justify-content: center; }
+          .da-qr-frame { padding: 14px; }
+          .da-qr-frame svg { max-width: 100%; height: auto; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .da-hub * { transition: none !important; animation-duration: 0.01ms !important; }
+        }
+      `}</style>
     </div>
   );
 };

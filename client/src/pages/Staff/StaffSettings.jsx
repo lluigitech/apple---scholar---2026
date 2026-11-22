@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
-  User, Mail, IdCard, ShieldCheck, Lock, KeyRound, Bell, CalendarDays, Settings,
-  Eye, EyeOff, CheckCircle2, AlertTriangle, Save, Check, Circle, Megaphone, ClipboardList, X,
-  QrCode, FileCheck, Undo2, RefreshCw, Activity,
-  SlidersHorizontal, Rows3, ListFilter,
+  User, Mail, IdCard, ShieldCheck, Lock, KeyRound, Bell,
+  SlidersHorizontal, ListFilter, Rows3, Rows2, Eye, EyeOff, CheckCircle2, AlertTriangle, Save, X, Check, Circle,
+  Megaphone, ClipboardList, QrCode, FileCheck, Undo2, Activity, RefreshCw,
 } from 'lucide-react';
 // TODO: i-adjust ang path na ito kung saan talaga naka-define ang API_BASE at authHeaders sa Staff side.
 import { API_BASE, authHeaders } from '../../components/Officer/Reports/ReportsHelpers';
@@ -16,15 +15,16 @@ import {
 } from '../../utils/staffWorkPreferences';
 import { getPasswordRequirementError, hasRequiredPasswordSymbol, isValidPassword, MIN_PASSWORD_LENGTH } from '../../utils/passwordPolicy';
 
-/* ───────── CONTRACT (assumed — hindi ko ma-inspect ang project mo; i-verify sa backend) ─────────
+/* ───────── CONTRACT (assumed — i-verify sa backend) ─────────
  * Relative sa API_BASE, gamit ang authHeaders() (Bearer token). Identity galing sa token sa server.
  * GET  /staff/profile -> { full_name, email, staff_id?, role, status? }
- * PUT  /staff/profile body { full_name, email }  (walang role/status/staff_id)
+ * PUT  /staff/profile body { full_name, email, currentPassword }
  * POST /staff/change-password body { current_password, new_password }
+ * POST /staff/settings/verify-password body { currentPassword }
  * GET/PUT /staff/settings/notifications -> { announcements, task_assignments, duty_attendance,
  *          submission_updates, makeup_requests, system_updates } (booleans)
  * Kapag 404/405 ang notifications endpoint -> local-only preferences (localStorage).
- * Kapag walang PUT /staff/profile, gawing false ang PROFILE_EDITABLE para read-only.
+ * Work Preferences: browser-only (localStorage).
  */
 const PROFILE_PATH = '/staff/profile';
 const PASSWORD_PATH = '/staff/change-password';
@@ -33,14 +33,24 @@ const VERIFY_PASSWORD_PATH = '/staff/settings/verify-password';
 const NOTIF_LOCAL_KEY = 'staff_notification_preferences';
 const PROFILE_EDITABLE = true;
 
+// ── Apple Scholar design system — same tokens as Officer Settings ──
+const PRIMARY = '#6D2140';
+const GOLD = '#A9784E';
+const BG = '#F7F4EE';
+const SURFACE = '#FFFDF9';
+const BORDER = '#E7D8C7';
+const INK = '#241512';
+const MUTED = '#8A7A68';
+const SUCCESS = '#3F8A55';
+const WARNING = '#B8863F';
+const DANGER = '#C1666B';
+const SAND = '#F1E8DA';
+const RADIUS = 16;
+const SHADOW = '0 12px 28px -20px rgba(36,21,18,0.22)';
 
-// ── Staff tokens ──
-const BG = '#F7F4EE', SURFACE = '#FFFDF9', BORDER = '#E7D8C7', PRIMARY = '#6D2140', DEEP = '#4A1730';
-const BRONZE = '#A9784E', SUCCESS = '#6B8F71', WARNING = '#C08A3E', DANGER = '#C0473F', INK = '#241512', MUTED = '#8A7A68';
-const BLUSH = '#F3EAE2';
-const serif = { fontFamily: "'Playfair Display', serif" };
-const sans = { fontFamily: "'Inter', sans-serif" };
-const tile = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 16, boxShadow: '0 8px 20px -16px rgba(36,21,18,0.35)' };
+const display = { fontFamily: "'Lora', Georgia, 'Times New Roman', serif" };
+const sans = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
+const card = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, boxShadow: SHADOW };
 
 const NOTIF_EVENTS = [
   { key: 'announcements', label: 'Announcements', note: 'New announcements posted to staff.', icon: Megaphone },
@@ -64,52 +74,63 @@ const classify = (err) => {
   return { kind: 'error', message: message || err?.message || 'Something went wrong. Please try again.' };
 };
 
-const initialsOf = (name = '') => name.trim().split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0].toUpperCase()).join('') || '?';
+const initialsOf = (name) => String(name || '?').split(/\s+/).filter(Boolean).map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
 
 // ── Small UI ──
 const inputBase = { ...sans, width: '100%', height: 40, padding: '0 12px 0 36px', border: `1px solid ${BORDER}`, borderRadius: 10, background: SURFACE, fontSize: '0.84rem', color: INK, outline: 'none' };
-const primaryBtn = (disabled) => ({ ...sans, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 38, padding: '0 16px', borderRadius: 10, border: 'none', background: PRIMARY, color: '#fff', fontSize: '0.78rem', fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1 });
-const ghostBtn = (disabled) => ({ ...sans, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 38, padding: '0 16px', borderRadius: 10, border: `1px solid ${PRIMARY}`, background: SURFACE, color: PRIMARY, fontSize: '0.78rem', fontWeight: 700, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1 });
-const linkBtn = { ...sans, fontSize: '0.74rem', fontWeight: 700, color: DANGER, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' };
+const primaryBtn = (disabled) => ({ ...sans, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 40, padding: '0 16px', borderRadius: 10, border: 'none', background: PRIMARY, color: '#fff', fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1 });
+const ghostBtn = (disabled) => ({ ...sans, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, minHeight: 40, padding: '0 16px', borderRadius: 10, border: `1px solid ${PRIMARY}`, background: '#fff', color: PRIMARY, fontSize: '0.78rem', fontWeight: 700, whiteSpace: 'nowrap', cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1 });
+const linkBtn = { ...sans, fontSize: '0.74rem', fontWeight: 700, color: DANGER, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', minHeight: 32 };
 
-const IconChip = ({ icon: Icon, size = 32 }) => (
-  <span className="inline-flex flex-shrink-0 items-center justify-center" style={{ width: size, height: size, borderRadius: 10, background: BLUSH, color: PRIMARY }}>
-    <Icon size={size * 0.5} strokeWidth={1.8} />
+const IconChip = ({ icon: Icon, size = 32, tone = PRIMARY }) => (
+  <span className="inline-flex flex-shrink-0 items-center justify-center rounded-full" style={{ width: size, height: size, background: `${tone}12`, color: tone }}>
+    <Icon size={Math.round(size * 0.48)} strokeWidth={1.8} />
   </span>
 );
 
-const Card = ({ id, icon: Icon, title, description, children, footer }) => (
-  <section id={id} className="flex min-w-0 flex-col" style={{ ...tile, padding: '18px 20px' }}>
-    <div className="flex items-start gap-3" style={{ marginBottom: 14 }}>
-      <IconChip icon={Icon} size={38} />
+const Card = ({ icon, title, description, children, className = '', footer, tone = GOLD }) => (
+  <section className={`flex min-w-0 flex-col ${className}`} style={{ ...card, padding: 'clamp(14px, 3vw, 22px)' }}>
+    <div className="flex items-start gap-3" style={{ marginBottom: 16 }}>
+      <IconChip icon={icon} size={34} tone={tone} />
       <div style={{ minWidth: 0 }}>
-        <h2 style={{ ...serif, fontSize: '1.08rem', fontWeight: 700, color: INK, lineHeight: 1.25 }}>{title}</h2>
-        {description && <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 2 }}>{description}</p>}
+        <h2 style={{ ...display, fontSize: '1.08rem', fontWeight: 700, color: INK, lineHeight: 1.25 }}>{title}</h2>
+        {description && <p style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>{description}</p>}
       </div>
     </div>
     <div className="flex-1">{children}</div>
-    {footer && <div className="flex flex-wrap items-center justify-end gap-2.5" style={{ marginTop: 14 }}>{footer}</div>}
+    {footer && (
+      <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap sm:items-center sm:justify-end" style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
+        {footer}
+      </div>
+    )}
   </section>
 );
 
 const Label = ({ htmlFor, children }) => (
-  <label htmlFor={htmlFor} style={{ ...sans, display: 'block', fontSize: '0.72rem', fontWeight: 600, color: '#6b5a52', marginBottom: 5 }}>{children}</label>
+  <label htmlFor={htmlFor} style={{ ...sans, display: 'block', fontSize: '0.7rem', fontWeight: 600, color: MUTED, marginBottom: 6 }}>{children}</label>
 );
 
 const IconInput = ({ id, icon: Icon, label, readOnly, error, children, ...rest }) => (
   <div style={{ minWidth: 0 }}>
     <Label htmlFor={id}>{label}</Label>
     <div style={{ position: 'relative' }}>
-      <Icon size={15} style={{ position: 'absolute', left: 12, top: 12.5, color: MUTED, pointerEvents: 'none' }} />
+      <Icon size={15} style={{ position: 'absolute', left: 12, top: 12.5, color: '#B8A999', pointerEvents: 'none' }} />
       {children || (
         <input id={id} className="ss-field" readOnly={readOnly} {...rest}
-          style={{ ...inputBase, background: readOnly ? BLUSH : SURFACE, color: readOnly ? '#6b6058' : INK, borderColor: error ? `${DANGER}99` : BORDER, paddingRight: readOnly ? 34 : 12 }}
-          aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined} />
+          style={{ ...inputBase, background: readOnly ? BG : SURFACE, color: readOnly ? MUTED : INK, borderColor: error ? `${DANGER}99` : BORDER, paddingRight: readOnly ? 34 : 12, textTransform: readOnly && id === 'ss-role' ? 'capitalize' : undefined }} aria-invalid={!!error} />
       )}
-      {readOnly && <Lock size={13} style={{ position: 'absolute', right: 12, top: 13.5, color: MUTED }} aria-label="Read-only" />}
+      {readOnly && <Lock size={13} style={{ position: 'absolute', right: 12, top: 13.5, color: '#B8A999' }} aria-label="Read-only" />}
     </div>
-    {error && <p id={`${id}-err`} style={{ ...sans, fontSize: '0.7rem', color: DANGER, marginTop: 4 }}>{error}</p>}
+    {error && <p style={{ ...sans, fontSize: '0.7rem', color: DANGER, marginTop: 4 }}>{error}</p>}
   </div>
+);
+
+const SelectInput = ({ id, icon, label, value, onChange, options, disabled }) => (
+  <IconInput id={id} icon={icon} label={label}>
+    <select id={id} className="ss-field" value={value} onChange={onChange} disabled={disabled} style={{ ...inputBase, cursor: 'pointer' }}>
+      {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
+  </IconInput>
 );
 
 const Banner = ({ tone, children, action }) => {
@@ -117,21 +138,21 @@ const Banner = ({ tone, children, action }) => {
   const Icon = tone === 'success' ? CheckCircle2 : AlertTriangle;
   return (
     <div role={tone === 'success' ? 'status' : 'alert'} className="flex items-center justify-between gap-3"
-      style={{ borderLeft: `3px solid ${color}`, background: `${color}0d`, borderRadius: '0 10px 10px 0', padding: '9px 12px', ...sans, fontSize: '0.78rem', fontWeight: 600, color }}>
-      <span className="flex items-center gap-2"><Icon size={14} className="flex-shrink-0" />{children}</span>
+      style={{ borderLeft: `3px solid ${color}`, background: `${color}0d`, borderRadius: 12, padding: '10px 14px', ...sans, fontSize: '0.78rem', fontWeight: 600, color }}>
+      <span className="flex items-start gap-2"><Icon size={14} className="flex-shrink-0" style={{ marginTop: 2 }} /><span>{children}</span></span>
       {action}
     </div>
   );
 };
 
 const Toggle = ({ checked, onChange, label, disabled }) => (
-  <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)} className="ss-btn"
-    style={{ width: 42, height: 24, borderRadius: 999, border: 'none', padding: 2, background: checked ? PRIMARY : BORDER, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1, transition: 'background 120ms', flexShrink: 0 }}>
+  <button type="button" role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={() => onChange(!checked)} className="ss-toggle"
+    style={{ width: 44, height: 26, borderRadius: 999, border: 'none', padding: 3, background: checked ? PRIMARY : BORDER, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1, transition: 'background 120ms', flexShrink: 0 }}>
     <span style={{ display: 'block', width: 20, height: 20, borderRadius: '50%', background: '#fff', transform: checked ? 'translateX(18px)' : 'translateX(0)', transition: 'transform 120ms', boxShadow: '0 1px 2px rgba(0,0,0,.25)' }} />
   </button>
 );
 
-const skeletons = (n, h) => <div className="space-y-3">{Array.from({ length: n }).map((_, i) => <div key={i} className="animate-pulse" style={{ height: h, borderRadius: 10, background: BLUSH }} />)}</div>;
+const skeletons = (n, h) => <div className="space-y-3">{Array.from({ length: n }).map((_, i) => <div key={i} className="animate-pulse" style={{ height: h, borderRadius: 10, background: '#EFE6D8' }} />)}</div>;
 
 // ─────────────────────────────────────────────────────────────
 const StaffSettings = () => {
@@ -159,6 +180,7 @@ const StaffSettings = () => {
   const [profileState, setProfileState] = useState('loading');
   const [profileMsg, setProfileMsg] = useState('');
   const [draft, setDraft] = useState({ full_name: '', email: '' });
+  const canEdit = PROFILE_EDITABLE;
 
   const loadProfile = useCallback(async () => {
     setProfileState('loading'); setProfileMsg('');
@@ -178,7 +200,10 @@ const StaffSettings = () => {
   const profileDirty = !!profile && (draft.full_name !== (profile.full_name || '') || draft.email !== (profile.email || ''));
   const emailValid = /^\S+@\S+\.\S+$/.test(draft.email.trim());
   const profileValid = draft.full_name.trim().length > 0 && emailValid;
+
   // ── Password change modal ──
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwDone, setPwDone] = useState(false);
   const [pw, setPw] = useState({ current: '', next: '', confirm: '' });
   const [showPw, setShowPw] = useState({ current: false, next: false, confirm: false });
   const [pwSaving, setPwSaving] = useState(false);
@@ -199,6 +224,11 @@ const StaffSettings = () => {
   };
   const pwReady = !!pw.current && isValidPassword(pw.next) && pw.next === pw.confirm && pw.next !== pw.current;
 
+  const closePw = useCallback(() => {
+    if (pwSaving) return;
+    setPwOpen(false); setPw({ current: '', next: '', confirm: '' }); setShowPw({ current: false, next: false, confirm: false }); setPwFeedback(null);
+  }, [pwSaving]);
+
   const savePassword = async () => {
     if (!pwReady || pwSaving) return;
     setPwSaving(true); setPwFeedback(null);
@@ -206,8 +236,7 @@ const StaffSettings = () => {
       await axios.post(`${API_BASE}${PASSWORD_PATH}`, { current_password: pw.current, new_password: pw.next }, authHeaders());
       setPw({ current: '', next: '', confirm: '' });
       setShowPw({ current: false, next: false, confirm: false });
-      setPwOpen(false);
-      setPwDone(true);
+      setPwOpen(false); setPwDone(true);
     } catch (e) {
       const c = classify(e);
       if (c.kind === 'auth') setAuthExpired(true);
@@ -221,18 +250,6 @@ const StaffSettings = () => {
   const [notifState, setNotifState] = useState('loading');
   const [notifLocal, setNotifLocal] = useState(false);
   const [notifMsg, setNotifMsg] = useState('');
-  const [workSaved, setWorkSaved] = useState(initialWorkPreferences.preferences);
-  const [workDraft, setWorkDraft] = useState(() => ({ ...initialWorkPreferences.preferences }));
-  const [workStorageError, setWorkStorageError] = useState(initialWorkPreferences.error);
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const [settingsFeedback, setSettingsFeedback] = useState(null);
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [confirmError, setConfirmError] = useState('');
-  const [confirmBusy, setConfirmBusy] = useState(false);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [pwOpen, setPwOpen] = useState(false);
-  const [pwDone, setPwDone] = useState(false);
-  const canEdit = PROFILE_EDITABLE;
 
   const loadNotifs = useCallback(async () => {
     setNotifState('loading'); setNotifMsg('');
@@ -248,11 +265,31 @@ const StaffSettings = () => {
         setNotifLocal(true); setNotifSaved(data); setNotifDraft(data); setNotifState('ready');
       } else { setNotifState('error'); setNotifMsg(c.message); }
     }
-  }, [setAuthExpired, setNotifDraft, setNotifLocal, setNotifMsg, setNotifSaved, setNotifState]);
+  }, []);
   const notifDirty = !!notifSaved && NOTIF_EVENTS.some(ev => notifDraft?.[ev.key] !== notifSaved[ev.key]);
 
+  // ── Work preferences (browser-only) ──
+  const [workSaved, setWorkSaved] = useState(initialWorkPreferences.preferences);
+  const [workDraft, setWorkDraft] = useState(() => ({ ...initialWorkPreferences.preferences }));
+  const [workStorageError, setWorkStorageError] = useState(initialWorkPreferences.error);
   const workDirty = Object.keys(DEFAULT_STAFF_WORK_PREFERENCES).some(key => workDraft[key] !== workSaved[key]);
+
+  // ── One save for every section ──
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsFeedback, setSettingsFeedback] = useState(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [confirmError, setConfirmError] = useState('');
+  const [confirmBusy, setConfirmBusy] = useState(false);
+
   const settingsDirty = (canEdit && profileDirty) || notifDirty || workDirty;
+  const cannotSave = (profileDirty && !profileValid) || settingsSaving || confirmBusy;
+  const resetAllSettings = () => {
+    if (profile) setDraft({ full_name: profile.full_name || '', email: profile.email || '' });
+    setWorkDraft(workSaved);
+    if (notifSaved) setNotifDraft(notifSaved);
+    setSettingsFeedback(null);
+  };
 
   const saveSettings = async (currentPassword) => {
     if (settingsSaving || !settingsDirty || (profileDirty && !profileValid)) return;
@@ -293,15 +330,13 @@ const StaffSettings = () => {
         }
       }));
 
+      const labelFor = key => ({ profile: 'Profile', notifications: 'Notification preferences', work: 'Work preferences' }[key]);
       const failures = [];
       outcomes.forEach(outcome => {
         if (outcome.error) {
           const classified = classify(outcome.error);
           if (classified.kind === 'auth') setAuthExpired(true);
-          const label = outcome.key === 'profile'
-            ? 'Profile'
-            : outcome.key === 'work' ? 'Work preferences' : 'Notification preferences';
-          failures.push(`${label}: ${classified.message}`);
+          failures.push(`${labelFor(outcome.key)}: ${classified.message}`);
           return;
         }
 
@@ -322,11 +357,6 @@ const StaffSettings = () => {
       });
 
       if (failures.length) {
-        const labelFor = key => ({
-          profile: 'Profile',
-          notifications: 'Notification preferences',
-          work: 'Work preferences',
-        }[key]);
         const successful = outcomes.filter(outcome => !outcome.error).map(outcome => labelFor(outcome.key));
         const failureMessage = failures.join(' ');
         setSettingsFeedback({
@@ -348,12 +378,12 @@ const StaffSettings = () => {
     }
   };
 
-  const closeSettingsConfirmation = () => {
+  const closeSettingsConfirmation = useCallback(() => {
     if (confirmBusy) return;
     setConfirmOpen(false);
     setConfirmPassword('');
     setConfirmError('');
-  };
+  }, [confirmBusy]);
 
   const confirmSettingsSave = async (event) => {
     event.preventDefault();
@@ -377,38 +407,33 @@ const StaffSettings = () => {
   };
 
   useEffect(() => {
-    if (!confirmOpen && !pwOpen) return undefined;
-    const onKeyDown = event => {
-      if (event.key === 'Escape' && !confirmBusy && !pwSaving) {
-        setConfirmOpen(false);
-        setConfirmPassword('');
-        setConfirmError('');
-        setPwOpen(false);
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [confirmOpen, pwOpen, confirmBusy, pwSaving]);
+    if (!confirmOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') closeSettingsConfirmation(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [confirmOpen, closeSettingsConfirmation]);
 
-  const closePasswordModal = () => {
-    if (pwSaving) return;
-    setPwOpen(false);
-    setPw({ current: '', next: '', confirm: '' });
-    setShowPw({ current: false, next: false, confirm: false });
-    setPwFeedback(null);
-  };
+  useEffect(() => {
+    if (!pwOpen) return undefined;
+    const onKey = (e) => { if (e.key === 'Escape') closePw(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [pwOpen, closePw]);
 
   useEffect(() => { loadProfile(); loadNotifs(); }, [loadProfile, loadNotifs]);
 
-  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
+  const densityOptions = [
+    { key: 'comfortable', title: 'Comfortable', note: 'Default spacing', icon: Rows3 },
+    { key: 'compact', title: 'Compact', note: 'Tighter spacing', icon: Rows2 },
+  ];
 
   const pwInput = (k, id, label, autoComplete, error) => (
     <IconInput id={id} icon={Lock} label={label} error={error}>
       <input id={id} className="ss-field" type={showPw[k] ? 'text' : 'password'} autoComplete={autoComplete} value={pw[k]}
         onChange={e => { setPw(p => ({ ...p, [k]: e.target.value })); setPwFeedback(null); }}
-        style={{ ...inputBase, paddingRight: 40, borderColor: error ? `${DANGER}99` : BORDER }} aria-invalid={!!error} aria-describedby={error ? `${id}-err` : undefined} />
-      <button type="button" className="ss-btn" onClick={() => setShowPw(s => ({ ...s, [k]: !s[k] }))} aria-label={showPw[k] ? `Hide ${label}` : `Show ${label}`}
-        style={{ position: 'absolute', right: 6, top: 0, height: 40, width: 32, background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}>
+        style={{ ...inputBase, paddingRight: 44, borderColor: error ? `${DANGER}99` : BORDER }} aria-invalid={!!error} />
+      <button type="button" onClick={() => setShowPw(s => ({ ...s, [k]: !s[k] }))} aria-label={showPw[k] ? `Hide ${label}` : `Show ${label}`} className="ss-btn"
+        style={{ position: 'absolute', right: 4, top: 0, height: 40, width: 38, background: 'none', border: 'none', cursor: 'pointer', color: MUTED }}>
         {showPw[k] ? <EyeOff size={15} /> : <Eye size={15} />}
       </button>
     </IconInput>
@@ -416,76 +441,97 @@ const StaffSettings = () => {
 
   const unsupported = (msg, what) => <Banner tone="warn">{msg} The {what} endpoint still needs to be added.</Banner>;
 
+  const displayName = profile?.full_name || localStorage.getItem('name') || 'Staff';
+
   return (
-    <div className="min-h-screen" style={{ background: BG, ...sans }}>
+    <div className="ss-page" style={{ background: BG, ...sans }}>
       <style>{`
-        .ss-field:focus { border-color: ${BRONZE} !important; box-shadow: 0 0 0 3px rgba(169,120,78,.15); }
-        .ss-btn:focus-visible { outline: 2px solid ${BRONZE}; outline-offset: 2px; }
+        .ss-page { width: 100%; min-height: 100vh; overflow-x: hidden; box-sizing: border-box; padding: 16px 16px 48px; }
+        @media (min-width: 640px) { .ss-page { padding: 24px 24px 48px; } }
+        @media (min-width: 1024px) { .ss-page { padding: 32px 32px 48px; } }
+
+        .ss-field:focus { border-color: ${PRIMARY} !important; box-shadow: 0 0 0 3px rgba(109,33,64,.10); }
+        .ss-btn:focus-visible, .ss-opt:focus-visible, .ss-toggle:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
+        .ss-opt { transition: background-color 150ms ease; }
+        .ss-opt:hover { background: ${SAND}; }
         .ss-nrow { border-top: 1px solid ${BORDER}; }
         .ss-nrow:first-child { border-top: none; }
         @media (min-width: 1024px) { .ss-nrow:nth-child(2) { border-top: none; } }
+
+        .ss-sheet { border-radius: 20px 20px 0 0; }
+        @media (min-width: 640px) { .ss-sheet { border-radius: 16px; } }
+
+        @media (max-width: 639px) {
+          /* 16px prevents iOS Safari from zooming in when a field is focused */
+          .ss-field { font-size: 16px !important; height: 44px !important; }
+          .ss-btn { min-height: 44px !important; }
+        }
+        @media (prefers-reduced-motion: reduce) { .ss-page * { transition: none !important; } }
       `}</style>
 
-      <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8" style={{ minWidth: 0 }}>
+      <div className="flex flex-col gap-5" style={{ minWidth: 0 }}>
 
-        {/* ── Header ── */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]">
-          <div className="relative overflow-hidden flex items-center gap-4" style={{ ...tile, padding: '22px 24px', background: `linear-gradient(135deg, ${SURFACE} 0%, ${BLUSH} 100%)` }}>
-            <span aria-hidden style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${PRIMARY}, ${BRONZE})` }} />
-            <IconChip icon={Settings} size={46} />
-            <div style={{ minWidth: 0 }}>
-              <p style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', color: BRONZE }}>STAFF PORTAL</p>
-              <h1 style={{ ...serif, fontSize: '1.75rem', fontWeight: 700, color: PRIMARY, marginTop: 4, lineHeight: 1.2 }}>Settings</h1>
-              <p style={{ ...sans, fontSize: '0.84rem', color: MUTED, marginTop: 6, maxWidth: 640 }}>Manage your account, security preferences, and notification settings.</p>
-            </div>
+        {/* ── Page header — same layout as the other portal pages ── */}
+        <header
+          className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
+          style={{ ...card, padding: 'clamp(14px, 3vw, 20px)' }}
+        >
+          <div className="min-w-0">
+            <p style={{ ...sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: GOLD }}>Staff Portal</p>
+            <h1 style={{ ...display, fontSize: 'clamp(1.6rem, 4vw, 2rem)', fontWeight: 700, color: PRIMARY, lineHeight: 1.15, marginTop: 3 }}>Settings</h1>
+            <p style={{ ...sans, fontSize: '0.9rem', color: MUTED, marginTop: 6, lineHeight: 1.55 }}>Manage your account, security, notifications, and work preferences.</p>
           </div>
-          <div className="flex items-center gap-3" style={{ ...tile, padding: '16px 24px' }}>
-            <span className="inline-flex flex-shrink-0 items-center justify-center" style={{ width: 42, height: 42, borderRadius: 12, background: `${PRIMARY}10` }}>
-              <CalendarDays size={19} style={{ color: PRIMARY }} />
-            </span>
-            <div>
-              <p style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>Today</p>
-              <p style={{ ...sans, fontSize: '0.92rem', fontWeight: 600, color: INK, whiteSpace: 'nowrap' }}>{todayLabel}</p>
-            </div>
-          </div>
-        </div>
+        </header>
 
         {authExpired && (
           <Banner tone="error" action={<button onClick={signInAgain} className="ss-btn" style={linkBtn}>Sign in again</button>}>
             Your sign-in session has expired or is invalid.
           </Banner>
         )}
-
         {pwDone && <Banner tone="success" action={<button onClick={() => setPwDone(false)} className="ss-btn" style={{ ...linkBtn, color: SUCCESS }}>Dismiss</button>}>Password updated.</Banner>}
 
-        {/* ── Account & Profile ── */}
-        <div className="grid grid-cols-1 gap-4">
-          <Card id="account" icon={User} title="Account & Profile" description={canEdit ? 'Update your name and email.' : 'Your account information.'}
-            footer={profileState === 'ready' && canEdit && (
-              <button type="button" className="ss-btn" disabled={!profileDirty || settingsSaving} onClick={() => { setDraft({ full_name: profile.full_name || '', email: profile.email || '' }); setSettingsFeedback(null); }} style={ghostBtn(!profileDirty || settingsSaving)}>Cancel</button>
-            )}>
-            {profileState === 'loading' && skeletons(4, 40)}
+        {/* ── Row 1: Staff Profile + Work Preferences ── */}
+        <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-2">
+          <Card icon={User} title="Staff Profile" description={canEdit ? 'Update your name and email.' : 'Your account information.'}>
+            {profileState === 'loading' && skeletons(3, 44)}
             {profileState === 'unsupported' && unsupported(profileMsg, 'profile')}
             {profileState === 'error' && <Banner tone="error" action={<button onClick={loadProfile} className="ss-btn" style={linkBtn}>Retry</button>}>{profileMsg}</Banner>}
             {profileState === 'ready' && (
               <div className="flex flex-col gap-4">
-                <div className="flex items-center gap-3">
-                  <span aria-hidden className="inline-flex flex-shrink-0 items-center justify-center" style={{ width: 48, height: 48, borderRadius: '50%', background: PRIMARY, color: '#fff', ...serif, fontWeight: 700, fontSize: '1rem' }}>{initialsOf(profile?.full_name)}</span>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ ...sans, fontSize: '0.92rem', fontWeight: 700, color: INK, overflowWrap: 'anywhere' }}>{profile?.full_name || '—'}</p>
-                    <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, overflowWrap: 'anywhere' }}>{profile?.email || '—'}</p>
+                {/* Identity strip */}
+                <div className="flex items-center gap-3.5" style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '12px 14px' }}>
+                  <span className="flex flex-shrink-0 items-center justify-center rounded-full" style={{ width: 46, height: 46, background: PRIMARY, color: '#fff', ...display, fontSize: '1rem', fontWeight: 700 }}>
+                    {initialsOf(displayName)}
+                  </span>
+                  <div className="min-w-0">
+                    <p style={{ ...display, fontSize: '1rem', fontWeight: 700, color: INK, lineHeight: 1.25, overflowWrap: 'anywhere' }}>{displayName}</p>
+                    <span className="mt-1 inline-flex items-center gap-1.5 capitalize" style={{ ...sans, fontSize: '0.66rem', fontWeight: 700, color: PRIMARY, background: `${PRIMARY}12`, border: `1px solid ${PRIMARY}30`, borderRadius: 999, padding: '2px 9px' }}>
+                      <ShieldCheck size={11} /> {profile?.role || 'Staff'}
+                    </span>
                   </div>
                 </div>
+
                 <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-                  <IconInput id="ss-name" icon={User} label="Full Name" readOnly={!canEdit} disabled={settingsSaving} value={canEdit ? draft.full_name : (profile?.full_name || '—')} onChange={e => { setDraft(d => ({ ...d, full_name: e.target.value })); setSettingsFeedback(null); }} autoComplete="name" error={canEdit && !draft.full_name.trim() ? 'Name is required.' : ''} />
-                  <IconInput id="ss-email" icon={Mail} label="Email Address" type="email" readOnly={!canEdit} disabled={settingsSaving} value={canEdit ? draft.email : (profile?.email || '—')} onChange={e => { setDraft(d => ({ ...d, email: e.target.value })); setSettingsFeedback(null); }} autoComplete="email" error={canEdit && draft.email && !emailValid ? 'Enter a valid email address.' : ''} />
-                  {profile?.staff_id && <IconInput id="ss-staff-id" icon={IdCard} label="Staff ID" readOnly value={profile.staff_id} />}
+                  <IconInput id="ss-name" icon={User} label="Display name" readOnly={!canEdit} disabled={settingsSaving}
+                    value={canEdit ? draft.full_name : (profile?.full_name || '—')}
+                    onChange={e => { setDraft(d => ({ ...d, full_name: e.target.value })); setSettingsFeedback(null); }}
+                    autoComplete="name" error={canEdit && !draft.full_name.trim() ? 'Name is required.' : ''} />
+                  <IconInput id="ss-email" icon={Mail} label="Email address" type="email" readOnly={!canEdit} disabled={settingsSaving}
+                    value={canEdit ? draft.email : (profile?.email || '—')}
+                    onChange={e => { setDraft(d => ({ ...d, email: e.target.value })); setSettingsFeedback(null); }}
+                    autoComplete="email" error={canEdit && draft.email && !emailValid ? 'Enter a valid email address.' : ''} />
                   <IconInput id="ss-role" icon={ShieldCheck} label="Role" readOnly value={profile?.role || '—'} />
-                  {profile?.status && <IconInput id="ss-status" icon={CheckCircle2} label="Account Status" readOnly value={profile.status} />}
+                  <IconInput id="ss-staff-id" icon={IdCard} label="Staff ID" readOnly value={profile?.staff_id || '—'} />
+                  {profile?.status && (
+                    <div className="sm:col-span-2">
+                      <IconInput id="ss-status" icon={CheckCircle2} label="Account status" readOnly value={profile.status} />
+                    </div>
+                  )}
                 </div>
-                <div className="flex items-center justify-between gap-3 pt-3.5" style={{ borderTop: `1px solid ${BORDER}` }}>
-                  <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
-                    <IconChip icon={KeyRound} />
+
+                <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between" style={{ borderTop: `1px solid ${BORDER}` }}>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <IconChip icon={KeyRound} tone={GOLD} />
                     <div style={{ minWidth: 0 }}>
                       <p style={{ ...sans, fontSize: '0.84rem', fontWeight: 700, color: INK }}>Password</p>
                       <p style={{ ...sans, fontSize: '0.72rem', color: MUTED }}>Change the password you use to log in.</p>
@@ -496,81 +542,82 @@ const StaffSettings = () => {
               </div>
             )}
           </Card>
+
+          <Card icon={SlidersHorizontal} title="Work Preferences" description="Default attendance report view. Saved on this browser only.">
+            <div className="flex flex-col gap-4">
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                <SelectInput id="ss-work-status" icon={ListFilter} label="Default attendance status" value={workDraft.attendanceStatus} disabled={settingsSaving}
+                  onChange={e => { setWorkDraft(d => ({ ...d, attendanceStatus: e.target.value })); setSettingsFeedback(null); }}
+                  options={[['all', 'All statuses'], ['present', 'Present'], ['late', 'Late'], ['absent', 'Absent']]} />
+                <SelectInput id="ss-work-page-size" icon={Rows3} label="Default page size" value={workDraft.pageSize} disabled={settingsSaving}
+                  onChange={e => { setWorkDraft(d => ({ ...d, pageSize: Number(e.target.value) })); setSettingsFeedback(null); }}
+                  options={[10, 20, 50].map(n => [n, `${n} rows`])} />
+              </div>
+
+              <div>
+                <Label>Table density</Label>
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2" role="radiogroup" aria-label="Table density">
+                  {densityOptions.map(o => {
+                    const active = workDraft.density === o.key;
+                    return (
+                      <button key={o.key} type="button" role="radio" aria-checked={active} disabled={settingsSaving}
+                        onClick={() => { setWorkDraft(d => ({ ...d, density: o.key })); setSettingsFeedback(null); }} className="ss-opt flex items-center gap-3 text-left"
+                        style={{ padding: '10px 12px', minHeight: 56, borderRadius: 12, cursor: 'pointer', background: active ? `${PRIMARY}0d` : SURFACE, border: `1.5px solid ${active ? PRIMARY : BORDER}` }}>
+                        <IconChip icon={o.icon} />
+                        <span style={{ minWidth: 0 }}>
+                          <span className="block" style={{ ...sans, fontSize: '0.82rem', fontWeight: 700, color: active ? PRIMARY : INK }}>{o.title}</span>
+                          <span className="block" style={{ ...sans, fontSize: '0.7rem', color: MUTED }}>{o.note}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              {workStorageError && <Banner tone="error">{workStorageError}</Banner>}
+            </div>
+          </Card>
         </div>
 
-        <Card id="work-preferences" icon={SlidersHorizontal} title="Work Preferences"
-          description="Choose the default attendance report view. Saved on this browser."
-          footer={(
-            <button type="button" className="ss-btn" disabled={!workDirty || settingsSaving}
-              onClick={() => { setWorkDraft(workSaved); setSettingsFeedback(null); }}
-              style={ghostBtn(!workDirty || settingsSaving)}>Reset to Saved</button>
-          )}>
-          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-            <IconInput id="ss-work-status" icon={ListFilter} label="Default attendance status">
-              <select id="ss-work-status" className="ss-field" value={workDraft.attendanceStatus} disabled={settingsSaving}
-                onChange={event => { setWorkDraft(draftValue => ({ ...draftValue, attendanceStatus: event.target.value })); setSettingsFeedback(null); }}
-                style={{ ...inputBase, cursor: 'pointer' }}>
-                <option value="all">All Statuses</option>
-                <option value="present">Present</option>
-                <option value="late">Late</option>
-                <option value="absent">Absent</option>
-              </select>
-            </IconInput>
-            <IconInput id="ss-work-page-size" icon={Rows3} label="Default rows per page">
-              <select id="ss-work-page-size" className="ss-field" value={workDraft.pageSize} disabled={settingsSaving}
-                onChange={event => { setWorkDraft(draftValue => ({ ...draftValue, pageSize: Number(event.target.value) })); setSettingsFeedback(null); }}
-                style={{ ...inputBase, cursor: 'pointer' }}>
-                {[10, 20, 50].map(size => <option key={size} value={size}>{size} rows</option>)}
-              </select>
-            </IconInput>
-            <IconInput id="ss-work-density" icon={Rows3} label="Table density">
-              <select id="ss-work-density" className="ss-field" value={workDraft.density} disabled={settingsSaving}
-                onChange={event => { setWorkDraft(draftValue => ({ ...draftValue, density: event.target.value })); setSettingsFeedback(null); }}
-                style={{ ...inputBase, cursor: 'pointer' }}>
-                <option value="comfortable">Comfortable</option>
-                <option value="compact">Compact</option>
-              </select>
-            </IconInput>
-          </div>
-        </Card>
-
-        {workStorageError && <Banner tone="error">{workStorageError}</Banner>}
-        {settingsFeedback && <Banner tone={settingsFeedback.tone}>{settingsFeedback.text}</Banner>}
-
-        {/* ── Row 2: Notification Preferences (full width) ── */}
-        <Card id="notifications" icon={Bell} title="Notification Preferences"
-          description={notifLocal ? 'Saved on this browser only. These are UI preferences, not email, SMS, or push subscriptions.' : 'Choose which staff events notify you in the portal.'}
-          footer={(
-            <>
-              {notifState === 'ready' && <button type="button" className="ss-btn" disabled={!notifDirty || settingsSaving} onClick={() => { setNotifDraft(notifSaved); setSettingsFeedback(null); }} style={ghostBtn(!notifDirty || settingsSaving)}>Reset to Saved</button>}
-              <button type="button" className="ss-btn" disabled={!settingsDirty || (profileDirty && !profileValid) || settingsSaving} onClick={() => { setConfirmOpen(true); setConfirmPassword(''); setConfirmError(''); }} style={primaryBtn(!settingsDirty || (profileDirty && !profileValid) || settingsSaving)}><Save size={14} /> {settingsSaving ? 'Saving…' : 'Save Settings'}</button>
-            </>
-          )}>
-          {notifState === 'loading' && skeletons(4, 48)}
+        {/* ── Row 2: Notifications ── */}
+        <Card icon={Bell} title="Notifications"
+          description={notifLocal ? 'Saved on this browser only. These are UI preferences, not email, SMS, or push subscriptions.' : 'Choose which staff events notify you in the portal.'}>
+          {notifState === 'loading' && skeletons(4, 52)}
           {notifState === 'error' && <Banner tone="error" action={<button onClick={loadNotifs} className="ss-btn" style={linkBtn}><RefreshCw size={12} style={{ display: 'inline', marginRight: 4 }} />Retry</button>}>{notifMsg}</Banner>}
           {notifState === 'ready' && (
-            <div>
-              <div className="grid grid-cols-1 gap-x-10 lg:grid-cols-2">
-                {NOTIF_EVENTS.map(ev => (
-                  <div key={ev.key} className="ss-nrow flex items-center gap-3 py-2.5">
-                    <IconChip icon={ev.icon} />
-                    <div className="flex-1" style={{ minWidth: 0 }}>
-                      <p style={{ ...sans, fontSize: '0.84rem', fontWeight: 700, color: INK }}>{ev.label}</p>
-                      <p style={{ ...sans, fontSize: '0.72rem', color: MUTED }}>{ev.note}</p>
-                    </div>
-                    <Toggle checked={!!notifDraft?.[ev.key]} disabled={settingsSaving} label={ev.label} onChange={v => { setNotifDraft(d => ({ ...d, [ev.key]: v })); setSettingsFeedback(null); }} />
+            <div className="grid grid-cols-1 gap-x-10 lg:grid-cols-2">
+              {NOTIF_EVENTS.map(ev => (
+                <div key={ev.key} className="ss-nrow flex items-center gap-3 py-3">
+                  <IconChip icon={ev.icon} />
+                  <div className="flex-1" style={{ minWidth: 0 }}>
+                    <p style={{ ...sans, fontSize: '0.84rem', fontWeight: 700, color: INK }}>{ev.label}</p>
+                    <p style={{ ...sans, fontSize: '0.72rem', color: MUTED, marginTop: 1 }}>{ev.note}</p>
                   </div>
-                ))}
-              </div>
+                  <Toggle checked={!!notifDraft?.[ev.key]} disabled={settingsSaving} label={ev.label} onChange={v => { setNotifDraft(d => ({ ...d, [ev.key]: v })); setSettingsFeedback(null); }} />
+                </div>
+              ))}
             </div>
           )}
         </Card>
+
+        {settingsFeedback && <Banner tone={settingsFeedback.tone}>{settingsFeedback.text}</Banner>}
+
+        {/* ── Sticky actions ── */}
+        <div role="region" aria-label="Settings actions" className="flex justify-end"
+          style={{ position: 'sticky', bottom: 16, zIndex: 20, ...card, padding: '12px 16px', boxShadow: '0 16px 36px -16px rgba(36,21,18,0.35)' }}>
+          <div className="grid w-full grid-cols-2 gap-2.5 sm:flex sm:w-auto sm:items-center">
+            <button type="button" className="ss-btn" onClick={resetAllSettings} disabled={!settingsDirty || settingsSaving || confirmBusy} style={ghostBtn(!settingsDirty || settingsSaving || confirmBusy)}>Reset Changes</button>
+            <button type="button" className="ss-btn" onClick={() => { setConfirmOpen(true); setConfirmPassword(''); setConfirmError(''); }} disabled={!settingsDirty || cannotSave} style={primaryBtn(!settingsDirty || cannotSave)}>
+              <Save size={14} /> {settingsSaving ? 'Saving…' : 'Save Settings'}
+            </button>
+          </div>
+        </div>
       </div>
 
+      {/* ── Confirm password modal ── */}
       {confirmOpen && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(36,21,18,0.5)' }}
+          className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4"
+          style={{ background: 'rgba(36,21,18,0.55)' }}
           onMouseDown={event => { if (event.target === event.currentTarget) closeSettingsConfirmation(); }}
         >
           <form
@@ -578,21 +625,21 @@ const StaffSettings = () => {
             aria-modal="true"
             aria-labelledby="ss-confirm-title"
             onSubmit={confirmSettingsSave}
-            className="w-full"
-            style={{ ...tile, maxWidth: 420, padding: 20, boxShadow: '0 28px 60px -24px rgba(36,21,18,0.5)' }}
+            className="ss-sheet w-full"
+            style={{ background: SURFACE, border: `1px solid ${BORDER}`, maxWidth: 440, padding: 20, paddingBottom: 'max(20px, env(safe-area-inset-bottom))', boxShadow: '0 28px 60px -24px rgba(36,21,18,0.5)' }}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-3">
-                <IconChip icon={Lock} size={38} />
+                <IconChip icon={Lock} size={36} tone={GOLD} />
                 <div>
-                  <h2 id="ss-confirm-title" style={{ ...serif, fontSize: '1.08rem', fontWeight: 700, color: INK }}>Confirm your password</h2>
-                  <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 2 }}>Enter your current password to save these settings.</p>
+                  <h2 id="ss-confirm-title" style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: PRIMARY }}>Confirm your password</h2>
+                  <p style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>Enter your current password to save these settings.</p>
                 </div>
               </div>
-              <button type="button" onClick={closeSettingsConfirmation} disabled={confirmBusy} aria-label="Close" className="ss-btn" style={{ ...ghostBtn(confirmBusy), padding: 0, width: 34, height: 34, borderColor: BORDER, color: MUTED }}><X size={15} /></button>
+              <button type="button" onClick={closeSettingsConfirmation} disabled={confirmBusy} aria-label="Close" className="ss-btn flex-shrink-0" style={{ ...ghostBtn(confirmBusy), padding: 0, width: 40, borderColor: BORDER, color: MUTED }}><X size={15} /></button>
             </div>
             <div style={{ marginTop: 16 }}>
-              <IconInput id="ss-confirm-current-password" icon={Lock} label="Current Password">
+              <IconInput id="ss-confirm-current-password" icon={Lock} label="Current password">
                 <input
                   id="ss-confirm-current-password"
                   className="ss-field"
@@ -606,8 +653,8 @@ const StaffSettings = () => {
                 />
               </IconInput>
             </div>
-            {confirmError && <p role="alert" style={{ ...sans, color: DANGER, background: `${DANGER}12`, border: `1px solid ${DANGER}44`, borderRadius: 10, padding: '8px 12px', marginTop: 12, fontSize: '0.78rem' }}>{confirmError}</p>}
-            <div className="flex justify-end gap-2" style={{ marginTop: 18 }}>
+            {confirmError && <div style={{ marginTop: 12 }}><Banner tone="error">{confirmError}</Banner></div>}
+            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:justify-end" style={{ marginTop: 18 }}>
               <button type="button" onClick={closeSettingsConfirmation} disabled={confirmBusy} className="ss-btn" style={ghostBtn(confirmBusy)}>Cancel</button>
               <button type="submit" disabled={confirmBusy || !confirmPassword} className="ss-btn" style={primaryBtn(confirmBusy || !confirmPassword)}>
                 {confirmBusy ? 'Confirming…' : 'Confirm & Save'}
@@ -617,34 +664,35 @@ const StaffSettings = () => {
         </div>
       )}
 
+      {/* ── Change Password modal ── */}
       {pwOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(36,21,18,0.5)' }} onClick={closePasswordModal}>
-          <div role="dialog" aria-modal="true" aria-labelledby="ss-pw-title" onClick={event => event.stopPropagation()} className="flex w-full flex-col"
-            style={{ ...tile, maxWidth: 440, maxHeight: '90vh', overflow: 'hidden', boxShadow: '0 28px 60px -24px rgba(36,21,18,0.5)' }}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4" style={{ background: 'rgba(36,21,18,0.55)' }} onClick={closePw}>
+          <div role="dialog" aria-modal="true" aria-labelledby="ss-pw-title" onClick={e => e.stopPropagation()} className="ss-sheet flex w-full flex-col"
+            style={{ background: SURFACE, border: `1px solid ${BORDER}`, maxWidth: 460, maxHeight: '92vh', overflow: 'hidden', boxShadow: '0 28px 60px -24px rgba(36,21,18,0.5)' }}>
             <div className="flex flex-shrink-0 items-start justify-between gap-3" style={{ padding: '18px 20px', borderBottom: `1px solid ${BORDER}` }}>
               <div className="flex items-start gap-3">
-                <IconChip icon={KeyRound} size={38} />
+                <IconChip icon={KeyRound} size={36} tone={GOLD} />
                 <div>
-                  <h2 id="ss-pw-title" style={{ ...serif, fontSize: '1.08rem', fontWeight: 700, color: INK }}>Change Password</h2>
-                  <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 2 }}>Enter your current password, then choose a new one.</p>
+                  <h2 id="ss-pw-title" style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: PRIMARY }}>Change Password</h2>
+                  <p style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>Enter your current password, then choose a new one.</p>
                 </div>
               </div>
-              <button type="button" onClick={closePasswordModal} disabled={pwSaving} aria-label="Close" className="ss-btn" style={{ ...ghostBtn(pwSaving), padding: 0, width: 36, height: 36, borderColor: BORDER, color: MUTED }}><X size={15} /></button>
+              <button type="button" onClick={closePw} disabled={pwSaving} aria-label="Close" className="ss-btn flex-shrink-0" style={{ ...ghostBtn(pwSaving), padding: 0, width: 40, borderColor: BORDER, color: MUTED }}><X size={15} /></button>
             </div>
             <div className="flex flex-col gap-3.5 overflow-y-auto" style={{ padding: 20 }}>
-              {pwInput('current', 'ss-pw-current', 'Current Password', 'current-password')}
-              {pwInput('next', 'ss-pw-new', 'New Password', 'new-password', pwErrors.next)}
+              {pwInput('current', 'ss-pw-current', 'Current password', 'current-password')}
+              {pwInput('next', 'ss-pw-new', 'New password', 'new-password', pwErrors.next)}
               {pw.next && (
                 <div aria-live="polite">
                   <div className="flex items-center gap-1.5" aria-hidden>
-                    {[1, 2, 3, 4].map(i => <span key={i} style={{ flex: 1, height: 5, borderRadius: 999, background: i <= strength ? BRONZE : BORDER, transition: 'background 120ms' }} />)}
+                    {[1, 2, 3, 4].map(i => <span key={i} style={{ flex: 1, height: 5, borderRadius: 999, background: i <= strength ? GOLD : BORDER, transition: 'background 120ms' }} />)}
                   </div>
-                  <p style={{ ...sans, fontSize: '0.7rem', color: MUTED, marginTop: 4 }}>Password strength: <strong style={{ color: BRONZE }}>{strengthLabel}</strong></p>
+                  <p style={{ ...sans, fontSize: '0.7rem', color: MUTED, marginTop: 4 }}>Password strength: <strong style={{ color: GOLD }}>{strengthLabel}</strong></p>
                 </div>
               )}
-              {pwInput('confirm', 'ss-pw-confirm', 'Confirm New Password', 'new-password', pwErrors.confirm)}
-              <div style={{ background: BLUSH, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '10px 12px' }}>
-                <p style={{ ...sans, fontSize: '0.72rem', fontWeight: 700, color: DEEP, marginBottom: 6 }}>Password requirements</p>
+              {pwInput('confirm', 'ss-pw-confirm', 'Confirm new password', 'new-password', pwErrors.confirm)}
+              <div style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '10px 12px' }}>
+                <p style={{ ...sans, fontSize: '0.72rem', fontWeight: 700, color: INK, marginBottom: 6 }}>Password requirements</p>
                 <ul className="grid grid-cols-1 gap-x-4 gap-y-1 sm:grid-cols-2" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
                   {checks.map(check => (
                     <li key={check.label} className="flex items-center gap-1.5" style={{ ...sans, fontSize: '0.72rem', color: check.ok ? SUCCESS : MUTED }}>
@@ -656,8 +704,8 @@ const StaffSettings = () => {
               </div>
               {pwFeedback && <Banner tone={pwFeedback.tone}>{pwFeedback.text}</Banner>}
             </div>
-            <div className="flex flex-shrink-0 justify-end gap-2.5" style={{ padding: '14px 20px', borderTop: `1px solid ${BORDER}` }}>
-              <button type="button" className="ss-btn" onClick={closePasswordModal} disabled={pwSaving} style={ghostBtn(pwSaving)}>Cancel</button>
+            <div className="grid flex-shrink-0 grid-cols-2 gap-2.5 sm:flex sm:justify-end" style={{ padding: '14px 20px', paddingBottom: 'max(14px, env(safe-area-inset-bottom))', borderTop: `1px solid ${BORDER}` }}>
+              <button type="button" className="ss-btn" onClick={closePw} disabled={pwSaving} style={ghostBtn(pwSaving)}>Cancel</button>
               <button type="button" className="ss-btn" onClick={savePassword} disabled={!pwReady || pwSaving} style={primaryBtn(!pwReady || pwSaving)}>{pwSaving ? 'Updating…' : 'Update Password'}</button>
             </div>
           </div>

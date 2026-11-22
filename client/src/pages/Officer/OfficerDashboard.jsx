@@ -5,61 +5,79 @@ import OfficerNotifications from '../../components/Officer/OfficerNotifications'
 import { API_BASE } from '../../components/Officer/Reports/ReportsHelpers';
 import {
   Users, Clock, CheckCircle, XCircle, TrendingUp,
-  Calendar, Zap,
+  Calendar,
   FileCheck, AlertTriangle, FileText, CalendarDays,
   ArrowUpRight, BarChart3, Megaphone, ChevronRight
 } from 'lucide-react';
 
-// ── Token system — shared across the whole portal ──
-const MAROON = '#7f2d3a';
-const MAROON_DEEP = '#4f1620';
-const GOLD = '#b98b4e';
-const GOLD_LIGHT = '#d4af7a';
-const IVORY = '#FBF7F2';
-const INK = '#241512';
-const SAGE = '#6b8f71';
-const CLAY = '#c1666b';
-const AMBER = '#b8863f';
-const PAPER = '#F6EFE4';
-const RULE = '#e8dccb';
-const ROSE = '#F5E8EA';
+// ── Executive design tokens — same system as the Admin portal ──
+const BG           = '#F7F4EE';
+const SURFACE      = '#FFFDF9';
+const BORDER       = '#E7D8C7';
+const PRIMARY      = '#6D2140';
+const PRIMARY_DEEP = '#4A1730';
+const INK          = '#241512';
+const INK_SOFT     = '#5C4E42';
+const MUTED        = '#8A7A68';
+const BRONZE       = '#A9784E';
+const BRONZE_DARK  = '#8A5E38'; // readable bronze for small text
+const SUCCESS      = '#6B8F71';
+const WARNING      = '#C08A3E';
+const DANGER       = '#A24A4A';
+const SAND         = '#F1E8DA';
+const RADIUS       = 16;
+const SHADOW       = '0 1px 2px rgba(74, 23, 48, 0.04), 0 6px 18px rgba(74, 23, 48, 0.04)';
 
 // Existing Officer Announcements route — must match the path registered in your router.
 const OFFICER_ANNOUNCEMENTS_PATH = '/officer/announcements';
 
 const serif = { fontFamily: "'Playfair Display', serif" };
-const sans = { fontFamily: "'DM Sans', sans-serif" };
-const mono = { fontFamily: "ui-monospace, 'SFMono-Regular', Menlo, monospace" };
+const sans  = { fontFamily: "'Inter', sans-serif" };
+const mono  = { fontFamily: "ui-monospace, 'SFMono-Regular', Menlo, monospace" };
 
-const tile = {
-  background: '#fff',
-  border: `1px solid ${RULE}`,
-  borderRadius: 14,
-  boxShadow: '0 8px 20px -16px rgba(36,21,18,0.35)',
-};
+const card = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, boxShadow: SHADOW };
 
-function SkeletonBox({ h = 16, w = '100%', radius = 6 }) {
-  return <div className="animate-pulse" style={{ height: h, width: w, borderRadius: radius, background: PAPER }} />;
+function SkeletonBox({ h = 16, w = '100%', radius = 8 }) {
+  return <div className="animate-pulse" style={{ height: h, width: w, borderRadius: radius, background: '#EFE6D8' }} />;
 }
 
-const formatTaskDueDate = value => {
+const parseDueDate = value => {
   const date = value instanceof Date ? value : new Date(`${String(value || '').slice(0, 10)}T00:00:00`);
-  return Number.isNaN(date.getTime())
-    ? 'Due date unavailable'
-    : date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatTaskDueDate = value => {
+  const date = parseDueDate(value);
+  return date
+    ? date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : 'Due date unavailable';
+};
+
+// "Today", "Tomorrow", "In 5 days" — with a colour that gets warmer as it gets closer
+const getDueBadge = value => {
+  const date = parseDueDate(value);
+  if (!date) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((date.getTime() - today.getTime()) / 86400000);
+  if (days < 0) return { label: 'Overdue', color: DANGER };
+  if (days === 0) return { label: 'Today', color: DANGER };
+  if (days === 1) return { label: 'Tomorrow', color: WARNING };
+  if (days <= 3) return { label: `In ${days} days`, color: WARNING };
+  return { label: `In ${days} days`, color: MUTED };
 };
 
 // Shared panel shell: icon chip + serif title + optional description.
-function Panel({ icon: Icon, title, description, children, className = '', style = {}, action = null }) {
+function Panel({ icon: Icon, title, description, children, className = '', action = null }) {
   return (
-    <section className={`min-w-0 ${className}`} style={{ ...tile, padding: '18px 20px', ...style }}>
-      <div className="flex items-start gap-3" style={{ marginBottom: 14 }}>
-        <span className="inline-flex flex-shrink-0 items-center justify-center rounded-lg" style={{ width: 34, height: 34, background: `${GOLD}1a` }}>
-          <Icon size={17} strokeWidth={1.75} style={{ color: GOLD }} />
+    <section className={`min-w-0 ${className}`} style={{ ...card, padding: '20px 22px' }}>
+      <div className="flex items-start gap-3" style={{ marginBottom: 16 }}>
+        <span className="inline-flex flex-shrink-0 items-center justify-center rounded-full" style={{ width: 34, height: 34, background: `${PRIMARY}0F`, color: PRIMARY }}>
+          <Icon size={16} strokeWidth={1.8} />
         </span>
         <div style={{ minWidth: 0 }}>
-          <h2 style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: MAROON, lineHeight: 1.25 }}>{title}</h2>
-          {description && <p style={{ ...sans, fontSize: '0.76rem', color: '#a89890', marginTop: 2 }}>{description}</p>}
+          <h2 style={{ ...serif, fontSize: '1.08rem', fontWeight: 600, color: INK, lineHeight: 1.25 }}>{title}</h2>
+          {description && <p style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>{description}</p>}
         </div>
         {action && <div className="ml-auto flex-shrink-0">{action}</div>}
       </div>
@@ -68,53 +86,134 @@ function Panel({ icon: Icon, title, description, children, className = '', style
   );
 }
 
+// ─── StatisticsCards ───────────────────────────────────────────────────────
+
+function StatisticsCards({ loading, totalScholars, pending, approved, rejected, onNavigate }) {
+  const cards = [
+    { label: 'Total Scholars', value: totalScholars, icon: Users, color: PRIMARY },
+    { label: 'Pending Review', value: pending, icon: Clock, color: WARNING, path: '/officer/validation' },
+    { label: 'Approved', value: approved, icon: CheckCircle, color: SUCCESS },
+    { label: 'Rejected', value: rejected, icon: XCircle, color: DANGER },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {cards.map((c) => {
+        const Tag = c.path ? 'button' : 'div';
+        return (
+          <Tag
+            key={c.label}
+            type={c.path ? 'button' : undefined}
+            onClick={c.path ? () => onNavigate(c.path) : undefined}
+            className="od-hover h-full min-w-0 p-5 text-left transition-opacity"
+            style={{ ...card, cursor: c.path ? 'pointer' : 'default', width: '100%' }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <p style={{ ...sans, fontSize: '0.8rem', fontWeight: 500, color: MUTED }}>{c.label}</p>
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full" style={{ background: `${c.color}14`, color: c.color }}>
+                <c.icon size={16} />
+              </span>
+            </div>
+            {loading
+              ? <div style={{ marginTop: 14 }}><SkeletonBox h={30} w={56} /></div>
+              : <p style={{ ...serif, fontSize: '2rem', fontWeight: 600, color: INK, lineHeight: 1.1, marginTop: 14 }}>{c.value}</p>}
+          </Tag>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── QuickActions — one strip of shortcuts ─────────────────────────────────
+
+function QuickActions({ onNavigate }) {
+  const actions = [
+    { label: 'Manual Validation', hint: 'Review pending submissions', icon: FileCheck, path: '/officer/validation', color: PRIMARY },
+    { label: 'Task Assignment', hint: 'Manage tasks and deadlines', icon: Calendar, path: '/officer/task-assignment', color: WARNING },
+    { label: 'Reports', hint: 'Open compliance reports', icon: BarChart3, path: '/officer/reports', color: BRONZE },
+    { label: 'Summary Report', hint: 'Generate a summary', icon: FileText, path: '/officer/summary-report', color: SUCCESS },
+  ];
+
+  return (
+    <nav aria-label="Quick actions" className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {actions.map((a) => (
+        <button
+          key={a.path}
+          type="button"
+          onClick={() => onNavigate(a.path)}
+          className="od-hover group flex min-w-0 items-center gap-3.5 p-4 text-left transition-colors"
+          style={{ ...card, cursor: 'pointer' }}
+        >
+          <span className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-full transition-transform group-hover:scale-105" style={{ background: `${a.color}14`, color: a.color }}>
+            <a.icon size={18} />
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate" style={{ ...sans, fontSize: '0.86rem', fontWeight: 700, color: INK }}>{a.label}</span>
+            <span className="block truncate" style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 2 }}>{a.hint}</span>
+          </span>
+          <ArrowUpRight size={15} style={{ color: BRONZE, flexShrink: 0 }} />
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+// ─── Compliance (main panel) ───────────────────────────────────────────────
+
 function ComplianceSeal({ loading, error, tasks }) {
   return (
     <Panel icon={TrendingUp} title="Overall Scholar Compliance" description="Latest Monthly Letter task and active Report Card, COR, and Other Documents tasks." className="h-full">
       {loading ? (
-        <div className="space-y-3">
-          <SkeletonBox h={104} />
-          <SkeletonBox h={104} />
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <SkeletonBox h={150} radius={12} />
+          <SkeletonBox h={150} radius={12} />
         </div>
       ) : error ? (
-        <p style={{ ...sans, fontSize: '0.8rem', color: CLAY }}>Couldn&apos;t load task compliance. It will retry automatically.</p>
+        <p style={{ ...sans, fontSize: '0.8rem', color: DANGER }}>Couldn&apos;t load task compliance. It will retry automatically.</p>
       ) : tasks.length === 0 ? (
-        <p style={{ ...sans, fontSize: '0.8rem', color: '#a89890' }}>No active tasks.</p>
+        <p className="py-6 text-center" style={{ ...sans, fontSize: '0.8rem', color: MUTED }}>No active tasks.</p>
       ) : (
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {tasks.map(task => {
             const stats = [
-              { label: 'Submitted', value: task.submitted, color: SAGE },
-              { label: 'Pending', value: task.pending, color: AMBER },
-              { label: 'Not Submitted', value: task.notSubmitted, color: CLAY },
+              { label: 'Submitted', value: task.submitted, color: SUCCESS },
+              { label: 'Pending', value: task.pending, color: WARNING },
+              { label: 'Not Submitted', value: task.notSubmitted, color: DANGER },
             ];
             const total = stats.reduce((sum, stat) => sum + stat.value, 0);
+            const submittedPct = total > 0 ? Math.round((task.submitted / total) * 100) : 0;
 
             return (
-              <div key={task.task_id} className="rounded-xl p-3.5" style={{ border: `1px solid ${RULE}`, background: '#fff' }}>
+              <div key={task.task_id} className="flex min-w-0 flex-col rounded-xl p-4" style={{ border: `1px solid ${BORDER}`, background: BG }}>
                 <div className="flex min-w-0 items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 style={{ ...serif, fontSize: '0.9rem', fontWeight: 700, color: MAROON, overflowWrap: 'anywhere' }}>
+                    <h3 style={{ ...serif, fontSize: '0.96rem', fontWeight: 600, color: INK, overflowWrap: 'anywhere' }}>
                       {task.title || task.type}
                     </h3>
-                    <p style={{ ...sans, fontSize: '0.68rem', color: '#a89890', marginTop: 2 }}>
+                    <p style={{ ...sans, fontSize: '0.7rem', color: MUTED, marginTop: 3, lineHeight: 1.5 }}>
                       {task.type === 'Monthly Report' ? 'Monthly Letter · Latest task' : task.type}
                       {' · '}Due {formatTaskDueDate(task.due_date)} · Task #{task.task_id}
                     </p>
                   </div>
-                  <Calendar size={15} style={{ flexShrink: 0, color: GOLD }} />
+                  <span className="flex-shrink-0 text-right" style={{ ...serif, fontSize: '1.3rem', fontWeight: 600, color: PRIMARY, lineHeight: 1 }}>
+                    {submittedPct}%
+                    <span className="block" style={{ ...sans, fontSize: '0.6rem', fontWeight: 500, color: MUTED, marginTop: 3 }}>submitted</span>
+                  </span>
                 </div>
 
-                <div className="mt-3 grid grid-cols-3 gap-2">
+                <div className="mt-3.5 grid grid-cols-3 gap-2">
                   {stats.map(stat => (
-                    <div key={stat.label} className="min-w-0 rounded-lg p-2" style={{ background: `${stat.color}12`, border: `1px solid ${stat.color}30` }}>
-                      <p style={{ ...serif, fontSize: '1.2rem', fontWeight: 700, color: stat.color, lineHeight: 1 }}>{stat.value}</p>
-                      <p style={{ ...sans, fontSize: '0.65rem', fontWeight: 600, color: '#6b6058', marginTop: 4, overflowWrap: 'anywhere' }}>{stat.label}</p>
+                    <div key={stat.label} className="min-w-0 rounded-lg p-2.5" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+                      <p className="flex items-center gap-1.5" style={{ ...sans, fontSize: '0.64rem', fontWeight: 600, color: MUTED }}>
+                        <span className="inline-block rounded-full" style={{ width: 7, height: 7, background: stat.color }} />
+                        <span style={{ overflowWrap: 'anywhere' }}>{stat.label}</span>
+                      </p>
+                      <p style={{ ...serif, fontSize: '1.3rem', fontWeight: 600, color: INK, lineHeight: 1, marginTop: 6 }}>{stat.value}</p>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-3 flex h-2 w-full overflow-hidden rounded-full" style={{ background: RULE }} role="img" aria-label={`${task.title || task.type}: submitted, pending, and not submitted`}>
+                <div className="mt-3.5 flex h-2 w-full overflow-hidden rounded-full" style={{ background: '#E9DCC8' }} role="img" aria-label={`${task.title || task.type}: submitted, pending, and not submitted`}>
                   {total > 0 && stats.map(stat => stat.value > 0 && (
                     <div key={stat.label} style={{ width: `${(stat.value / total) * 100}%`, background: stat.color }} />
                   ))}
@@ -128,124 +227,55 @@ function ComplianceSeal({ loading, error, tasks }) {
   );
 }
 
-// ─── StatisticsCards ───────────────────────────────────────────────────────
-
-function StatisticsCards({ loading, totalScholars, pending, approved, rejected }) {
-  const cards = [
-    { label: 'Total Scholars', value: totalScholars, icon: Users, color: MAROON },
-    { label: 'Pending Review', value: pending, icon: Clock, color: AMBER },
-    { label: 'Approved', value: approved, icon: CheckCircle, color: SAGE },
-    { label: 'Rejected', value: rejected, icon: XCircle, color: CLAY },
-  ];
-
-  return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-      {cards.map((card) => (
-        <div key={card.label} className="flex h-full items-center gap-3.5" style={{ ...tile, padding: '16px 18px', minWidth: 0 }}>
-          <span className="inline-flex flex-shrink-0 items-center justify-center rounded-full" style={{ width: 46, height: 46, background: `${card.color}1a` }}>
-            <card.icon size={20} strokeWidth={1.75} style={{ color: card.color }} />
-          </span>
-          <div style={{ minWidth: 0 }}>
-            <p className="truncate" style={{ ...sans, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#a89890' }}>{card.label}</p>
-            {loading ? <div style={{ marginTop: 6 }}><SkeletonBox h={26} w={44} /></div>
-              : <p style={{ ...serif, fontSize: '1.75rem', fontWeight: 700, color: INK, lineHeight: 1.15 }}>{card.value}</p>}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// ─── NeedsAttention ───────────────────────────────────────────────────────
-
-function NeedsAttention({ loading, pending, deadlines, onNavigate }) {
-  const items = [
-    { label: 'Pending reviews', value: pending, note: 'Submissions waiting for action', path: '/officer/validation', icon: Clock, color: AMBER },
-    { label: 'Upcoming tasks', value: deadlines.length, note: 'Active deadlines to monitor', path: '/officer/task-assignment', icon: Calendar, color: MAROON },
-  ];
-
-  return (
-    <Panel icon={Zap} title="Needs Attention" description="Items waiting in your officer queue." className="h-full">
-      <div className="grid grid-cols-1 gap-3">
-        {items.map(item => (
-          <button key={item.path} type="button" onClick={() => onNavigate(item.path)}
-            className="od-card flex items-center gap-3 rounded-xl p-3.5 text-left transition-colors"
-            style={{ border: `1px solid ${RULE}`, borderLeft: `3px solid ${item.color}`, background: '#fff', cursor: 'pointer' }}>
-            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: `${item.color}14`, color: item.color }}>
-              <item.icon size={17} />
-            </div>
-            <div className="min-w-0 flex-1">
-              {loading ? <SkeletonBox h={20} w={30} /> : <p style={{ ...serif, fontSize: '1.2rem', fontWeight: 700, color: item.color, lineHeight: 1 }}>{item.value}</p>}
-              <p className="truncate" style={{ ...sans, fontSize: '0.78rem', fontWeight: 700, color: INK, marginTop: 3 }}>{item.label}</p>
-              <p className="truncate" style={{ ...sans, fontSize: '0.7rem', color: '#a89890' }}>{item.note}</p>
-            </div>
-            <ArrowUpRight size={15} style={{ color: '#c9b9b0', flexShrink: 0 }} />
-          </button>
-        ))}
-      </div>
-    </Panel>
-  );
-}
-
 // ─── UpcomingDeadlines ─────────────────────────────────────────────────────
 
-function UpcomingDeadlines({ loading, deadlines }) {
+function UpcomingDeadlines({ loading, deadlines, onNavigate }) {
   return (
-    <Panel icon={Calendar} title="Upcoming Deadlines" description="Next tasks due for your scholars." className="h-full">
+    <Panel
+      icon={Calendar}
+      title="Upcoming Deadlines"
+      description="Next tasks due for your scholars."
+      className="h-full"
+      action={(
+        <button type="button" onClick={() => onNavigate('/officer/task-assignment')} className="od-hover inline-flex items-center gap-1 rounded-full"
+          style={{ ...sans, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY, padding: '6px 12px', border: `1px solid ${BORDER}`, background: SURFACE, cursor: 'pointer' }}>
+          Manage <ChevronRight size={13} />
+        </button>
+      )}
+    >
       {loading ? (
         <div className="space-y-2.5">
-          {[1, 2, 3].map(i => <SkeletonBox key={i} h={44} radius={10} />)}
+          {[1, 2, 3, 4].map(i => <SkeletonBox key={i} h={52} radius={12} />)}
         </div>
       ) : deadlines.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
-          <Calendar size={26} style={{ color: '#e9d9dc' }} className="mb-2" />
-          <p style={{ ...sans, fontSize: '0.78rem', color: '#a89890' }}>No upcoming deadlines</p>
+          <Calendar size={28} className="mb-2" style={{ color: `${BRONZE}66` }} />
+          <p style={{ ...sans, fontSize: '0.8rem', color: MUTED }}>No upcoming deadlines</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {deadlines.slice(0, 5).map((d, i) => (
-            <div key={i} className="od-row flex items-center gap-3 rounded-lg p-3 transition-colors" style={{ background: PAPER }}>
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg" style={{ background: ROSE, color: MAROON }}>
-                <Calendar size={13} />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate" style={{ ...sans, fontSize: '0.8rem', fontWeight: 700, color: INK }}>{d.title || d.name}</p>
-                <p style={{ ...mono, fontSize: '0.68rem', color: '#a89890' }}>{d.date || d.due_date}</p>
-              </div>
-            </div>
-          ))}
-        </div>
+        <ul>
+          {deadlines.slice(0, 5).map((d, i) => {
+            const dueValue = d.due_date || d.date;
+            const badge = getDueBadge(dueValue);
+            return (
+              <li key={d.task_id ?? d.id ?? i} className="flex items-center gap-3 py-3" style={{ borderTop: i === 0 ? 'none' : `1px solid ${BORDER}` }}>
+                <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full" style={{ background: `${PRIMARY}0F`, color: PRIMARY }}>
+                  <Calendar size={14} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate" style={{ ...sans, fontSize: '0.82rem', fontWeight: 600, color: INK }}>{d.title || d.name}</p>
+                  <p style={{ ...mono, fontSize: '0.68rem', color: MUTED, marginTop: 2 }}>{formatTaskDueDate(dueValue)}</p>
+                </div>
+                {badge && (
+                  <span className="flex-shrink-0 rounded-full px-2.5 py-1" style={{ ...sans, fontSize: '0.64rem', fontWeight: 700, color: badge.color, background: `${badge.color}14` }}>
+                    {badge.label}
+                  </span>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
-    </Panel>
-  );
-}
-
-// ─── QuickActions ──────────────────────────────────────────────────────────
-
-function QuickActions() {
-  const navigate = useNavigate();
-
-  const actions = [
-    { label: 'Manual Validation', icon: FileCheck, path: '/officer/validation', color: MAROON },
-    { label: 'Reports', icon: BarChart3, path: '/officer/reports', color: GOLD },
-    { label: 'Summary Report', icon: FileText, path: '/officer/summary-report', color: SAGE },
-  ];
-
-  return (
-    <Panel icon={Zap} title="Quick Actions" description="Common tasks and navigation." className="h-full">
-      <div className="flex flex-col gap-2.5">
-        {actions.map((a) => (
-          <button key={a.path} type="button" onClick={() => navigate(a.path)}
-            className="od-card group flex items-center gap-3 rounded-xl p-3.5 text-left transition-colors"
-            style={{ border: `1px solid ${RULE}`, background: '#fff', cursor: 'pointer' }}>
-            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg transition-transform group-hover:scale-105" style={{ background: `${a.color}14`, color: a.color }}>
-              <a.icon size={18} />
-            </span>
-            <span className="flex-1" style={{ ...sans, fontSize: '0.82rem', fontWeight: 700, color: '#4b3f38', lineHeight: 1.25 }}>{a.label}</span>
-            <ArrowUpRight size={14} style={{ color: '#c9b9b0', flexShrink: 0 }} />
-          </button>
-        ))}
-      </div>
     </Panel>
   );
 }
@@ -253,9 +283,9 @@ function QuickActions() {
 // ─── RecentAnnouncements ───────────────────────────────────────────────────
 
 const PRIORITY_STYLES = {
-  critical: { label: 'Critical', color: CLAY },
-  important: { label: 'Important', color: AMBER },
-  info: { label: 'Info', color: GOLD },
+  critical: { label: 'Critical', color: DANGER },
+  important: { label: 'Important', color: WARNING },
+  info: { label: 'Info', color: BRONZE },
 };
 
 const getRecentAnnouncements = (list, limit = 3) => {
@@ -287,67 +317,66 @@ function RecentAnnouncements({ loading, error, announcements, onNavigate, onRetr
       title="Recent Announcements"
       description="Latest updates from the administration and staff."
       action={(
-        <button type="button" onClick={goToAnnouncements} className="od-card inline-flex items-center gap-1 rounded-lg"
-          style={{ ...sans, fontSize: '0.74rem', fontWeight: 700, color: MAROON, padding: '6px 10px', border: `1px solid ${RULE}`, background: '#fff', cursor: 'pointer' }}>
-          View All <ChevronRight size={14} />
+        <button type="button" onClick={goToAnnouncements} className="od-hover inline-flex items-center gap-1 rounded-full"
+          style={{ ...sans, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY, padding: '6px 12px', border: `1px solid ${BORDER}`, background: SURFACE, cursor: 'pointer' }}>
+          View All <ChevronRight size={13} />
         </button>
       )}
     >
       {loading ? (
-        <div className="space-y-2.5">
-          {[1, 2, 3].map(i => <SkeletonBox key={i} h={64} radius={10} />)}
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          {[1, 2, 3].map(i => <SkeletonBox key={i} h={128} radius={12} />)}
         </div>
       ) : error && recent.length === 0 ? (
-        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-lg p-3"
-          style={{ borderLeft: `3px solid ${CLAY}`, background: `${CLAY}0d`, ...sans, fontSize: '0.78rem', fontWeight: 600, color: CLAY }}>
+        <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-xl p-3.5"
+          style={{ border: `1px solid ${DANGER}35`, background: `${DANGER}0d`, ...sans, fontSize: '0.78rem', fontWeight: 600, color: DANGER }}>
           <span className="flex items-center gap-2"><AlertTriangle size={14} className="flex-shrink-0" />Announcements could not be loaded.</span>
-          <button type="button" onClick={onRetry} style={{ ...sans, fontSize: '0.74rem', fontWeight: 700, color: CLAY, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>Retry</button>
+          <button type="button" onClick={onRetry} style={{ ...sans, fontSize: '0.74rem', fontWeight: 700, color: DANGER, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer' }}>Retry</button>
         </div>
       ) : recent.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
-          <Megaphone size={26} style={{ color: '#e9d9dc' }} className="mb-2" />
-          <p style={{ ...sans, fontSize: '0.82rem', fontWeight: 700, color: INK }}>No announcements yet.</p>
-          <p style={{ ...sans, fontSize: '0.74rem', color: '#a89890', marginTop: 2 }}>New announcements will appear here when they are published.</p>
+          <Megaphone size={28} className="mb-2" style={{ color: `${BRONZE}66` }} />
+          <p style={{ ...sans, fontSize: '0.84rem', fontWeight: 700, color: INK }}>No announcements yet.</p>
+          <p style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>New announcements will appear here when they are published.</p>
         </div>
       ) : (
         <>
-          <div className="space-y-2.5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
             {recent.map((a, i) => {
               const priority = PRIORITY_STYLES[String(a.priority || '').toLowerCase()];
-              const accent = priority ? priority.color : GOLD;
               const source = [a.created_by_name, roleLabel(a.created_by_role)].filter(Boolean).join(' · ');
               const date = formatAnnouncementDate(a.created_at);
               return (
                 <button key={a.id ?? i} type="button" onClick={goToAnnouncements}
-                  className="od-card flex w-full items-center gap-3 rounded-xl p-3.5 text-left transition-colors"
-                  style={{ border: `1px solid ${RULE}`, borderLeft: `3px solid ${accent}`, background: '#fff', cursor: 'pointer', minWidth: 0 }}>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p style={{ ...sans, fontSize: '0.84rem', fontWeight: 700, color: INK, overflowWrap: 'anywhere' }}>{a.title || 'Untitled announcement'}</p>
-                      {priority && (
-                        <span style={{ ...sans, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: priority.color, background: `${priority.color}1a`, border: `1px solid ${priority.color}40`, borderRadius: 999, padding: '2px 8px' }}>
-                          {priority.label}
-                        </span>
-                      )}
-                    </div>
-                    {a.content && (
-                      <p style={{ ...sans, fontSize: '0.76rem', color: '#6b6058', marginTop: 3, lineHeight: 1.5, overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-                        {a.content}
-                      </p>
-                    )}
-                    {(source || date) && (
-                      <p style={{ ...sans, fontSize: '0.7rem', color: '#a89890', marginTop: 5 }}>
-                        {source}{source && date ? ' · ' : ''}{date && <span style={mono}>{date}</span>}
-                      </p>
-                    )}
+                  className="od-hover flex h-full min-w-0 flex-col rounded-xl p-4 text-left transition-colors"
+                  style={{ border: `1px solid ${BORDER}`, background: BG, cursor: 'pointer' }}>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    {priority ? (
+                      <span style={{ ...sans, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: priority.color, background: `${priority.color}1a`, border: `1px solid ${priority.color}40`, borderRadius: 999, padding: '2px 9px' }}>
+                        {priority.label}
+                      </span>
+                    ) : <span />}
+                    <ChevronRight size={14} style={{ color: BRONZE, flexShrink: 0 }} />
                   </div>
-                  <ChevronRight size={15} style={{ color: '#c9b9b0', flexShrink: 0 }} />
+                  <p style={{ ...serif, fontSize: '0.96rem', fontWeight: 600, color: INK, lineHeight: 1.3, overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    {a.title || 'Untitled announcement'}
+                  </p>
+                  {a.content && (
+                    <p style={{ ...sans, fontSize: '0.78rem', color: INK_SOFT, marginTop: 6, lineHeight: 1.55, overflowWrap: 'anywhere', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      {a.content}
+                    </p>
+                  )}
+                  {(source || date) && (
+                    <p className="mt-auto" style={{ ...sans, fontSize: '0.7rem', color: MUTED, paddingTop: 10 }}>
+                      {source}{source && date ? ' · ' : ''}{date && <span style={mono}>{date}</span>}
+                    </p>
+                  )}
                 </button>
               );
             })}
           </div>
           {error && (
-            <p style={{ ...sans, fontSize: '0.7rem', color: '#a89890', marginTop: 8 }}>Couldn&apos;t refresh announcements. Showing the last loaded ones.</p>
+            <p style={{ ...sans, fontSize: '0.72rem', color: MUTED, marginTop: 10 }}>Couldn&apos;t refresh announcements. Showing the last loaded ones.</p>
           )}
         </>
       )}
@@ -485,83 +514,79 @@ const OfficerDashboard = () => {
   const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
   return (
-    <div className="min-h-screen" style={{ background: IVORY, ...sans }}>
+    <div className="min-h-screen" style={{ background: BG, ...sans }}>
       <style>{`
-        .od-card:hover, .od-row:hover { background: #faf6ee !important; }
-        .od-card:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
+        .od-hover:hover { background: ${SAND} !important; }
+        .od-hover:focus-visible { outline: 2px solid ${BRONZE}; outline-offset: 2px; }
       `}</style>
 
-      <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8" style={{ minWidth: 0 }}>
+      <div className="flex flex-col gap-5 px-4 py-5 sm:px-6 lg:px-8" style={{ minWidth: 0 }}>
 
-        {/* ── Standard Officer header: title card + date card (+ notifications) ──
-            No overflow:hidden anywhere here so the notifications dropdown is never clipped. */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]">
-          <div style={{ ...tile, padding: '20px 24px' }}>
-            <p style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', color: GOLD }}>OFFICER PORTAL</p>
-            <h1 style={{ ...serif, fontSize: '1.75rem', fontWeight: 700, color: MAROON_DEEP, marginTop: 4, lineHeight: 1.2 }}>Dashboard</h1>
-            <p style={{ ...sans, fontSize: '0.84rem', color: '#a89890', marginTop: 6, maxWidth: 640 }}>
-              Here&apos;s an overview of your assigned scholars, submissions, and compliance.
-            </p>
-            <p style={{ ...sans, fontSize: '0.76rem', color: '#7a6a62', marginTop: 8 }}>
-              Welcome back, <strong style={{ color: INK }}>{name || 'Officer'}</strong>
+        {/* ── Page header — same layout as Announcements ──
+            No overflow:hidden so the notifications dropdown is never clipped. */}
+        <header
+          className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
+          style={{ ...card, padding: 'clamp(14px, 3vw, 20px)', boxShadow: '0 12px 28px -20px rgba(36,21,18,0.22)', position: 'relative' }}
+        >
+          <div className="min-w-0">
+            <p style={{ ...sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', color: BRONZE }}>OFFICER PORTAL</p>
+            <h1 style={{ fontFamily: "'Lora', Georgia, 'Times New Roman', serif", fontSize: 'clamp(1.6rem, 4vw, 2rem)', fontWeight: 700, color: PRIMARY, lineHeight: 1.15, marginTop: 3 }}>
+              Dashboard
+            </h1>
+            <p style={{ ...sans, fontSize: '0.9rem', color: MUTED, marginTop: 6, lineHeight: 1.55 }}>
+              Welcome back, <strong style={{ color: INK }}>{name || 'Officer'}</strong>. Here&apos;s an overview of your assigned scholars, submissions, and compliance.
               {lastUpdated && (
-                <span style={{ ...mono, color: '#a89890' }}> · Updated {lastUpdated.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })}</span>
+                <span style={{ ...mono, fontSize: '0.72rem', color: MUTED }}> · Updated {lastUpdated.toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })}</span>
               )}
             </p>
           </div>
 
-          <div className="flex items-stretch gap-3">
-            <div className="flex items-center gap-4" style={{ ...tile, padding: '16px 18px', position: 'relative' }}>
-              <span className="inline-flex flex-shrink-0 items-center justify-center" style={{ width: 42, height: 42, borderRadius: 12, background: `${MAROON}10` }}>
-                <CalendarDays size={19} style={{ color: MAROON }} />
-              </span>
-              <div>
-                <p style={{ ...sans, fontSize: '0.68rem', color: '#a89890' }}>Today</p>
-                <p style={{ ...sans, fontSize: '0.92rem', fontWeight: 600, color: INK, whiteSpace: 'nowrap' }}>{todayLabel}</p>
-              </div>
-              <div aria-hidden="true" style={{ alignSelf: 'stretch', width: 1, background: RULE, margin: '0 2px' }} />
-              <OfficerNotifications
-                loading={loading}
-                pending={validationCounts.newSubmissions}
-                pendingReviews={validationCounts.pendingReviews}
-                deadlines={complianceReminders}
-                announcements={announcements}
-                preferences={notificationPreferences}
-                error={notificationDataError}
-                onRetry={() => fetchData(true)}
-                onNavigate={navigate}
-              />
+          <div
+            className="flex flex-shrink-0 items-center gap-4 self-start lg:self-auto"
+            style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 12, padding: '10px 14px', position: 'relative' }}
+          >
+            <span className="inline-flex flex-shrink-0 items-center justify-center rounded-full" style={{ width: 36, height: 36, background: `${PRIMARY}0F`, color: PRIMARY }}>
+              <CalendarDays size={16} />
+            </span>
+            <div>
+              <p style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>Today</p>
+              <p style={{ ...sans, fontSize: '0.88rem', fontWeight: 600, color: INK, whiteSpace: 'nowrap' }}>{todayLabel}</p>
             </div>
+            <div aria-hidden="true" style={{ alignSelf: 'stretch', width: 1, background: BORDER, margin: '0 2px' }} />
+            <OfficerNotifications
+              loading={loading}
+              pending={validationCounts.newSubmissions}
+              pendingReviews={validationCounts.pendingReviews}
+              deadlines={complianceReminders}
+              announcements={announcements}
+              preferences={notificationPreferences}
+              error={notificationDataError}
+              onRetry={() => fetchData(true)}
+              onNavigate={navigate}
+            />
           </div>
-        </div>
+        </header>
 
-        {/* ── KPI cards ── */}
+        {/* ── 1. Overview numbers ── */}
         <StatisticsCards
           loading={loading}
           totalScholars={scholars.length}
           pending={pending}
           approved={approved}
           rejected={rejected}
+          onNavigate={path => navigate(path)}
         />
 
-        {/* ── Overall Scholar Compliance (left) + Quick Actions (right) ── */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        {/* ── 2. Shortcuts ── */}
+        <QuickActions onNavigate={path => navigate(path)} />
+
+        {/* ── 3. Compliance (main) + Upcoming Deadlines (side) ── */}
+        <div className="grid grid-cols-1 items-stretch gap-5 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
           <ComplianceSeal loading={loading} error={taskComplianceError} tasks={taskCompliance} />
-          <QuickActions />
+          <UpcomingDeadlines loading={loading} deadlines={deadlines} onNavigate={path => navigate(path)} />
         </div>
 
-        {/* ── Needs Attention + Upcoming Deadlines ── */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <NeedsAttention
-            loading={loading}
-            pending={pending}
-            deadlines={deadlines}
-            onNavigate={path => navigate(path)}
-          />
-          <UpcomingDeadlines loading={loading} deadlines={deadlines} />
-        </div>
-
-        {/* ── Recent Announcements (full width) ── */}
+        {/* ── 4. Recent Announcements: three cards across ── */}
         <RecentAnnouncements
           loading={loading}
           error={announcementsError}

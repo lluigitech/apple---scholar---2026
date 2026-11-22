@@ -1,8 +1,9 @@
 // Monthly letter review queue and decision workflow.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Mail, CheckCircle2, XCircle, AlertTriangle, ChevronLeft, ChevronRight,
-  Download, CheckSquare, Square, Search, FileText, Eye, X,
+  Mail, CheckCircle2, XCircle, AlertTriangle, ChevronLeft, ChevronRight, ChevronDown,
+  Download, CheckSquare, Square, Search, FileText, Eye, X, Clock3, SlidersHorizontal, FilterX,
+  BarChart3, ListChecks, MessageSquare,
 } from 'lucide-react';
 import axios from 'axios';
 import { formatYearLevelLabel } from '../../../utils/yearLevelLabels';
@@ -81,17 +82,17 @@ const getLetterPdfBlob = async letter => {
   return doc.output('blob');
 };
 
-// ── Officer design tokens ──
-const MAROON = '#6D2140', MAROON_DEEP = '#4f1620', GOLD = '#b98b4e', BG = '#F6EFE4', CARD = '#fffdf8';
-const RULE = '#e8dccb', INK = '#241512', MUTED = '#a89890', SAGE = '#3F8A55', AMBER = '#b8863f', CLAY = '#C1666B';
+// ── Apple Scholar design tokens — same as the other Officer pages ──
+const MAROON = '#6D2140', GOLD = '#A9784E', BG = '#F7F4EE', CARD = '#FFFDF9';
+const RULE = '#E7D8C7', INK = '#241512', MUTED = '#8A7A68', SAGE = '#3F8A55', AMBER = '#B8863F', CLAY = '#C1666B';
 const display = { fontFamily: "'Lora', Georgia, serif" };
-const body = { fontFamily: "'Work Sans', 'Segoe UI', sans-serif" };
+const body = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
 const mono = { fontFamily: "'IBM Plex Mono', ui-monospace, Menlo, monospace" };
-const tile = { background: CARD, border: `1px solid ${RULE}`, borderRadius: 14, boxShadow: '0 8px 20px -16px rgba(36,21,18,0.35)' };
-const fieldLabel = { ...body, display: 'block', fontSize: '0.72rem', fontWeight: 500, color: '#7a6a62', marginBottom: 5 };
-const boxField = { height: 40, padding: '0 10px', border: `1px solid ${RULE}`, borderRadius: 8, background: CARD, ...body, fontSize: '0.84rem', color: INK, outline: 'none', minWidth: 140 };
-const outlineBtn = { display: 'inline-flex', alignItems: 'center', gap: 8, height: 38, padding: '0 14px', border: `1px solid ${RULE}`, borderRadius: 8, background: CARD, color: MAROON_DEEP, ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' };
-const filledBtn = c => ({ ...outlineBtn, justifyContent: 'center', background: c, color: '#fff', border: 'none' });
+const card = { background: CARD, border: `1px solid ${RULE}`, borderRadius: 16, boxShadow: '0 12px 28px -20px rgba(36,21,18,0.22)' };
+const fieldLabel = { ...body, display: 'block', fontSize: '0.7rem', fontWeight: 600, color: MUTED, marginBottom: 6 };
+const boxField = { height: 40, padding: '0 12px', border: `1px solid ${RULE}`, borderRadius: 10, background: CARD, ...body, fontSize: '0.82rem', color: INK, outline: 'none', minWidth: 0, width: '100%' };
+const outlineBtn = { display: 'inline-flex', alignItems: 'center', gap: 8, minHeight: 38, padding: '0 14px', border: `1px solid ${RULE}`, borderRadius: 10, background: CARD, color: MAROON, whiteSpace: 'nowrap', ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' };
+const filledBtn = c => ({ ...outlineBtn, justifyContent: 'center', background: c, color: '#fff', border: 'none', fontWeight: 700 });
 
 // ── Config ──
 const sentimentCfg = {
@@ -103,6 +104,11 @@ const qualityCfg = {
   accepted: { color: SAGE, label: 'Quality Accepted' },
   medium_risk: { color: AMBER, label: 'Quality Medium Risk' },
   high_risk: { color: CLAY, label: 'Quality High Risk' },
+};
+const reviewCfg = {
+  pending: { color: AMBER, label: 'Pending Review' },
+  approved: { color: SAGE, label: 'Approved' },
+  returned: { color: CLAY, label: 'Returned' },
 };
 const RUBRIC = [
   { key: 'paragraph', label: 'Paragraph Structure', max: 7 },
@@ -134,6 +140,7 @@ const getSentiment = (label, score) => {
     : s100 === null ? null : s100 >= 70 ? 'positive' : s100 < 40 ? 'negative' : 'neutral';
   return { sentiment, score: s100 };
 };
+const initialsOf = name => String(name || '?').split(/\s+/).map(n => n[0]).join('').slice(0, 2).toUpperCase();
 
 const mapRow = row => {
   const fullText = pick(row, 'letter_content', 'letterContent') || '';
@@ -197,14 +204,45 @@ const mapRow = row => {
 
 // ── Small shared UI ──
 const AlertStrip = ({ color, children, action }) => (
-  <div className="flex items-center justify-between gap-3" style={{ ...tile, borderLeft: `3px solid ${color}`, background: `${color}0d`, padding: '11px 16px', ...body, fontSize: '0.8rem', fontWeight: 600, color }} role="alert">
-    <span className="flex items-center gap-2"><AlertTriangle size={14} style={{ flexShrink: 0 }} />{children}</span>{action}
+  <div className="flex items-center justify-between gap-3" style={{ borderRadius: 12, borderLeft: `3px solid ${color}`, background: `${color}0d`, padding: '11px 16px', ...body, fontSize: '0.8rem', fontWeight: 600, color }} role="alert">
+    <span className="flex items-start gap-2"><AlertTriangle size={14} style={{ flexShrink: 0, marginTop: 2 }} /><span>{children}</span></span>{action}
   </div>
 );
 const Pill = ({ color, children }) => (<span style={{ ...body, fontSize: '0.72rem', fontWeight: 600, padding: '4px 10px', borderRadius: 999, background: `${color}16`, color, whiteSpace: 'nowrap' }}>{children}</span>);
-const MetricCard = ({ label, children, accent = MAROON }) => (
+const ReviewPill = ({ review }) => {
+  const cfg = reviewCfg[review] || reviewCfg.pending;
+  return (
+    <span className="inline-flex items-center gap-1.5 whitespace-nowrap" style={{ ...body, fontSize: '0.7rem', fontWeight: 700, color: cfg.color, background: `${cfg.color}14`, border: `1px solid ${cfg.color}35`, borderRadius: 999, padding: '4px 10px' }}>
+      <span className="rounded-full" style={{ width: 6, height: 6, background: cfg.color }} />{cfg.label}
+    </span>
+  );
+};
+const Avatar = ({ name, size = 36 }) => (
+  <span className="flex flex-shrink-0 items-center justify-center rounded-full" style={{ width: size, height: size, background: `${MAROON}12`, color: MAROON, ...display, fontSize: size > 38 ? '0.9rem' : '0.74rem', fontWeight: 700 }}>
+    {initialsOf(name)}
+  </span>
+);
+const ScoreBar = ({ score, width = 64 }) => {
+  if (score === null) return <span style={{ color: MUTED }}>—</span>;
+  const color = scoreColor(score);
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-1.5 flex-shrink-0 overflow-hidden rounded-full" style={{ width, background: RULE }}>
+        <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, score))}%`, background: color }} />
+      </div>
+      <span style={{ ...mono, fontSize: '0.74rem', fontWeight: 700, color }}>{score}</span>
+    </div>
+  );
+};
+const SectionTitle = ({ icon: Icon, children }) => (
+  <div className="mb-3 flex items-center gap-2.5">
+    <span className="flex items-center justify-center rounded-full" style={{ width: 28, height: 28, background: `${GOLD}18`, color: GOLD }}><Icon size={13} /></span>
+    <h3 style={{ ...display, fontSize: '0.98rem', fontWeight: 700, color: INK }}>{children}</h3>
+  </div>
+);
+const MetricCard = ({ label, children }) => (
   <div style={{ background: BG, border: `1px solid ${RULE}`, borderRadius: 12, padding: '14px 16px' }}>
-    <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.05em', color: accent, marginBottom: 10 }}>{label}</p>{children}
+    <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.05em', color: MUTED, marginBottom: 10 }}>{label}</p>{children}
   </div>
 );
 const SentimentGauge = ({ score, color }) => (
@@ -285,7 +323,7 @@ function PdfPages({ blob }) {
   );
 }
 
-// ── Isang centered Review modal ──
+// ── Review modal (bottom sheet on phones, centered card on larger screens) ──
 function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
   const [comment, setComment] = useState(letter.comment || '');
   const [mode, setMode] = useState(initialMode);
@@ -299,7 +337,6 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
   const qColor = letter.score === null ? MUTED : scoreColor(letter.score);
   const reasonMissing = mode === 'return' && !comment.trim();
   const canDecide = letter.review === 'pending';
-  const reviewPill = { pending: [AMBER, 'Pending Review'], approved: [SAGE, 'Approved'], returned: [CLAY, 'Returned'] }[letter.review];
 
   useEffect(() => {
     const onKey = e => { if (e.key === 'Escape' && !submitting) onClose(); };
@@ -315,14 +352,8 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
 
   const togglePdf = async () => {
     if (pdfBusy) return;
-    if (showPdf) {
-      setShowPdf(false);
-      return;
-    }
-    if (pdfBlob) {
-      setShowPdf(true);
-      return;
-    }
+    if (showPdf) { setShowPdf(false); return; }
+    if (pdfBlob) { setShowPdf(true); return; }
     setPdfBusy(true);
     setPdfErr('');
     try {
@@ -348,33 +379,32 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6" style={{ background: 'rgba(36,21,18,0.55)' }} onClick={() => !submitting && onClose()}>
       <div role="dialog" aria-modal="true" aria-labelledby="mlr-title" onClick={e => e.stopPropagation()} className="mlr-modal flex w-full flex-col"
         style={{ background: CARD, border: `1px solid ${RULE}`, boxShadow: '0 28px 60px -24px rgba(36,21,18,0.5)', overflow: 'hidden' }}>
-        <div className="flex flex-shrink-0 items-start justify-between gap-3" style={{ padding: '14px 16px', borderBottom: `1px solid ${RULE}` }}>
-          <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
-            <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full sm:h-11 sm:w-11" style={{ background: `${MAROON}12`, color: MAROON, ...display, fontWeight: 700 }}>
-              {letter.scholarName.split(/\s+/).map(name => name[0]).join('').slice(0, 2).toUpperCase()}
-            </span>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ ...body, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em', color: GOLD }}>SUBMISSION DETAILS</p>
-              <h2 id="mlr-title" style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color: INK, lineHeight: 1.25, overflowWrap: 'anywhere' }}>{letter.scholarName}</h2>
-              <p style={{ ...mono, fontSize: '0.68rem', color: MUTED, overflowWrap: 'anywhere' }}>{letter.scholarId} · {letter.yearLevel} · Submitted {letter.submittedDate}</p>
-              <div className="mt-2 flex flex-wrap gap-1.5 sm:hidden">
+
+        {/* Header */}
+        <div className="flex flex-shrink-0 items-start justify-between gap-3" style={{ padding: '16px 18px', borderBottom: `1px solid ${RULE}` }}>
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar name={letter.scholarName} size={44} />
+            <div className="min-w-0">
+              <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.1em', color: GOLD }}>SUBMISSION DETAILS</p>
+              <h2 id="mlr-title" style={{ ...display, fontSize: '1.2rem', fontWeight: 700, color: MAROON, lineHeight: 1.2, overflowWrap: 'anywhere' }}>{letter.scholarName}</h2>
+              <p style={{ ...mono, fontSize: '0.68rem', color: MUTED, marginTop: 2, overflowWrap: 'anywhere' }}>{letter.scholarId} · {letter.yearLevel} · Submitted {letter.submittedDate}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <ReviewPill review={letter.review} />
                 {letter.riskFlag && <Pill color={CLAY}>Risk Flag</Pill>}
-                <Pill color={reviewPill[0]}>{reviewPill[1]}</Pill>
               </div>
             </div>
           </div>
-          <div className="flex flex-shrink-0 items-center gap-2">
-            <span className="hidden sm:flex items-center gap-2">
-              {letter.riskFlag && <Pill color={CLAY}>Risk Flag</Pill>}
-              <Pill color={reviewPill[0]}>{reviewPill[1]}</Pill>
-            </span>
-            <button onClick={onClose} disabled={submitting} aria-label="Close review" style={{ ...outlineBtn, padding: 0, width: 38, justifyContent: 'center' }}><X size={16} /></button>
-          </div>
+          <button onClick={onClose} disabled={submitting} aria-label="Close review" className="mlr-btn flex-shrink-0" style={{ ...outlineBtn, padding: 0, width: 40, height: 40, justifyContent: 'center' }}><X size={16} /></button>
         </div>
 
-        <div className="space-y-5 overflow-y-auto p-4 sm:space-y-6 sm:p-6" style={{ flex: 1 }}>
-          <div>
-            <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.08em', color: GOLD, marginBottom: 10 }}>LETTER</p>
+        {/* Body */}
+        <div className="space-y-6 overflow-y-auto p-4 sm:p-6" style={{ flex: 1 }}>
+          {letter.comment && (letter.review !== 'pending' || !mode) && (
+            <AlertStrip color={AMBER}>Previous officer feedback: {letter.comment}</AlertStrip>
+          )}
+
+          <section>
+            <SectionTitle icon={FileText}>Letter</SectionTitle>
             {letter.fullText || letter.pdfUrl ? (
               <div style={{ border: `1px solid ${RULE}`, borderRadius: 12, background: BG, overflow: 'hidden' }}>
                 <div className="flex flex-wrap items-center gap-4" style={{ padding: '14px 16px' }}>
@@ -387,7 +417,7 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
                     <p style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 2 }}>{letter.wordCount} words · Monthly Progress Report</p>
                   </div>
                   <button onClick={togglePdf} disabled={pdfBusy} className="mlr-btn w-full sm:w-auto"
-                    style={{ ...(showPdf ? outlineBtn : filledBtn(MAROON)), justifyContent: 'center', opacity: pdfBusy ? 0.6 : 1 }}>
+                    style={{ ...(showPdf ? outlineBtn : filledBtn(MAROON)), justifyContent: 'center', minHeight: 44, opacity: pdfBusy ? 0.6 : 1 }}>
                     {showPdf ? <X size={14} /> : <Eye size={14} />}
                     {pdfBusy ? 'Loading…' : showPdf ? 'Close Letter' : 'Open Letter'}
                   </button>
@@ -396,10 +426,10 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
               </div>
             ) : <p style={{ ...body, fontSize: '0.84rem', color: MUTED }}>Letter content is not available.</p>}
             {pdfErr && <div className="mt-3"><AlertStrip color={CLAY}>{pdfErr}</AlertStrip></div>}
-          </div>
+          </section>
 
-          <div>
-            <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.08em', color: GOLD, marginBottom: 10 }}>REPORT EVALUATION</p>
+          <section>
+            <SectionTitle icon={BarChart3}>Report evaluation</SectionTitle>
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {[
                 ['Quality Score', letter.score === null ? '—' : `${letter.score}%`, letter.rubric.length ? `${letter.bodyScore} / 70 ${letter.scoringMethod} points` : 'No rubric data', qColor],
@@ -407,7 +437,7 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
                 ['Word Count', letter.wordCount, 'words', INK],
               ].map(([label, value, sub, color], index) => (
                 <div key={label} className={index === 2 ? 'col-span-2 sm:col-span-1' : ''} style={{ background: BG, border: `1px solid ${RULE}`, borderRadius: 12, padding: '12px 14px' }}>
-                  <p style={{ ...body, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.06em', color: MUTED, textTransform: 'uppercase' }}>{label}</p>
+                  <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.06em', color: MUTED, textTransform: 'uppercase' }}>{label}</p>
                   <p style={{ ...display, fontSize: '1.45rem', fontWeight: 700, color, lineHeight: 1.2, marginTop: 4 }}>{value}</p>
                   <p style={{ ...body, fontSize: '0.7rem', color: MUTED, marginTop: 2 }}>{sub}</p>
                 </div>
@@ -439,8 +469,11 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
                 </p>
               </div>
             )}
+          </section>
 
-            <div className="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <section>
+            <SectionTitle icon={ListChecks}>Score breakdown</SectionTitle>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <MetricCard label={letter.scoringMethod === 'rule-based' ? 'RULE-BASED SCORE BREAKDOWN' : 'RUBRIC BREAKDOWN'}>
                 {letter.rubric.length ? <div className="space-y-3">
                   {letter.rubric.map(item => {
@@ -481,19 +514,18 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
                   </MetricCard>)}
               </div>
             </div>
-          </div>
-
-          {letter.comment && letter.review !== 'pending' || (letter.comment && !mode)
-            ? <AlertStrip color={AMBER}>Previous officer feedback: {letter.comment}</AlertStrip> : null}
+          </section>
         </div>
+
+        {/* Decision footer */}
         {canDecide && (
           <div className="flex-shrink-0" style={{ borderTop: `1px solid ${RULE}`, padding: '12px 16px', paddingBottom: 'max(12px, env(safe-area-inset-bottom))', background: CARD }}>
             {!mode ? (
               <div className="grid gap-3 sm:flex sm:flex-wrap sm:items-center sm:justify-between">
-                <p style={{ ...body, fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.06em', color: INK }}>OFFICER DECISION</p>
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
-                  <button onClick={() => setMode('return')} style={{ ...filledBtn(CLAY), justifyContent: 'center' }}><XCircle size={14} /> Return for Revision</button>
-                  <button onClick={() => setMode('approve')} style={{ ...filledBtn(SAGE), justifyContent: 'center' }}><CheckCircle2 size={14} /> Approve</button>
+                <p className="flex items-center gap-2" style={{ ...body, fontSize: '0.74rem', fontWeight: 700, letterSpacing: '0.06em', color: INK }}><MessageSquare size={14} style={{ color: GOLD }} /> OFFICER DECISION</p>
+                <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:flex sm:flex-wrap">
+                  <button onClick={() => setMode('return')} style={{ ...filledBtn(CLAY), minHeight: 44 }}><XCircle size={14} /> Return for Revision</button>
+                  <button onClick={() => setMode('approve')} style={{ ...filledBtn(SAGE), minHeight: 44 }}><CheckCircle2 size={14} /> Approve</button>
                 </div>
               </div>
             ) : (
@@ -501,14 +533,14 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
                 <label htmlFor="mlr-comment" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: mode === 'approve' ? SAGE : CLAY }}>
                   {mode === 'approve' ? 'Approval note (optional)' : 'Reason for returning (required)'}
                 </label>
-                <textarea id="mlr-comment" value={comment} onChange={event => setComment(event.target.value)} rows={3} autoFocus className="w-full resize-none outline-none"
+                <textarea id="mlr-comment" value={comment} onChange={event => setComment(event.target.value)} rows={3} autoFocus className="mlr-field w-full resize-none outline-none"
                   placeholder={mode === 'approve' ? 'Optional approval note...' : 'Explain what needs to be revised...'}
                   style={{ ...body, fontSize: '0.88rem', padding: '12px 14px', borderRadius: 12, border: `1px solid ${reasonMissing ? `${CLAY}88` : RULE}`, background: BG, color: INK }} />
                 {reasonMissing && <p style={{ ...body, fontSize: '0.74rem', color: CLAY }}>A reason is required before returning this letter.</p>}
                 {err && <AlertStrip color={CLAY}>{err}</AlertStrip>}
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:justify-end">
-                  <button onClick={() => { setMode(null); setErr(''); }} disabled={submitting} style={{ ...outlineBtn, justifyContent: 'center' }}>Cancel</button>
-                  <button onClick={submit} disabled={reasonMissing || submitting} style={{ ...filledBtn(mode === 'approve' ? SAGE : CLAY), opacity: reasonMissing || submitting ? 0.5 : 1, cursor: reasonMissing || submitting ? 'not-allowed' : 'pointer' }}>
+                <div className="grid grid-cols-1 gap-2 min-[400px]:grid-cols-2 sm:flex sm:flex-wrap sm:justify-end">
+                  <button onClick={() => { setMode(null); setErr(''); }} disabled={submitting} className="mlr-btn" style={{ ...outlineBtn, justifyContent: 'center', minHeight: 44 }}>Cancel</button>
+                  <button onClick={submit} disabled={reasonMissing || submitting} style={{ ...filledBtn(mode === 'approve' ? SAGE : CLAY), minHeight: 44, opacity: reasonMissing || submitting ? 0.5 : 1, cursor: reasonMissing || submitting ? 'not-allowed' : 'pointer' }}>
                     {submitting ? 'Saving…' : `Confirm ${mode === 'approve' ? 'Approval' : 'Return'}`}
                   </button>
                 </div>
@@ -522,15 +554,42 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
 // ── CSV helpers ──
 const csvCell = v => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
 
-const DEFAULT_FILTERS = { search: '', yearLevel: 'all', sentiment: 'all' };
+const DEFAULT_FILTERS = { search: '', yearLevel: 'all', sentiment: 'all', status: 'all' };
+const DEFAULT_PERIOD = '6m';
+
+// Defined outside the page component so it is not remounted on every render.
+const Select = ({ id, label, value, onChange, options, disabled = false }) => (
+  <div className="min-w-0">
+    <label htmlFor={id} style={fieldLabel}>{label}</label>
+    <select id={id} className="mlr-field" value={value} onChange={e => onChange(e.target.value)} disabled={disabled}
+      style={{ ...boxField, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.7 : 1 }}>
+      {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+    </select>
+  </div>
+);
+
+const KpiCard = ({ icon: Icon, label, value, note, color }) => (
+  <div className="flex min-w-0 flex-col items-start gap-2.5 sm:flex-row sm:gap-3.5" style={{ ...card, padding: 'clamp(12px, 3vw, 18px)' }}>
+    <span className="flex shrink-0 items-center justify-center" style={{ width: 42, height: 42, borderRadius: 12, background: `${color}1a`, color }}>
+      <Icon size={19} />
+    </span>
+    <div className="min-w-0">
+      <p style={{ ...display, color: MAROON, fontSize: 'clamp(1.3rem, 4vw, 1.7rem)', fontWeight: 700, lineHeight: 1 }}>{value}</p>
+      <p style={{ ...body, color: INK, fontSize: '0.78rem', fontWeight: 600, marginTop: 6 }}>{label}</p>
+      <p className="hidden sm:block" style={{ ...body, color: MUTED, fontSize: '0.72rem', marginTop: 2, lineHeight: 1.4 }}>{note}</p>
+    </div>
+  </div>
+);
+
 // ── Main ──
 export default function MonthlyLetterReview({ assignedYearLevels = [], assignedYearLevelsLoading = false }) {
   const [workPreferences] = useState(readOfficerWorkPreferences);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const [error, setError] = useState('');
-  const [period, setPeriod] = useState('6m');
+  const [period, setPeriod] = useState(DEFAULT_PERIOD);
   const [month, setMonth] = useState('');
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
@@ -566,7 +625,8 @@ export default function MonthlyLetterReview({ assignedYearLevels = [], assignedY
     return rows.filter(r =>
       (!q || r.scholarName.toLowerCase().includes(q) || String(r.scholarId).toLowerCase().includes(q)) &&
       (filters.yearLevel === 'all' || r.yearLevel === filters.yearLevel) &&
-      (filters.sentiment === 'all' || r.sentiment === filters.sentiment));
+      (filters.sentiment === 'all' || r.sentiment === filters.sentiment) &&
+      (filters.status === 'all' || r.review === filters.status));
   }, [rows, filters]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -575,7 +635,12 @@ export default function MonthlyLetterReview({ assignedYearLevels = [], assignedY
   useEffect(() => { if (page > pageCount) setPage(pageCount); }, [page, pageCount]);
 
   const pendingCount = rows.filter(r => r.review === 'pending').length;
+  const approvedCount = rows.filter(r => r.review === 'approved').length;
+  const riskCount = rows.filter(r => r.riskFlag).length;
   const selected = rows.find(r => r.id === selectedId) || null;
+
+  const filtersActive = month !== '' || period !== DEFAULT_PERIOD || filters.search !== '' || filters.yearLevel !== 'all' || filters.sentiment !== 'all' || filters.status !== 'all';
+  const resetFilters = () => { setFilters(DEFAULT_FILTERS); setPeriod(DEFAULT_PERIOD); setMonth(''); setPage(1); };
 
   // Isang decision workflow; ang modal ang nagpapakita ng error kapag nag-throw.
   const handleDecide = async (id, action, comment) => {
@@ -584,6 +649,8 @@ export default function MonthlyLetterReview({ assignedYearLevels = [], assignedY
       ? { ...r, review: action === 'approve' ? 'approved' : 'returned', comment: comment || null } : r));
     load(); // i-sync sa server (counts, filters, pagination)
   };
+
+  const openReview = (id, action = null) => { setSelectedId(id); setSelectedAction(action); };
 
   const exportCSV = () => {
     const header = ['Scholar ID', 'Scholar Name', 'Submission Type', 'Submission Date', 'Completeness/Quality Score', 'Sentiment', 'Sentiment Score'];
@@ -621,205 +688,281 @@ export default function MonthlyLetterReview({ assignedYearLevels = [], assignedY
     }
   };
 
-  const columns = ['Scholar', 'Scholar ID', 'AI Quality Score', 'Sentiment', 'Submitted', 'Actions'];
-  const Select = ({ id, label, value, onChange, options, disabled = false }) => (
-    <div><label htmlFor={id} style={fieldLabel}>{label}</label>
-      <select id={id} value={value} onChange={e => onChange(e.target.value)} disabled={disabled} style={{ ...boxField, cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.7 : 1 }}>
-        {options.map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></div>
-  );
+  const exportDisabled = generatingPdf || filtered.length === 0;
+  const thStyle = { ...body, fontSize: '0.72rem', fontWeight: 700, color: MUTED, textAlign: 'left', padding: workPreferences.density === 'compact' ? '8px 12px' : '12px 14px', background: BG, borderBottom: `1px solid ${RULE}`, whiteSpace: 'nowrap' };
+  const tdStyle = { padding: workPreferences.density === 'compact' ? '8px 12px' : '12px 14px', verticalAlign: 'middle' };
 
   return (
-    <div className="flex flex-col gap-4" style={{ minWidth: 0, ...body }}>
+    <div className="flex flex-col gap-5" style={{ minWidth: 0, ...body }}>
       <style>{`
-        .mlr-btn:hover{background:${BG}}
-        .mlr-btn:focus-visible,.mlr-field:focus-visible{outline:2px solid ${GOLD};outline-offset:2px}
-        .mlr-table{width:100%;min-width:0;table-layout:fixed}
-        .mlr-table .mlr-col-scholar{width:19%}
-        .mlr-table .mlr-col-id{width:17%}
-        .mlr-table .mlr-col-score{width:13%}
-        .mlr-table .mlr-col-sentiment{width:13%}
-        .mlr-table .mlr-col-submitted{width:16%}
-        .mlr-table .mlr-col-actions{width:22%}
-        .mlr-table.mlr-compact th,.mlr-table.mlr-compact td{padding:8px 10px!important}
-        .mlr-modal{max-width:860px;max-height:90vh;max-height:90dvh;border-radius:16px}
+        .mlr-btn:hover:not(:disabled){background:${BG}}
+        .mlr-btn:focus-visible{outline:2px solid ${GOLD};outline-offset:2px}
+        .mlr-field:focus{border-color:${MAROON}!important;box-shadow:0 0 0 3px rgba(109,33,64,.10)}
+        .mlr-row{transition:background-color 150ms ease;cursor:pointer}
+        .mlr-row:hover{background:#FBF7EE}
+        .mlr-menu-item:hover:not(:disabled){background:${BG}}
+        .mlr-scroll::-webkit-scrollbar{height:6px}
+        .mlr-scroll::-webkit-scrollbar-thumb{background:rgba(109,33,64,.18);border-radius:999px}
+        .mlr-modal{max-width:880px;max-height:90vh;max-height:90dvh;border-radius:16px}
         .mlr-pdf-scroll{max-height:520px}
         @media(max-width:639px){
-          .mlr-filters select,.mlr-filters input[type=month]{width:100%!important;min-width:0!important}
           .mlr-modal{max-height:94vh;max-height:94dvh;border-radius:18px 18px 0 0}
           .mlr-pdf-scroll{max-height:62vh;max-height:62dvh}
+          /* 16px prevents iOS Safari from zooming in when a field is focused */
+          .mlr-field{font-size:16px!important}
         }
+        @media (prefers-reduced-motion: reduce){ .mlr-row{transition:none} }
       `}</style>
 
-      <div style={{ ...tile, padding: '14px 18px', borderLeft: `3px solid ${GOLD}` }}>
-        <div className="mlr-filters grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-end">
-          <div className="col-span-2 sm:col-span-1" style={{ flex: '1 1 200px', minWidth: 180 }}>
-            <label htmlFor="mlr-search" style={fieldLabel}>Search</label>
-            <div className="flex items-center gap-2" style={{ ...boxField, minWidth: 0 }}>
-              <Search size={14} style={{ color: MUTED, flexShrink: 0 }} />
-              <input id="mlr-search" className="mlr-field" value={filters.search} onChange={e => setFilter('search', e.target.value)} placeholder="Scholar name or ID"
-                style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.84rem', color: INK }} />
-            </div>
-          </div>
-          <div><label htmlFor="mlr-period" style={fieldLabel}>Reporting Period</label>
-            <select id="mlr-period" className="mlr-field" value={period} onChange={e => { setPeriod(e.target.value); setPage(1); }} style={boxField}>
-              <option value="1m">Last month</option>
-              <option value="3m">Last 3 months</option>
-              <option value="6m">Last 6 months</option>
-            </select></div>
-            <div>
-              <label htmlFor="mlr-month" style={fieldLabel}>Filter by Month</label>
-              <div className="flex items-center gap-2">
-                <input id="mlr-month" className="mlr-field" type="month" value={month} onChange={e => { setMonth(e.target.value); setPage(1); }} style={{ ...boxField, flex: 1, minWidth: 0 }} />
-                {month && <button type="button" onClick={() => { setMonth(''); setPage(1); }} style={{ ...body, border: 'none', background: 'none', color: MAROON, fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>Clear</button>}
-              </div>
-            </div>
-            <Select id="mlr-year" label="Assigned Year Level" value={filters.yearLevel} onChange={v => setFilter('yearLevel', v)} disabled={assignedYearLevelsLoading || yearLevelOptions.length === 0} options={[[ 'all', assignedYearLevelsLoading ? 'Loading assigned year levels...' : yearLevelOptions.length ? 'All Assigned Year Levels' : 'No Assigned Year Levels' ], ...yearLevelOptions.map(y => [y, y])]} />
-          <Select id="mlr-sent" label="Sentiment" value={filters.sentiment} onChange={v => setFilter('sentiment', v)} options={[['all', 'All'], ['positive', 'Positive'], ['neutral', 'Neutral'], ['negative', 'Negative']]} />
-          <div className="col-span-2 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center lg:ml-auto">
-            <button onClick={exportPDF} disabled={generatingPdf || filtered.length === 0} style={{ ...outlineBtn, justifyContent: 'center', opacity: generatingPdf || filtered.length === 0 ? 0.5 : 1, cursor: generatingPdf || filtered.length === 0 ? 'not-allowed' : 'pointer' }}>
-              <FileText size={14} /> {generatingPdf ? 'Generating…' : 'Download PDF'}
-            </button>
-            <button onClick={exportCSV} disabled={filtered.length === 0} style={{ ...filledBtn(MAROON), opacity: filtered.length ? 1 : 0.5 }}><Download size={14} /> Export CSV</button>
-          </div>
-        </div>
-        {!loading && <p style={{ fontSize: '0.74rem', color: MUTED, marginTop: 10 }}>
-          {filtered.length} matching {filtered.length === 1 ? 'letter' : 'letters'}
-          {month && ' for the selected month'}
-        </p>}
+      {/* ── KPI cards ── */}
+      <div className="grid grid-cols-2 gap-2.5 sm:gap-4 xl:grid-cols-4">
+        <KpiCard icon={Mail} label="Total Letters" value={loading ? '—' : rows.length} note="Submitted in the selected period" color={MAROON} />
+        <KpiCard icon={Clock3} label="Pending Review" value={loading ? '—' : pendingCount} note="Waiting for an officer decision" color={AMBER} />
+        <KpiCard icon={CheckCircle2} label="Approved" value={loading ? '—' : approvedCount} note="Accepted by an officer" color={SAGE} />
+        <KpiCard icon={AlertTriangle} label="Risk Flagged" value={loading ? '—' : riskCount} note="Negative sentiment or high-risk quality" color={CLAY} />
       </div>
 
-      {error && <AlertStrip color={CLAY} action={<button onClick={load} style={{ ...body, fontSize: '0.74rem', fontWeight: 700, color: CLAY, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Retry</button>}>{error}</AlertStrip>}
-
-      <div style={{ ...tile, overflow: 'hidden' }}>
-        <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: `1px solid ${RULE}` }}>
-          <Mail size={20} strokeWidth={1.75} style={{ color: MAROON_DEEP }} />
-          <div>
-            <h2 style={{ ...display, fontSize: '1.15rem', fontWeight: 600, color: MAROON_DEEP, lineHeight: 1.2 }}>Monthly Letter Review</h2>
-            <p style={{ fontSize: '0.78rem', color: MUTED, marginTop: 3 }}>Review monthly letters from your assigned scholars.
-              {!loading && !error && pendingCount > 0 && <span style={{ color: AMBER, fontWeight: 600 }}> {pendingCount} awaiting review.</span>}</p>
+      {/* ── Filters ── */}
+      <section aria-label="Letter filters" style={{ ...card, padding: 'clamp(14px, 3vw, 20px)' }}>
+        <div className="mb-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <span className="flex items-center justify-center rounded-full" style={{ width: 30, height: 30, background: `${GOLD}18`, color: GOLD }}><SlidersHorizontal size={14} /></span>
+            <h2 style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK }}>Filters</h2>
           </div>
+
+          <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
+            {filtersActive && (
+              <button type="button" onClick={resetFilters} className="mlr-btn" style={{ ...outlineBtn, minHeight: 36, padding: '0 12px', fontSize: '0.76rem', fontWeight: 700 }}>
+                <FilterX size={13} /> Reset
+              </button>
+            )}
+            <div style={{ position: 'relative' }}>
+              <button type="button" onClick={() => setExportOpen(v => !v)} aria-haspopup="menu" aria-expanded={exportOpen}
+                className="mlr-btn transition-opacity hover:opacity-90"
+                style={{ ...filledBtn(MAROON), minHeight: 36, padding: '0 14px', cursor: generatingPdf ? 'wait' : 'pointer' }}>
+                <Download size={14} /> {generatingPdf ? 'Generating PDF…' : 'Export'} <ChevronDown size={13} />
+              </button>
+              {exportOpen && (
+                <>
+                  <div onClick={() => setExportOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 30 }} />
+                  <div role="menu" style={{ ...card, position: 'absolute', right: 0, top: 'calc(100% + 6px)', minWidth: 180, zIndex: 31, boxShadow: '0 16px 32px -18px rgba(36,21,18,0.3)', padding: 6 }}>
+                    <button type="button" role="menuitem" disabled={exportDisabled} className="mlr-menu-item"
+                      onClick={() => { setExportOpen(false); exportPDF(); }}
+                      style={{ ...body, width: '100%', textAlign: 'left', border: 'none', background: 'transparent', padding: '10px', borderRadius: 8, color: INK, fontSize: '0.82rem', cursor: exportDisabled ? 'not-allowed' : 'pointer', opacity: exportDisabled ? 0.55 : 1 }}>
+                      <span className="inline-flex items-center gap-2"><FileText size={14} /> Download PDF</span>
+                    </button>
+                    <button type="button" role="menuitem" disabled={filtered.length === 0} className="mlr-menu-item"
+                      onClick={() => { setExportOpen(false); exportCSV(); }}
+                      style={{ ...body, width: '100%', textAlign: 'left', border: 'none', background: 'transparent', padding: '10px', borderRadius: 8, color: INK, fontSize: '0.82rem', cursor: filtered.length === 0 ? 'not-allowed' : 'pointer', opacity: filtered.length === 0 ? 0.55 : 1 }}>
+                      <span className="inline-flex items-center gap-2"><Download size={14} /> Download CSV</span>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="min-w-0 sm:col-span-2 lg:col-span-3 xl:col-span-5">
+            <label htmlFor="mlr-search" style={fieldLabel}>Search scholar</label>
+            <div className="relative">
+              <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: '#B8A999' }} />
+              <input id="mlr-search" className="mlr-field" value={filters.search} onChange={e => setFilter('search', e.target.value)} placeholder="Scholar name or ID…"
+                style={{ ...boxField, paddingLeft: 34 }} />
+            </div>
+          </div>
+
+          <Select id="mlr-period" label="Reporting period" value={period} onChange={v => { setPeriod(v); setPage(1); }}
+            options={[['1m', 'Last month'], ['3m', 'Last 3 months'], ['6m', 'Last 6 months']]} />
+
+          <div className="min-w-0">
+            <label htmlFor="mlr-month" style={fieldLabel}>Month</label>
+            <div className="flex items-center gap-2">
+              <input id="mlr-month" className="mlr-field" type="month" value={month} onChange={e => { setMonth(e.target.value); setPage(1); }} style={{ ...boxField, flex: 1, cursor: 'pointer' }} />
+              {month && (
+                <button type="button" onClick={() => { setMonth(''); setPage(1); }}
+                  style={{ ...body, border: 'none', background: 'none', color: MAROON, fontSize: '0.76rem', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap', minHeight: 40 }}>Clear</button>
+              )}
+            </div>
+          </div>
+
+          <Select id="mlr-year" label="Year level" value={filters.yearLevel} onChange={v => setFilter('yearLevel', v)}
+            disabled={assignedYearLevelsLoading || yearLevelOptions.length === 0}
+            options={[['all', assignedYearLevelsLoading ? 'Loading assigned year levels...' : yearLevelOptions.length ? 'All Assigned Year Levels' : 'No Assigned Year Levels'], ...yearLevelOptions.map(y => [y, y])]} />
+
+          <Select id="mlr-status" label="Review status" value={filters.status} onChange={v => setFilter('status', v)}
+            options={[['all', 'All Statuses'], ['pending', 'Pending Review'], ['approved', 'Approved'], ['returned', 'Returned']]} />
+
+          <Select id="mlr-sent" label="Sentiment" value={filters.sentiment} onChange={v => setFilter('sentiment', v)}
+            options={[['all', 'All Sentiments'], ['positive', 'Positive'], ['neutral', 'Neutral'], ['negative', 'Negative']]} />
+        </div>
+      </section>
+
+      {error && <AlertStrip color={CLAY} action={<button onClick={load} style={{ ...body, fontSize: '0.74rem', fontWeight: 700, color: CLAY, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline', minHeight: 32 }}>Retry</button>}>{error}</AlertStrip>}
+
+      {/* ── Letter queue ── */}
+      <section style={{ ...card, overflow: 'hidden', minWidth: 0 }}>
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-5" style={{ borderBottom: `1px solid ${RULE}` }}>
+          <div className="flex min-w-0 items-center gap-2.5">
+            <span className="flex flex-shrink-0 items-center justify-center rounded-full" style={{ width: 30, height: 30, background: `${MAROON}10`, color: MAROON }}><Mail size={14} /></span>
+            <div className="min-w-0">
+              <h2 style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: INK, lineHeight: 1.2 }}>Monthly Letter Review</h2>
+              <p style={{ fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>
+                Review monthly letters from your assigned scholars.
+                {!loading && !error && pendingCount > 0 && <span style={{ color: AMBER, fontWeight: 600 }}> {pendingCount} awaiting review.</span>}
+              </p>
+            </div>
+          </div>
+          {!loading && (
+            <span style={{ ...mono, fontSize: '0.7rem', fontWeight: 700, color: MAROON, background: `${MAROON}10`, borderRadius: 999, padding: '3px 10px' }}>
+              {filtered.length} {filtered.length === 1 ? 'letter' : 'letters'}{month ? ' · selected month' : ''}
+            </span>
+          )}
         </div>
 
         {!loading && filtered.length === 0 ? (
-          <div className="px-4 py-14 text-center"><FileText className="mx-auto mb-3 h-9 w-9" style={{ color: RULE }} />
-            <p style={{ fontSize: '0.82rem', color: MUTED }}>No letters found.</p></div>
+          <div className="flex flex-col items-center justify-center px-4 py-14 text-center">
+            <span className="mb-3 flex items-center justify-center rounded-full" style={{ width: 48, height: 48, background: `${GOLD}16`, color: GOLD }}><FileText size={21} /></span>
+            <p style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK }}>{filtersActive ? 'No matching letters' : 'No letters found'}</p>
+            <p style={{ fontSize: '0.8rem', color: MUTED, marginTop: 4 }}>{filtersActive ? 'Try adjusting your search or filters.' : 'No monthly letters were submitted in this period.'}</p>
+            {filtersActive && <button type="button" onClick={resetFilters} className="mlr-btn mt-4" style={outlineBtn}><FilterX size={13} /> Reset filters</button>}
+          </div>
         ) : (
           <>
-          <div className="hidden overflow-x-auto md:block">
-            <table className={`mlr-table${workPreferences.density === 'compact' ? ' mlr-compact' : ''}`} style={{ borderCollapse: 'collapse', fontSize: '0.85rem' }}>
-              <thead><tr style={{ background: `${BG}b3`, borderBottom: `1px solid ${RULE}` }}>
-                {columns.map((c, i) => <th key={i} scope="col" className={`mlr-col-${['scholar', 'id', 'score', 'sentiment', 'submitted', 'actions'][i]} px-4 py-3 ${i === 5 ? 'text-center' : 'text-left'}`} style={{ fontSize: '0.74rem', fontWeight: 600, color: '#6b5a52', overflowWrap: 'anywhere' }}>{c}</th>)}
-              </tr></thead>
-              <tbody>
-                {loading ? Array.from({ length: 5 }).map((_, r) => (
-                  <tr key={r} style={{ borderTop: `1px solid ${RULE}` }}>{columns.map((__, c) => <td key={c} className={`mlr-col-${['scholar', 'id', 'score', 'sentiment', 'submitted', 'actions'][c]} px-4 py-4`}><div className="h-2.5 w-4/5 animate-pulse rounded-full" style={{ background: BG }} /></td>)}</tr>
-                )) : paged.map(r => {
-                  const sc = r.sentiment ? sentimentCfg[r.sentiment] : null;
-                  const color = r.score === null ? MUTED : scoreColor(r.score);
-                  const initials = r.scholarName.split(/\s+/).map(n => n[0]).join('').slice(0, 2).toUpperCase();
-                  return (
-                    <tr key={r.id} className="transition-colors hover:bg-[#F6EFE4]" style={{ borderTop: `1px solid ${RULE}` }}>
-                      <td className="mlr-col-scholar px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full" style={{ background: `${MAROON}12`, color: MAROON, ...display, fontSize: '0.74rem', fontWeight: 700 }}>{initials}</span>
-                          <div style={{ minWidth: 0 }}>
-                            <p style={{ fontSize: '0.82rem', fontWeight: 600, color: INK }}>{r.scholarName}{r.riskFlag && <span title="Risk flag" style={{ marginLeft: 6, color: CLAY }}><AlertTriangle size={11} style={{ display: 'inline' }} /></span>}</p>
-                            <p style={{ fontSize: '0.72rem', color: MUTED }}>{r.yearLevel}</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="mlr-col-id px-4 py-3" style={{ ...mono, fontSize: '0.74rem', color: '#6b6058', overflowWrap: 'anywhere' }}>{r.scholarId}</td>
-                      <td className="mlr-col-score px-4 py-3">{r.score === null ? <span style={{ color: MUTED }}>—</span> : (
-                        <div className="flex items-center gap-2"><div className="h-1.5 w-16 overflow-hidden rounded-full" style={{ background: RULE }}>
-                          <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, r.score))}%`, background: color }} /></div>
-                          <span style={{ ...mono, fontSize: '0.74rem', fontWeight: 700, color }}>{r.score}</span></div>)}</td>
-                      <td className="mlr-col-sentiment px-4 py-3">{sc ? <Pill color={sc.color}>{sc.label}</Pill> : <span style={{ color: MUTED }}>—</span>}</td>
-                      <td className="mlr-col-submitted px-4 py-3" style={{ fontSize: '0.76rem', color: '#7a6a62', overflowWrap: 'anywhere' }}>{r.submittedDate}</td>
-                      <td className="mlr-col-actions px-4 py-3" style={{ textAlign: 'center' }}>
-                        <div className="flex flex-col items-center gap-1.5">
-                          {r.review === 'pending' && (
-                            <div className="flex items-center gap-1.5">
-                              <button type="button" onClick={() => { setSelectedId(r.id); setSelectedAction('approve'); }} aria-label={`Approve letter from ${r.scholarName}`} style={{ ...filledBtn(SAGE), height: 30, padding: '0 9px', fontSize: '0.7rem' }}>
-                                <CheckCircle2 size={12} /> Approve
-                              </button>
-                              <button type="button" onClick={() => { setSelectedId(r.id); setSelectedAction('return'); }} aria-label={`Return letter from ${r.scholarName}`} style={{ ...filledBtn(CLAY), height: 30, padding: '0 9px', fontSize: '0.7rem' }}>
-                                <XCircle size={12} /> Return
-                              </button>
+            {/* Desktop: table */}
+            <div className="mlr-scroll hidden overflow-x-auto xl:block">
+              <table className="w-full" style={{ borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr>
+                    {['Scholar', 'Scholar ID', 'Quality score', 'Sentiment', 'Submitted', 'Status', 'Actions'].map(label => (
+                      <th key={label} scope="col" style={label === 'Actions' ? { ...thStyle, textAlign: 'right' } : thStyle}>{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? Array.from({ length: 5 }).map((_, r) => (
+                    <tr key={r} style={{ borderTop: `1px solid ${RULE}` }}>
+                      {Array.from({ length: 7 }).map((__, c) => <td key={c} style={tdStyle}><div className="h-2.5 w-4/5 animate-pulse rounded-full" style={{ background: '#EFE6D8' }} /></td>)}
+                    </tr>
+                  )) : paged.map(r => {
+                    const sc = r.sentiment ? sentimentCfg[r.sentiment] : null;
+                    return (
+                      <tr key={r.id} className="mlr-row" onClick={() => openReview(r.id)} style={{ borderTop: `1px solid ${RULE}` }}>
+                        <td style={tdStyle}>
+                          <div className="flex items-center gap-3">
+                            <Avatar name={r.scholarName} />
+                            <div style={{ minWidth: 0 }}>
+                              <p style={{ fontSize: '0.84rem', fontWeight: 600, color: INK }}>
+                                {r.scholarName}
+                                {r.riskFlag && <span title="Risk flag" style={{ marginLeft: 6, color: CLAY }}><AlertTriangle size={11} style={{ display: 'inline' }} /></span>}
+                              </p>
+                              <p style={{ fontSize: '0.72rem', color: MUTED }}>{r.yearLevel}</p>
                             </div>
-                          )}
-                          <button type="button" className="mlr-btn" onClick={() => { setSelectedId(r.id); setSelectedAction(null); }} aria-label={`View letter from ${r.scholarName}`} style={{ ...outlineBtn, height: 32 }}>
-                            <Eye size={13} /> View
-                          </button>
-                        </div>
-                      </td>
-                    </tr>);
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="md:hidden">
-            {loading ? Array.from({ length: 3 }).map((_, index) => (
-              <div key={index} className="px-4 py-4" style={{ borderTop: `1px solid ${RULE}` }}>
-                <div className="h-3 w-1/2 animate-pulse rounded-full" style={{ background: BG }} />
-                <div className="mt-3 h-2.5 w-3/4 animate-pulse rounded-full" style={{ background: BG }} />
-              </div>
-            )) : paged.map(row => {
-              const sentiment = row.sentiment ? sentimentCfg[row.sentiment] : null;
-              const scoreColorValue = row.score === null ? MUTED : scoreColor(row.score);
-              const initials = row.scholarName.split(/\s+/).map(name => name[0]).join('').slice(0, 2).toUpperCase();
-              return (
-                <div key={row.id} className="px-4 py-4" style={{ borderTop: `1px solid ${RULE}` }}>
-                  <div className="flex items-start gap-3">
-                    <span className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full" style={{ background: `${MAROON}12`, color: MAROON, ...display, fontSize: '0.78rem', fontWeight: 700 }}>{initials}</span>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: '0.88rem', fontWeight: 600, color: INK, overflowWrap: 'anywhere' }}>
-                        {row.scholarName}{row.riskFlag && <span title="Risk flag" style={{ marginLeft: 6, color: CLAY }}><AlertTriangle size={12} style={{ display: 'inline' }} /></span>}
-                      </p>
-                      <p style={{ ...mono, fontSize: '0.7rem', color: MUTED, overflowWrap: 'anywhere' }}>{row.scholarId} · {row.yearLevel}</p>
+                          </div>
+                        </td>
+                        <td style={{ ...tdStyle, ...mono, fontSize: '0.74rem', color: '#6b6058', whiteSpace: 'nowrap' }}>{r.scholarId}</td>
+                        <td style={tdStyle}><ScoreBar score={r.score} /></td>
+                        <td style={tdStyle}>{sc ? <Pill color={sc.color}>{sc.label}</Pill> : <span style={{ color: MUTED }}>—</span>}</td>
+                        <td style={{ ...tdStyle, fontSize: '0.78rem', color: '#7a6a62', whiteSpace: 'nowrap' }}>{r.submittedDate}</td>
+                        <td style={tdStyle}><ReviewPill review={r.review} /></td>
+                        <td style={tdStyle} onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center justify-end gap-1.5">
+                            {r.review === 'pending' && (
+                              <>
+                                <button type="button" onClick={() => openReview(r.id, 'approve')} aria-label={`Approve letter from ${r.scholarName}`} title="Approve"
+                                  style={{ ...filledBtn(SAGE), minHeight: 32, width: 34, padding: 0 }}><CheckCircle2 size={14} /></button>
+                                <button type="button" onClick={() => openReview(r.id, 'return')} aria-label={`Return letter from ${r.scholarName}`} title="Return for revision"
+                                  style={{ ...filledBtn(CLAY), minHeight: 32, width: 34, padding: 0 }}><XCircle size={14} /></button>
+                              </>
+                            )}
+                            <button type="button" className="mlr-btn" onClick={() => openReview(r.id)} aria-label={`View letter from ${r.scholarName}`}
+                              style={{ ...outlineBtn, minHeight: 32, padding: '0 12px', fontSize: '0.74rem', border: `1px solid ${MAROON}` }}>
+                              <Eye size={13} /> {r.review === 'pending' ? 'Review' : 'View'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Phone + tablet: one card per letter */}
+            <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 sm:p-4 xl:hidden">
+              {loading ? Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} style={{ border: `1px solid ${RULE}`, borderRadius: 12, padding: 16, background: '#fff' }}>
+                  <div className="h-3 w-1/2 animate-pulse rounded-full" style={{ background: '#EFE6D8' }} />
+                  <div className="mt-3 h-2.5 w-3/4 animate-pulse rounded-full" style={{ background: '#EFE6D8' }} />
+                  <div className="mt-3 h-2.5 w-2/3 animate-pulse rounded-full" style={{ background: '#EFE6D8' }} />
+                </div>
+              )) : paged.map(row => {
+                const sentiment = row.sentiment ? sentimentCfg[row.sentiment] : null;
+                return (
+                  <article key={row.id} className="flex min-w-0 flex-col" style={{ border: `1px solid ${RULE}`, borderRadius: 12, padding: 14, background: '#fff' }}>
+                    <div className="flex items-start gap-3">
+                      <Avatar name={row.scholarName} size={40} />
+                      <div className="min-w-0 flex-1">
+                        <p style={{ fontSize: '0.88rem', fontWeight: 700, color: INK, overflowWrap: 'anywhere' }}>
+                          {row.scholarName}
+                          {row.riskFlag && <span title="Risk flag" style={{ marginLeft: 6, color: CLAY }}><AlertTriangle size={12} style={{ display: 'inline' }} /></span>}
+                        </p>
+                        <p style={{ ...mono, fontSize: '0.7rem', color: MUTED, overflowWrap: 'anywhere' }}>{row.scholarId} · {row.yearLevel}</p>
+                      </div>
                     </div>
-                    {sentiment && <Pill color={sentiment.color}>{sentiment.label}</Pill>}
-                  </div>
 
-                  <div className="mt-3 flex items-center justify-between gap-3">
-                    {row.score === null ? <span style={{ fontSize: '0.74rem', color: MUTED }}>No quality score</span> : (
-                      <div className="flex flex-1 items-center gap-2">
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full" style={{ background: RULE, maxWidth: 140 }}>
-                          <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(100, row.score))}%`, background: scoreColorValue }} />
-                        </div>
-                        <span style={{ ...mono, fontSize: '0.74rem', fontWeight: 700, color: scoreColorValue }}>{row.score}</span>
-                      </div>)}
-                    <span style={{ fontSize: '0.74rem', color: '#7a6a62', whiteSpace: 'nowrap' }}>{row.submittedDate}</span>
-                  </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <ReviewPill review={row.review} />
+                      {sentiment && <Pill color={sentiment.color}>{sentiment.label}</Pill>}
+                    </div>
 
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    {row.review === 'pending' && (<>
-                      <button type="button" onClick={() => { setSelectedId(row.id); setSelectedAction('approve'); }} aria-label={`Approve letter from ${row.scholarName}`} style={{ ...filledBtn(SAGE), justifyContent: 'center', minHeight: 38 }}>
-                        <CheckCircle2 size={13} /> Approve
+                    <div className="mt-3 flex items-center justify-between gap-3" style={{ paddingTop: 12, borderTop: `1px solid ${RULE}` }}>
+                      {row.score === null
+                        ? <span style={{ fontSize: '0.74rem', color: MUTED }}>No quality score</span>
+                        : <div><p style={{ fontSize: '0.66rem', color: MUTED, marginBottom: 4 }}>Quality score</p><ScoreBar score={row.score} width={90} /></div>}
+                      <div className="text-right">
+                        <p style={{ fontSize: '0.66rem', color: MUTED, marginBottom: 4 }}>Submitted</p>
+                        <p style={{ fontSize: '0.76rem', fontWeight: 600, color: INK, whiteSpace: 'nowrap' }}>{row.submittedDate}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-auto grid grid-cols-2 gap-2 pt-3">
+                      {row.review === 'pending' && (
+                        <>
+                          <button type="button" onClick={() => openReview(row.id, 'approve')} aria-label={`Approve letter from ${row.scholarName}`} style={{ ...filledBtn(SAGE), minHeight: 44 }}>
+                            <CheckCircle2 size={14} /> Approve
+                          </button>
+                          <button type="button" onClick={() => openReview(row.id, 'return')} aria-label={`Return letter from ${row.scholarName}`} style={{ ...filledBtn(CLAY), minHeight: 44 }}>
+                            <XCircle size={14} /> Return
+                          </button>
+                        </>
+                      )}
+                      <button type="button" className="mlr-btn" onClick={() => openReview(row.id)} aria-label={`View letter from ${row.scholarName}`}
+                        style={{ ...outlineBtn, justifyContent: 'center', minHeight: 44, border: `1px solid ${MAROON}`, gridColumn: '1 / -1' }}>
+                        <Eye size={14} /> {row.review === 'pending' ? 'Review letter' : 'View letter'}
                       </button>
-                      <button type="button" onClick={() => { setSelectedId(row.id); setSelectedAction('return'); }} aria-label={`Return letter from ${row.scholarName}`} style={{ ...filledBtn(CLAY), justifyContent: 'center', minHeight: 38 }}>
-                        <XCircle size={13} /> Return
-                      </button>
-                    </>)}
-                    <button type="button" className="mlr-btn" onClick={() => { setSelectedId(row.id); setSelectedAction(null); }} aria-label={`View letter from ${row.scholarName}`} style={{ ...outlineBtn, justifyContent: 'center', minHeight: 38, gridColumn: row.review === 'pending' ? '1 / -1' : undefined }}>
-                      <Eye size={13} /> View
-                    </button>
-                  </div>
-                </div>);
-            })}
-          </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
           </>
         )}
 
         {!loading && filtered.length > 0 && (
-          <div className="flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between" style={{ borderTop: `1px solid ${RULE}` }}>
-            <p style={{ fontSize: '0.76rem', color: MUTED }}>Showing {(safePage - 1) * pageSize + 1}-{Math.min(safePage * pageSize, filtered.length)} of {filtered.length} letters</p>
-            <div className="flex flex-wrap items-center gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1} aria-label="Previous page" style={{ ...outlineBtn, height: 32, padding: '0 9px', opacity: safePage <= 1 ? 0.45 : 1 }}><ChevronLeft size={15} /></button>
-              <span style={{ fontSize: '0.74rem', color: INK, minWidth: 76, textAlign: 'center' }}>Page {safePage} of {pageCount}</span>
-              <button onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={safePage >= pageCount} aria-label="Next page" style={{ ...outlineBtn, height: 32, padding: '0 9px', opacity: safePage >= pageCount ? 0.45 : 1 }}><ChevronRight size={15} /></button>
+          <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5" style={{ borderTop: `1px solid ${RULE}` }}>
+            <p style={{ fontSize: '0.76rem', color: MUTED }}>Showing {(safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)} of {filtered.length} letters</p>
+            <div className="flex items-center justify-between gap-2 sm:justify-end">
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={safePage <= 1} aria-label="Previous page" className="mlr-btn"
+                style={{ ...outlineBtn, height: 40, width: 44, padding: 0, justifyContent: 'center', opacity: safePage <= 1 ? 0.45 : 1 }}><ChevronLeft size={16} /></button>
+              <span style={{ fontSize: '0.76rem', fontWeight: 600, color: MAROON, background: `${MAROON}12`, borderRadius: 8, padding: '7px 12px', minWidth: 88, textAlign: 'center' }}>Page {safePage} of {pageCount}</span>
+              <button onClick={() => setPage(p => Math.min(pageCount, p + 1))} disabled={safePage >= pageCount} aria-label="Next page" className="mlr-btn"
+                style={{ ...outlineBtn, height: 40, width: 44, padding: 0, justifyContent: 'center', opacity: safePage >= pageCount ? 0.45 : 1 }}><ChevronRight size={16} /></button>
             </div>
-          </div>)}
-      </div>
+          </div>
+        )}
+      </section>
 
       {selected && <ReviewModal
         key={`${selected.id}-${selectedAction || 'view'}`}

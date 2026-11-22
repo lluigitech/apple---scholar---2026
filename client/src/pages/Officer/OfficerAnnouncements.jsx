@@ -391,13 +391,12 @@ function CreateModal({ authorName, onClose, onCreated }) {
 }
 
 // ─── Feed row — one compact line per announcement, click to expand ──────────
-function AnnouncementRow({ ann, isLatest, onNotify, notifyingId }) {
+function AnnouncementRow({ ann, isLatest }) {
     const [open, setOpen] = useState(false);   // presentation-only
     const levels = ann.target_levels || [];
     const roles  = ann.target_roles || [];
     const src    = SOURCE_CONFIG[ann.created_by_role];
     const cfg    = PRIORITY_CONFIG[ann.priority] || PRIORITY_CONFIG.info;
-    const sending = notifyingId === ann.id;
     const authorName = ann.created_by_name || ann.created_by || 'Unknown';
     const postedDate = ann.created_at
         ? new Date(ann.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' })
@@ -431,9 +430,6 @@ function AnnouncementRow({ ann, isLatest, onNotify, notifyingId }) {
                 </button>
 
                 <div className="ann-actions">
-                    <button type="button" onClick={() => onNotify(ann.id)} disabled={sending} className="notify-btn" style={body}>
-                        <Send size={12} /> {sending ? 'Sending…' : 'Notify recipients'}
-                    </button>
                     <button type="button" className="chev-btn" onClick={() => setOpen(v => !v)} aria-label={open ? 'Collapse' : 'Expand'}>
                         <ChevronDown size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 160ms ease' }} />
                     </button>
@@ -471,12 +467,6 @@ const OfficerAnnouncement = () => {
     const [sourceFilter,   setSourceFilter]   = useState('all');
     const [priorityFilter, setPriorityFilter] = useState('all');
     const [showModal,     setShowModal]     = useState(false);
-    const [notifyingId, setNotifyingId] = useState(null);
-    const [notifyMessage, setNotifyMessage] = useState('');
-    const [notifyError, setNotifyError] = useState('');
-    // Session-only running total for the "Notified This Session" tile —
-    // adds up the real sent_count from each successful /notify call in this session.
-    const [sessionRecipients, setSessionRecipients] = useState(0);
 
     const fetchAnnouncements = async () => {
         try {
@@ -491,33 +481,9 @@ const OfficerAnnouncement = () => {
 
     useEffect(() => { fetchAnnouncements(); }, []);
 
-    // Presentation-only: notice banners clear themselves
-    useEffect(() => {
-        if (!notifyMessage && !notifyError) return;
-        const t = setTimeout(() => { setNotifyMessage(''); setNotifyError(''); }, 5000);
-        return () => clearTimeout(t);
-    }, [notifyMessage, notifyError]);
-
     const handleRefresh = () => {
         setLoading(true);
         fetchAnnouncements();
-    };
-
-    const handleNotifyAnnouncement = async (id) => {
-        setNotifyError('');
-        setNotifyMessage('');
-        setNotifyingId(id);
-
-        try {
-            const res = await axios.post(`${API}/officer/announcements/${id}/notify`, {}, authHeaders());
-            const sentCount = res.data?.sent_count ?? 0;
-            setNotifyMessage(`Notifications sent to ${sentCount} recipient(s).`);
-            setSessionRecipients(prev => prev + sentCount);
-        } catch (err) {
-            setNotifyError(err.response?.data?.error || 'Failed to send notifications.');
-        } finally {
-            setNotifyingId(null);
-        }
     };
 
     const filtered = announcements.filter(ann => {
@@ -574,7 +540,6 @@ const OfficerAnnouncement = () => {
                     <KPICard icon={Megaphone} label="Announcements Posted" value={announcements.length} accent={PRIMARY} />
                     <KPICard icon={AlertCircle} label="Critical Announcements" value={criticalCount} accent={DANGER} />
                     <KPICard icon={AlertTriangle} label="Important Announcements" value={importantCount} accent={WARNING} />
-                    <KPICard icon={Send} label="Notified This Session" value={sessionRecipients} accent={SUCCESS} />
                 </div>
 
                 {/* ── Announcement feed ── */}
@@ -616,9 +581,6 @@ const OfficerAnnouncement = () => {
                         )}
                     </div>
 
-                    {notifyMessage && <div role="status" className="notice-banner notice-success" style={body}>{notifyMessage}</div>}
-                    {notifyError && <div role="alert" className="notice-banner notice-error" style={body}>{notifyError}</div>}
-
                     {loading ? (
                         <div className="ann-list">
                             {Array(4).fill(0).map((_, i) => (
@@ -647,8 +609,6 @@ const OfficerAnnouncement = () => {
                                     key={ann.id}
                                     ann={ann}
                                     isLatest={idx === 0 && !filtersActive}
-                                    onNotify={handleNotifyAnnouncement}
-                                    notifyingId={notifyingId}
                                 />
                             ))}
                         </div>

@@ -176,7 +176,7 @@ exports.bulkMarkAttendance = (req, res) => {
     db.query(
         `SELECT d.status,
             TIMESTAMP(d.duty_date, COALESCE(d.time_start, '00:00:00'))
-                <= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 1 HOUR) AS checkin_locked,
+                <= DATE_SUB(DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR), INTERVAL 3 HOUR) AS checkin_locked,
             d.time_start IS NOT NULL AND DATE_ADD(UTC_TIMESTAMP(), INTERVAL 8 HOUR) > DATE_ADD(
                 TIMESTAMP(d.duty_date, d.time_start),
                 INTERVAL 15 MINUTE
@@ -213,7 +213,7 @@ exports.bulkMarkAttendance = (req, res) => {
                     return res.status(200).json({ message: 'Attendance was already saved and remains locked.', count: 0 });
                 }
                 if (Number(dutyRows[0].checkin_locked) === 1) {
-                    return res.status(409).json({ error: 'Manual check-in is locked one hour after the scheduled duty start.' });
+                    return res.status(409).json({ error: 'Manual check-in is locked three hours after the scheduled duty start.' });
                 }
                 if (Number(dutyRows[0].is_late) === 1) {
                     newRecords.forEach(record => {

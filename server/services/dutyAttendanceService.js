@@ -12,7 +12,7 @@ const checkOutDutyAttendance = (dutyId, scholarId, callback) => {
     const sql = `
         SELECT da.id, da.status, da.check_out_at, da.is_makeup,
             ${checkoutOpenSql} <= ${manilaNowSql} AS checkout_open,
-            DATE_ADD(${dutyEndSql}, INTERVAL 2 HOUR) <= ${manilaNowSql} AS checkout_locked
+            DATE_ADD(${dutyEndSql}, INTERVAL 3 HOUR) <= ${manilaNowSql} AS checkout_locked
         FROM duty_attendance da
         INNER JOIN duties d ON d.id = da.duty_id
         WHERE da.duty_id = ? AND da.scholar_id = ?
@@ -35,7 +35,7 @@ const checkOutDutyAttendance = (dutyId, scholarId, callback) => {
         }
 
         if (Number(attendance.checkout_locked) === 1) {
-            return callback({ status: 409, error: 'The check-out window closed two hours after the scheduled duty end.' });
+            return callback({ status: 409, error: 'The check-out window closed three hours after the scheduled duty end.' });
         }
         if (Number(attendance.checkout_open) !== 1) {
             return callback({ status: 409, error: 'Check-out is available after the scheduled duty ends.' });

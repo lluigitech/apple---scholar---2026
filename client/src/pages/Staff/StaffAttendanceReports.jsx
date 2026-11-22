@@ -1,13 +1,13 @@
 import { API_ORIGIN } from '../../utils/apiConfig.js';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
     CalendarDays, Search, Download, ChevronDown, ChevronLeft, ChevronRight,
     CheckCircle2, XCircle, Clock,
-    FileText, Inbox, MapPin, RotateCcw, UserX, Users,
+    FileText, Inbox, MapPin, RotateCcw, SlidersHorizontal, Check,
 } from 'lucide-react';
-import { buildSummaryRows, currentPeriodLabel, downloadReportSummaryPdf } from '../../utils/reportPdfExport';
+import { monthPeriodLabel, downloadReportSummaryPdf } from '../../utils/reportPdfExport';
 import {
     DEFAULT_STAFF_WORK_PREFERENCES,
     readStaffWorkPreferences,
@@ -20,7 +20,6 @@ const authHeaders = () => ({
 
 // ── Apple Scholar design system (tokens unchanged) ──
 const PRIMARY = '#6D2140';
-const PRIMARY_DARK = '#4A1730';
 const GOLD = '#A9784E';
 const BG = '#F3EEE6';
 const SURFACE = '#FFFDF9';
@@ -39,6 +38,11 @@ const STATUS_CONFIG = {
     absent:  { label: 'Absent',  icon: XCircle,       color: DANGER },
 };
 
+const STATUS_OPTIONS = [
+    { key: 'all', label: 'All statuses', color: PRIMARY },
+    ...Object.entries(STATUS_CONFIG).map(([key, cfg]) => ({ key, label: cfg.label, color: cfg.color })),
+];
+
 // Raw year-level codes → readable labels, per the required conversion table.
 const YEAR_LEVEL_LABELS = {
     grade_7: 'Grade 7', grade_8: 'Grade 8', grade_9: 'Grade 9', grade_10: 'Grade 10',
@@ -52,8 +56,6 @@ const getInitials = (name) => {
     if (!name) return '?';
     return name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
 };
-
-const PAGE_SIZE_OPTIONS = [10, 20, 50];
 
 const getGroupDutyKey = (record) => JSON.stringify([
     record.group_name || 'Unassigned',
@@ -89,6 +91,15 @@ const formatAttendanceClock = (value) => {
     return date ? formatClock(date) : '—';
 };
 
+// Presentation helpers shared by the table row and the mobile card.
+const getRecordDay = (record) => parseRecordDate(record.date || record.duty_date || record.marked_at);
+const getTimeRange = (record) => {
+    const checkedIn = record.status === 'present' || record.status === 'late';
+    const inTime = checkedIn ? parseRecordDate(record.marked_at) : null;
+    const outAt = parseRecordDate(record.check_out_at);
+    return inTime ? `${formatClock(inTime)} - ${outAt ? formatClock(outAt) : '—'}` : '—';
+};
+
 const StatusBadge = ({ status }) => {
     const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.absent;
     const Icon = cfg.icon;
@@ -100,13 +111,9 @@ const StatusBadge = ({ status }) => {
     );
 };
 
-// One table row for a single attendance record.
+// One table row for a single attendance record (wide screens).
 const AttendanceRow = ({ record, index }) => {
-    const day = parseRecordDate(record.date || record.duty_date || record.marked_at);
-    const checkedIn = record.status === 'present' || record.status === 'late';
-    const inTime = checkedIn ? parseRecordDate(record.marked_at) : null;
-    const outAt = parseRecordDate(record.check_out_at);
-
+    const day = getRecordDay(record);
     return (
         <tr>
             <td className="col-num">{index}</td>
@@ -130,16 +137,42 @@ const AttendanceRow = ({ record, index }) => {
                     <span className="clamp-2">{record.location || 'No location'}</span>
                 </span>
             </td>
-            <td className="cell-text">
-                {day ? formatDay(day) : 'No date'}
-            </td>
-            <td className="cell-text">
-                {inTime
-                    ? `${formatClock(inTime)} - ${outAt ? formatClock(outAt) : '—'}`
-                    : '—'}
-            </td>
+            <td className="cell-text">{day ? formatDay(day) : 'No date'}</td>
+            <td className="cell-text">{getTimeRange(record)}</td>
             <td><StatusBadge status={record.status} /></td>
         </tr>
+    );
+};
+
+const MetaCell = ({ label, children }) => (
+    <div className="meta-cell">
+        <span className="meta-label">{label}</span>
+        <span className="meta-value">{children}</span>
+    </div>
+);
+
+// One card per record (tablet and phone).
+const AttendanceCard = ({ record, index }) => {
+    const day = getRecordDay(record);
+    return (
+        <article className="rec-card">
+            <div className="rec-card-top">
+                <span className="duty-avatar"><span>{getInitials(record.scholar)}</span></span>
+                <div className="min-w-0 flex-1">
+                    <p className="cell-title truncate">{record.scholar || 'Unknown Scholar'}</p>
+                    <p className="cell-sub truncate">{record.scholar_id || '—'} · #{index}</p>
+                </div>
+                <StatusBadge status={record.status} />
+            </div>
+            <p className="rec-duty">{getGroupDutyLabel(record)}</p>
+            <div className="rec-meta">
+                <MetaCell label="Date">{day ? formatDay(day) : 'No date'}</MetaCell>
+                <MetaCell label="Time in - out">{getTimeRange(record)}</MetaCell>
+                <MetaCell label="Year level">{formatYearLevelLabel(record.year_level)}</MetaCell>
+                <MetaCell label="Method">{getAttendanceMethodLabel(record.method)}</MetaCell>
+            </div>
+            <p className="rec-loc"><MapPin size={13} style={{ color: GOLD, flexShrink: 0 }} /> {record.location || 'No location'}</p>
+        </article>
     );
 };
 
@@ -167,7 +200,9 @@ const StaffAttendanceReports = () => {
     const [monthFilter, setMonthFilter] = useState(getCurrentMonth);
     const [pdfLoading, setPdfLoading] = useState(false);
     const [page, setPage]             = useState(1);
-    const [pageSize, setPageSize]     = useState(workPreferences.pageSize);
+    const [pageSize]                  = useState(workPreferences.pageSize);
+    const [filtersOpen, setFiltersOpen] = useState(false); // presentation-only (phones)
+    const [statusOpen, setStatusOpen] = useState(false);   // presentation-only (status dropdown)
 
     useEffect(() => {
         if (!localStorage.getItem('token')) {
@@ -213,38 +248,29 @@ const StaffAttendanceReports = () => {
     };
 
     // ── Client-side filters ──────────────────────────────────
-    const filtered = records.filter(r => {
+    // `baseFiltered` ignores the status filter so the status chips can show their own counts.
+    const baseFiltered = records.filter(r => {
         const matchSearch = !search ||
             r.scholar?.toLowerCase().includes(search.toLowerCase()) ||
             r.scholar_id?.toLowerCase().includes(search.toLowerCase());
         const matchGroupDuty = !groupDutyFilter || getGroupDutyKey(r) === groupDutyFilter;
         const matchMethod = !methodFilter || getAttendanceMethodLabel(r.method) === methodFilter;
-        const matchStatus = statusFilter === 'all' || !statusFilter || r.status === statusFilter;
         const recordMonth = String(r.date || r.marked_at || r.duty_date || '').slice(0, 7);
         const matchMonth = !monthFilter || recordMonth === monthFilter;
-        return matchSearch && matchGroupDuty && matchMethod && matchStatus && matchMonth;
+        return matchSearch && matchGroupDuty && matchMethod && matchMonth;
     });
+    const filtered = baseFiltered.filter(r => statusFilter === 'all' || !statusFilter || r.status === statusFilter);
 
     // ── Stats ────────────────────────────────────────────────
     const stats = {
         total:   filtered.length,
         present: filtered.filter(r => r.status === 'present').length,
+        late:    filtered.filter(r => r.status === 'late').length,
         absent:  filtered.filter(r => r.status === 'absent').length,
     };
 
     const rate = stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0;
 
-    // Scholars with the most absences in the current filtered view.
-    const followUp = useMemo(() => {
-        const counts = new Map();
-        filtered.forEach(r => {
-            if (r.status !== 'absent') return;
-            const key = `${r.scholar || 'Unknown'}::${r.scholar_id || '—'}`;
-            if (!counts.has(key)) counts.set(key, { name: r.scholar || 'Unknown Scholar', scholarId: r.scholar_id || '—', count: 0 });
-            counts.get(key).count += 1;
-        });
-        return Array.from(counts.values()).sort((a, b) => b.count - a.count).slice(0, 4);
-    }, [filtered]);
 
     // ── Export to CSV (opens in Excel) ───────────────────────
     const exportCSV = () => {
@@ -273,8 +299,23 @@ const StaffAttendanceReports = () => {
     const exportPDF = async () => {
         setPdfLoading(true);
         try {
-            const rows = buildSummaryRows(filtered, row => row.status === 'present');
-            await downloadReportSummaryPdf({ role: 'staff', reportTitle: 'Attendance Reports', periodLabel: currentPeriodLabel(), rows });
+            const rows = filtered.map(record => ({
+                scholarName: record.scholar || 'Unknown Scholar',
+                studentId: record.scholar_id || '—',
+                groupName: record.group_name || 'Unassigned',
+                assignedStaff: record.assigned_staff || 'Unassigned',
+                duty: record.duty || '—',
+                attendanceDate: record.date || record.duty_date || '',
+                attendanceTime: record.marked_at || record.date || record.duty_date || '',
+                attendanceStatus: record.status || 'absent',
+            }));
+            await downloadReportSummaryPdf({
+                role: 'staff',
+                reportTitle: 'Attendance Reports',
+                reportType: 'Attendance Reports',
+                periodLabel: monthPeriodLabel(monthFilter),
+                rows,
+            });
         } catch (err) {
             console.error(err);
             alert(err.response?.data?.message || 'Failed to generate the PDF report.');
@@ -306,12 +347,20 @@ const StaffAttendanceReports = () => {
         return Array.from({ length: end - start + 1 }, (_, i) => start + i);
     })();
 
-    const pct = (n) => (stats.total > 0 ? `${((n / stats.total) * 100).toFixed(1)}% of total` : '0.0% of total');
+    const sharePct = (n) => (stats.total > 0 ? Math.round((n / stats.total) * 1000) / 10 : 0);
     const kpis = [
-        { key: 'total',   label: 'Total Records', value: stats.total,   sub: 'Across all filtered data', icon: FileText,      color: PRIMARY },
-        { key: 'present', label: 'Present',       value: stats.present, sub: pct(stats.present),        icon: CheckCircle2,  color: SUCCESS },
-        { key: 'absent',  label: 'Absent',        value: stats.absent,  sub: pct(stats.absent),         icon: XCircle,       color: DANGER },
+        { key: 'total',   label: 'Total records', value: stats.total,   sub: 'Across all filtered data', icon: FileText,     color: PRIMARY, progress: undefined },
+        { key: 'present', label: 'Present',       value: stats.present, sub: `${sharePct(stats.present)}% of total`, icon: CheckCircle2, color: SUCCESS, progress: sharePct(stats.present) },
+        { key: 'late',    label: 'Late',          value: stats.late,    sub: `${sharePct(stats.late)}% of total`,    icon: Clock,        color: WARNING, progress: sharePct(stats.late) },
+        { key: 'absent',  label: 'Absent',        value: stats.absent,  sub: `${sharePct(stats.absent)}% of total`,  icon: XCircle,      color: DANGER,  progress: sharePct(stats.absent) },
     ];
+
+    const activeStatus = statusFilter || 'all';
+    const activeOption = STATUS_OPTIONS.find(o => o.key === activeStatus) || STATUS_OPTIONS[0];
+    const statusIsCustom = activeStatus !== (workPreferences.attendanceStatus || 'all');
+
+    const advancedFilterCount = [groupDutyFilter, methodFilter, statusIsCustom, monthFilter !== getCurrentMonth() ? monthFilter : ''].filter(Boolean).length;
+    const filtersActive = Boolean(search) || advancedFilterCount > 0;
 
     return (
         <div className="reports-hub" style={{ background: BG, ...body }}>
@@ -329,38 +378,49 @@ const StaffAttendanceReports = () => {
                 </div>
 
                 {workPreferenceState.error && (
-                    <div role="alert" style={{
-                        marginBottom: 14,
-                        padding: '10px 14px',
-                        color: DANGER,
-                        background: `${DANGER}10`,
-                        border: `1px solid ${DANGER}40`,
-                        borderRadius: 12,
-                        fontSize: '0.82rem',
-                    }}>
-                        {workPreferenceState.error}
-                    </div>
+                    <div role="alert" className="notice-error">{workPreferenceState.error}</div>
                 )}
 
                 {/* ── KPI cards ── */}
                 <div className="kpi-grid">
-                    {kpis.map(({ key, label, value, sub, icon: Icon, color }) => (
+                    {kpis.map(({ key, label, value, sub, icon: Icon, color, progress }) => (
                         <div key={key} className="hub-card kpi-card">
-                            <span className="kpi-icon" style={{ background: `${color}14`, color }}>
-                                <Icon size={22} />
-                            </span>
-                            <div className="min-w-0">
-                                <span className="kpi-value">{loading ? '—' : value}</span>
-                                <span className="kpi-label">{label}</span>
-                                <span className="kpi-sub">{loading ? 'Loading…' : sub}</span>
+                            <div className="kpi-row">
+                                <span className="kpi-icon" style={{ background: `${color}16`, color }}>
+                                    <Icon size={20} />
+                                </span>
+                                <div className="min-w-0">
+                                    <span className="kpi-value">{loading ? '—' : value}</span>
+                                    <span className="kpi-label">{label}</span>
+                                </div>
                             </div>
+                            {progress !== undefined && (
+                                <div className="kpi-bar" style={{ background: `${color}1f` }}>
+                                    <span style={{ width: `${loading ? 0 : progress}%`, background: color }} />
+                                </div>
+                            )}
+                            <span className="kpi-sub" style={progress !== undefined ? { color } : undefined}>{loading ? 'Loading…' : sub}</span>
                         </div>
                     ))}
                 </div>
 
-                {/* ── Filter toolbar ── */}
+                {/* ── Filters: one row on desktop, search + collapsible filters on phones ── */}
                 <div className="hub-card filter-card">
-                    <div className="filter-bar">
+                    <div className="filter-top">
+                        <div className="field field-search">
+                            <label htmlFor="att-search" className="field-label">Search scholar</label>
+                            <div className="input-wrap">
+                                <Search size={14} className="lead-icon" />
+                                <input id="att-search" type="text" placeholder="Search scholar name or ID…" value={search} onChange={e => setSearch(e.target.value)} />
+                            </div>
+                        </div>
+                        <button type="button" className="btn-outline filter-toggle" onClick={() => setFiltersOpen(v => !v)} aria-expanded={filtersOpen} aria-controls="att-filter-grid">
+                            <SlidersHorizontal size={14} /> Filters
+                            {advancedFilterCount > 0 && <span className="filter-count">{advancedFilterCount}</span>}
+                        </button>
+                    </div>
+
+                    <div id="att-filter-grid" className={`filter-grid${filtersOpen ? ' open' : ''}`}>
                         <div className="field">
                             <label htmlFor="att-month" className="field-label">Month</label>
                             <div className="input-wrap">
@@ -369,174 +429,182 @@ const StaffAttendanceReports = () => {
                             </div>
                         </div>
                         <div className="field">
-                            <label htmlFor="att-group-duty" className="field-label">Group / Duties</label>
+                            <label htmlFor="att-group-duty" className="field-label">Group / duties</label>
                             <div className="input-wrap">
                                 <select id="att-group-duty" value={groupDutyFilter} onChange={e => setGroupDutyFilter(e.target.value)}>
-                                    <option value="">All Groups / Duties</option>
+                                    <option value="">All groups / duties</option>
                                     {uniqueGroupDuties.map(item => <option key={item.key} value={item.key}>{item.label}</option>)}
                                 </select>
                                 <ChevronDown size={14} className="select-chevron" />
                             </div>
                         </div>
                         <div className="field">
-                            <label htmlFor="att-status" className="field-label">Status</label>
-                            <div className="input-wrap">
-                                <select id="att-status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-                                    <option value="all">All Statuses</option>
-                                    <option value="present">Present</option>
-                                    <option value="late">Late</option>
-                                    <option value="absent">Absent</option>
-                                </select>
-                                <ChevronDown size={14} className="select-chevron" />
-                            </div>
-                        </div>
-                        <div className="field">
-                            <label htmlFor="att-method" className="field-label">Check-in Method</label>
+                            <label htmlFor="att-method" className="field-label">Check-in method</label>
                             <div className="input-wrap">
                                 <select id="att-method" value={methodFilter} onChange={e => setMethodFilter(e.target.value)}>
-                                    <option value="">All Methods</option>
+                                    <option value="">All methods</option>
                                     {uniqueMethods.map(method => <option key={method} value={method}>{method}</option>)}
                                 </select>
                                 <ChevronDown size={14} className="select-chevron" />
                             </div>
                         </div>
-                        <div className="field field-search">
-                            <label htmlFor="att-search" className="field-label">Search Scholar</label>
-                            <div className="input-wrap">
-                                <Search size={14} className="lead-icon" />
-                                <input id="att-search" type="text" placeholder="Search scholar name or ID…" value={search} onChange={e => setSearch(e.target.value)} />
+                        <div className="field">
+                            <span className="field-label" id="att-status-label">Status</span>
+                            <div className="status-select">
+                                <button
+                                    type="button"
+                                    id="att-status"
+                                    className="input-wrap status-trigger"
+                                    aria-haspopup="listbox"
+                                    aria-expanded={statusOpen}
+                                    aria-labelledby="att-status-label att-status"
+                                    onClick={() => setStatusOpen(v => !v)}
+                                    onKeyDown={e => { if (e.key === 'Escape') setStatusOpen(false); }}
+                                >
+                                    <span className="status-dot" style={{ background: activeOption.color }} />
+                                    <span className="status-trigger-label">{activeOption.label}</span>
+                                    <ChevronDown size={14} className="select-chevron" style={{ transform: statusOpen ? 'rotate(180deg)' : 'none' }} />
+                                </button>
+                                {statusOpen && (
+                                    <>
+                                        <div className="status-menu" role="listbox" aria-label="Status">
+                                            {STATUS_OPTIONS.map(o => {
+                                                const active = o.key === activeStatus;
+                                                return (
+                                                    <button
+                                                        key={o.key}
+                                                        type="button"
+                                                        role="option"
+                                                        aria-selected={active}
+                                                        className={`status-option${active ? ' is-active' : ''}`}
+                                                        onClick={() => { setStatusFilter(o.key); setStatusOpen(false); }}
+                                                    >
+                                                        <span className="status-dot" style={{ background: o.color }} />
+                                                        <span className="status-option-label">{o.label}</span>
+                                                        {active && <Check size={14} style={{ color: PRIMARY, flexShrink: 0 }} />}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                        <div className="status-backdrop" onClick={() => setStatusOpen(false)} />
+                                    </>
+                                )}
                             </div>
                         </div>
                     </div>
+
+                    {filtersActive && (
+                        <button type="button" onClick={resetFilters} className="reset-btn">
+                            <RotateCcw size={13} /> Reset filters
+                        </button>
+                    )}
                 </div>
 
-                {/* ── Attendance Records ── */}
-                <div className="hub-card records-card">
+                {/* ── Attendance records ── */}
+                <section className="hub-card records-card">
                     <div className="records-head">
-                        <div>
-                            <h2>Attendance Records</h2>
+                        <div className="min-w-0">
+                            <h2>Attendance records</h2>
                             <p>Records matching the selected filters.{!loading && stats.total > 0 && <> {rate}% present.</>}</p>
                         </div>
                         <div className="export-toolbar" role="group" aria-label="Export actions">
-                            <button onClick={exportCSV} className="btn-outline">
+                            <button type="button" onClick={exportCSV} className="btn-outline">
                                 <Download size={14} /> Export CSV
                             </button>
-                            <button onClick={exportPDF} disabled={pdfLoading} className="btn-filled">
+                            <button type="button" onClick={exportPDF} disabled={pdfLoading} className="btn-filled">
                                 <FileText size={14} /> {pdfLoading ? 'Generating…' : 'Export PDF'}
                             </button>
                         </div>
                     </div>
 
-                    <div className="table-shell">
-                        <div className="table-scroll">
-                            <table className={`att-table${workPreferences.density === 'compact' ? ' att-table-compact' : ''}`}>
-                                <thead>
-                                    <tr>
-                                        <th className="col-num">#</th>
-                                        <th>Scholar</th>
-                                        <th>Year Level</th>
-                                        <th>Group / Duties</th>
-                                        <th>Check-in Method</th>
-                                        <th>Location</th>
-                                        <th>Date</th>
-                                        <th>Time In - Out</th>
-                                        <th>Status</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {loading ? (
-                                        Array(5).fill(0).map((_, i) => (
-                                            <tr key={`sk-${i}`} className="skeleton-tr">
-                                                <td colSpan={9}><div className="animate-pulse skeleton-bar" /></td>
-                                            </tr>
-                                        ))
-                                    ) : pageRecords.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={9} className="empty-cell">
-                                                <div className="empty-state">
-                                                    <div className="empty-icon"><Inbox size={22} style={{ color: GOLD }} /></div>
-                                                    <p className="empty-title">No attendance records</p>
-                                                    <p className="empty-text">Adjust or reset the filters to see more records.</p>
-                                                    <button onClick={resetFilters} className="btn-outline" style={{ marginTop: 14 }}>
-                                                        <RotateCcw size={13} /> Reset filters
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        pageRecords.map((record, i) => (
-                                            <AttendanceRow
-                                                key={record.id ?? `${record.scholar_id || 'x'}-${record.duty || 'd'}-${startIdx + i}`}
-                                                record={record}
-                                                index={startIdx + i + 1}
-                                            />
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
+
+                    {loading ? (
+                        <div className="skeleton-list">
+                            {Array(5).fill(0).map((_, i) => <div key={i} className="animate-pulse skeleton-bar" />)}
                         </div>
-                    </div>
+                    ) : pageRecords.length === 0 ? (
+                        <div className="empty-state">
+                            <div className="empty-icon"><Inbox size={22} style={{ color: GOLD }} /></div>
+                            <p className="empty-title">No attendance records</p>
+                            <p className="empty-text">Adjust or reset the filters to see more records.</p>
+                            <button type="button" onClick={resetFilters} className="btn-outline" style={{ marginTop: 14 }}>
+                                <RotateCcw size={13} /> Reset filters
+                            </button>
+                        </div>
+                    ) : (
+                        <>
+                            {/* Wide screens: table */}
+                            <div className="table-shell rec-table">
+                                <div className="table-scroll">
+                                    <table className={`att-table${workPreferences.density === 'compact' ? ' att-table-compact' : ''}`}>
+                                        <thead>
+                                            <tr>
+                                                <th className="col-num">#</th>
+                                                <th>Scholar</th>
+                                                <th>Year level</th>
+                                                <th>Group / duties</th>
+                                                <th>Check-in method</th>
+                                                <th>Location</th>
+                                                <th>Date</th>
+                                                <th>Time in - out</th>
+                                                <th>Status</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {pageRecords.map((record, i) => (
+                                                <AttendanceRow
+                                                    key={record.id ?? `${record.scholar_id || 'x'}-${record.duty || 'd'}-${startIdx + i}`}
+                                                    record={record}
+                                                    index={startIdx + i + 1}
+                                                />
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* Tablet and phone: cards */}
+                            <div className="rec-cards">
+                                {pageRecords.map((record, i) => (
+                                    <AttendanceCard
+                                        key={record.id ?? `c-${record.scholar_id || 'x'}-${record.duty || 'd'}-${startIdx + i}`}
+                                        record={record}
+                                        index={startIdx + i + 1}
+                                    />
+                                ))}
+                            </div>
+                        </>
+                    )}
 
                     <div className="pager">
                         <div className="pager-left">
                             <span className="pager-info">
                                 Showing {rangeStart}–{rangeEnd} of {filtered.length} record{filtered.length === 1 ? '' : 's'}
                             </span>
-                            <label className="pager-size">
-                                <span>Rows</span>
-                                <select
-                                    value={pageSize}
-                                    onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
-                                    aria-label="Rows per page"
-                                >
-                                    {PAGE_SIZE_OPTIONS.map(n => <option key={n} value={n}>{n}</option>)}
-                                </select>
-                            </label>
                         </div>
                         <nav className="pager-controls" aria-label="Pagination">
-                            <button className="page-btn" onClick={() => setPage(Math.max(1, safePage - 1))} disabled={safePage <= 1} aria-label="Previous page">
+                            <button type="button" className="page-btn" onClick={() => setPage(Math.max(1, safePage - 1))} disabled={safePage <= 1} aria-label="Previous page">
                                 <ChevronLeft size={15} />
                             </button>
                             {pageNumbers.map(n => (
                                 <button
                                     key={n}
-                                    className={`page-btn${n === safePage ? ' page-btn-active' : ''}`}
+                                    type="button"
+                                    className={`page-btn page-num${n === safePage ? ' page-btn-active' : ''}`}
                                     onClick={() => setPage(n)}
                                     aria-current={n === safePage ? 'page' : undefined}
                                 >
                                     {n}
                                 </button>
                             ))}
-                            <button className="page-btn" onClick={() => setPage(Math.min(totalPages, safePage + 1))} disabled={safePage >= totalPages} aria-label="Next page">
+                            <span className="page-of">Page {safePage} of {totalPages}</span>
+                            <button type="button" className="page-btn" onClick={() => setPage(Math.min(totalPages, safePage + 1))} disabled={safePage >= totalPages} aria-label="Next page">
                                 <ChevronRight size={15} />
                             </button>
-                            <span className="page-of">Page {safePage} of {totalPages}</span>
                         </nav>
                     </div>
-                </div>
+                </section>
 
-                {/* ── Needs follow-up (secondary) ── */}
-                <div className="hub-card followup-card">
-                    <div className="followup-head">
-                        <span className="followup-kicker"><UserX size={14} /> Needs follow-up</span>
-                        <span className="followup-note">Scholars with the most absences in the current filtered records.</span>
-                    </div>
-                    {followUp.length === 0 ? (
-                        <p className="followup-empty">No repeat absences in the current view.</p>
-                    ) : (
-                        <div className="followup-list">
-                            {followUp.map((s, i) => (
-                                <div key={i} className="followup-row">
-                                    <div className="min-w-0">
-                                        <p className="cell-title truncate">{s.name}</p>
-                                        <p className="cell-sub truncate">{s.scholarId}</p>
-                                    </div>
-                                    <span className="followup-count">{s.count}× absent</span>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </div>
             </div>
 
             <GlobalStyle />
@@ -546,78 +614,132 @@ const StaffAttendanceReports = () => {
 
 const GlobalStyle = () => (
     <style>{`
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
         .reports-hub { min-height: 100vh; overflow-x: hidden; }
         .reports-hub *, .reports-hub *::before, .reports-hub *::after { box-sizing: border-box; }
-        .hub-inner { padding: 24px 20px 48px; width: 100%; }
+        .hub-inner { padding: 16px 12px 48px; width: 100%; }
+        @media (min-width: 640px) { .hub-inner { padding: 24px 24px 48px; } }
+        @media (min-width: 1024px) { .hub-inner { padding: 32px 32px 48px; } }
+
+        .reports-hub button:focus-visible, .reports-hub input:focus-visible, .reports-hub select:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
 
         .hub-card {
             background: ${SURFACE};
             border: 1px solid ${BORDER};
             border-radius: 16px;
-            box-shadow: 0 8px 20px -16px rgba(36,21,18,0.28);
+            box-shadow: 0 12px 28px -20px rgba(36,21,18,0.22);
         }
 
-        /* ── Header ── */
-        .hub-header { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; margin-bottom: 14px; }
-        .hub-header-single { grid-template-columns: minmax(0, 1fr); }
-        .hub-title-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 18px 24px; }
+        /* ── Header (unchanged structure) ── */
+        .hub-header { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-bottom: 16px; }
+        .hub-title-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: clamp(14px, 3vw, 20px) clamp(16px, 3vw, 24px); }
         .hub-title-text { min-width: 0; }
         .hub-title-text p { margin: 4px 0 0; }
+        /* Zero-specificity fallback; the shared staff-page-* styles win whenever they are loaded. */
+        :where(.staff-page-eyebrow) { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; color: ${GOLD}; }
+        :where(.staff-page-title) { font-family: 'Lora', Georgia, 'Times New Roman', serif; font-size: clamp(1.6rem, 4vw, 2rem); font-weight: 700; color: ${PRIMARY}; line-height: 1.15; margin-top: 3px; }
+        :where(.staff-page-description) { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 0.9rem; color: ${MUTED}; margin-top: 6px; line-height: 1.55; }
+
+        .notice-error { margin-bottom: 14px; padding: 10px 14px; color: #8E2631; background: #FBEAEA; border-left: 3px solid ${DANGER}; border-radius: 10px; font-size: 0.82rem; font-weight: 600; }
+
         /* ── Buttons ── */
         .btn-outline, .btn-filled {
             display: inline-flex; align-items: center; justify-content: center; gap: 8px;
-            height: 40px; padding: 0 16px; border-radius: 12px;
-            font-family: 'Inter', sans-serif; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+            height: 40px; padding: 0 16px; border-radius: 10px;
+            font-family: 'Inter', sans-serif; font-size: 0.8rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+            transition: background-color 150ms ease, opacity 150ms ease;
         }
-        .btn-outline { background: ${SURFACE}; border: 1px solid ${PRIMARY}; color: ${PRIMARY}; flex-shrink: 0; }
-        .btn-outline:hover:not(:disabled) { background: ${PRIMARY}0F; }
-        .btn-filled { border: 1px solid ${PRIMARY}; color: #fff; background: linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_DARK} 100%); }
-        .btn-filled:hover:not(:disabled) { filter: brightness(1.1); }
+        .btn-outline { background: #fff; border: 1px solid ${BORDER}; color: ${PRIMARY}; flex-shrink: 0; }
+        .btn-outline:hover:not(:disabled) { background: ${BG}; }
+        .btn-filled { border: 1px solid ${PRIMARY}; color: #fff; background: ${PRIMARY}; }
+        .btn-filled:hover:not(:disabled) { opacity: 0.9; }
         .btn-outline:disabled, .btn-filled:disabled { opacity: 0.6; cursor: default; }
-        .btn-outline:focus-visible, .btn-filled:focus-visible, .page-btn:focus-visible { outline: 2px solid ${PRIMARY}; outline-offset: 2px; }
 
         /* ── KPI ── */
-        .kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
-        .kpi-card { display: flex; align-items: center; gap: 16px; padding: 18px 20px; height: 100%; }
-        .kpi-icon { width: 52px; height: 52px; border-radius: 14px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
-        .kpi-value { display: block; font-family: 'Lora', Georgia, serif; font-size: 1.8rem; line-height: 1.1; font-weight: 700; color: ${PRIMARY}; }
-        .kpi-label { display: block; font-size: 0.86rem; color: ${INK}; margin-top: 3px; }
-        .kpi-sub { display: block; font-size: 0.74rem; color: ${MUTED}; margin-top: 2px; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 16px; }
+        @media (min-width: 640px) { .kpi-grid { gap: 16px; } }
+        @media (min-width: 1024px) { .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+        .kpi-card { display: flex; flex-direction: column; padding: clamp(14px, 3vw, 18px); min-width: 0; }
+        .kpi-row { display: flex; align-items: center; gap: 12px; }
+        .kpi-icon { width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+        .kpi-value { display: block; font-family: 'Lora', Georgia, serif; font-size: clamp(1.35rem, 4vw, 1.7rem); line-height: 1; font-weight: 700; color: ${PRIMARY}; }
+        .kpi-label { display: block; font-size: 0.78rem; color: ${MUTED}; margin-top: 5px; }
+        .kpi-bar { height: 5px; border-radius: 3px; overflow: hidden; margin-top: 12px; }
+        .kpi-bar span { display: block; height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+        .kpi-sub { display: block; font-size: 0.7rem; font-weight: 600; color: ${MUTED}; margin-top: 12px; }
+        .kpi-bar + .kpi-sub { margin-top: 5px; }
 
         /* ── Filters ── */
-        .filter-card { padding: 16px 20px; margin-bottom: 14px; }
-        .filter-bar { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
-        .field { min-width: 0; flex: 1 1 150px; }
-        .field-search { flex: 1.6 1 220px; }
+        .filter-card { padding: clamp(12px, 2.5vw, 18px); margin-bottom: 16px; }
+        .filter-top { display: flex; align-items: flex-end; gap: 10px; }
+        .filter-top .field-search { flex: 1; }
+        .filter-toggle { position: relative; }
+        .filter-count { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: ${PRIMARY}; color: #fff; font-size: 0.66rem; display: inline-flex; align-items: center; justify-content: center; }
+        .filter-grid { display: none; grid-template-columns: minmax(0, 1fr); gap: 12px; margin-top: 12px; }
+        .filter-grid.open { display: grid; }
+        .field { min-width: 0; }
         .field-label { display: block; font-size: 0.74rem; font-weight: 600; color: ${INK}; margin-bottom: 6px; }
         .input-wrap {
             position: relative; display: flex; align-items: center; gap: 8px;
-            height: 42px; padding: 0 12px; background: #fff; border: 1px solid ${BORDER}; border-radius: 12px;
+            height: 42px; padding: 0 12px; background: #fff; border: 1px solid ${BORDER}; border-radius: 10px;
         }
-        .input-wrap:focus-within { border-color: ${PRIMARY}; box-shadow: 0 0 0 3px ${PRIMARY}1F; }
+        .input-wrap:focus-within { border-color: ${GOLD}; }
         .lead-icon { color: ${MUTED}; flex-shrink: 0; }
         .input-wrap input, .input-wrap select {
             flex: 1; min-width: 0; width: 100%; height: 100%;
             border: none; outline: none; background: none; appearance: none; -webkit-appearance: none;
             font-family: 'Inter', sans-serif; font-size: 0.84rem; color: ${INK};
         }
-        .input-wrap select { cursor: pointer; padding-right: 20px; }
+        .input-wrap select { cursor: pointer; padding-right: 20px; text-overflow: ellipsis; }
         .select-chevron { position: absolute; right: 12px; color: ${MUTED}; pointer-events: none; }
+        /* Status dropdown */
+        .status-select { position: relative; }
+        .status-trigger { width: 100%; cursor: pointer; text-align: left; font-family: 'Inter', sans-serif; font-size: 0.84rem; color: ${INK}; }
+        .status-trigger:hover { background: #FCFAF5; }
+        .status-trigger-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 18px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .status-menu {
+            position: absolute; z-index: 50; top: calc(100% + 6px); left: 0; right: 0; min-width: 180px;
+            padding: 4px; background: ${SURFACE}; border: 1px solid ${BORDER}; border-radius: 12px;
+            box-shadow: 0 16px 32px -18px rgba(36,21,18,0.3);
+        }
+        .status-backdrop { position: fixed; inset: 0; z-index: 40; }
+        .status-option {
+            width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: none; border-radius: 8px;
+            background: none; text-align: left; cursor: pointer;
+            font-family: 'Inter', sans-serif; font-size: 0.84rem; color: ${INK};
+        }
+        .status-option:hover { background: ${BG}; }
+        .status-option.is-active { background: ${PRIMARY}0D; font-weight: 700; color: ${PRIMARY}; }
+        .status-option-label { flex: 1; }
+        .reset-btn {
+            display: inline-flex; align-items: center; gap: 6px; margin-top: 12px; padding: 6px 12px;
+            border: none; background: ${PRIMARY}0D; color: ${PRIMARY}; border-radius: 999px;
+            font-family: 'Inter', sans-serif; font-size: 0.74rem; font-weight: 700; cursor: pointer;
+        }
+        .reset-btn:hover { background: ${PRIMARY}1A; }
+
+        @media (min-width: 768px) {
+            .filter-card { display: block; }
+            .filter-toggle { display: none; }
+            .filter-top { display: contents; }
+            .filter-card { display: grid; grid-template-columns: minmax(220px, 1.5fr) repeat(4, minmax(0, 1fr)); gap: 12px; align-items: end; }
+            .filter-grid, .filter-grid.open { display: contents; }
+            .reset-btn { grid-column: 1 / -1; justify-self: start; margin-top: 0; }
+        }
+
         /* ── Records ── */
-        .records-card { padding: 20px 22px; margin-bottom: 14px; }
-        .records-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 16px; }
-        .records-head h2 { font-family: 'Lora', Georgia, serif; font-size: 1.4rem; font-weight: 700; color: ${PRIMARY}; margin: 0; }
-        .records-head p { font-size: 0.82rem; color: ${MUTED}; margin: 3px 0 0; }
+        .records-card { padding: clamp(14px, 3vw, 22px); margin-bottom: 16px; }
+        .records-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+        .records-head h2 { font-family: 'Lora', Georgia, serif; font-size: 1.2rem; font-weight: 600; color: ${INK}; margin: 0; }
+        .records-head p { font-size: 0.8rem; color: ${MUTED}; margin: 3px 0 0; }
         .export-toolbar { display: flex; gap: 10px; flex-wrap: wrap; }
 
-        .table-shell { border: 1px solid ${BORDER}; border-radius: 14px; overflow: hidden; background: ${SURFACE}; }
+
+        .table-shell { border: 1px solid ${BORDER}; border-radius: 14px; overflow: hidden; background: #fff; }
         .table-scroll { overflow-x: auto; }
-        /* Keep the time range and status columns readable at all table widths. */
-        .att-table { width: 100%; min-width: 1250px; border-collapse: collapse; table-layout: fixed; }
+        .att-table { width: 100%; min-width: 1150px; border-collapse: collapse; table-layout: fixed; }
         .att-table thead th {
-            background: ${BG}; color: ${INK}; font-size: 0.78rem; font-weight: 600; text-align: left;
+            background: #FCFAF5; color: ${MUTED}; font-size: 0.74rem; font-weight: 600; text-align: left;
             padding: 13px 14px; border-bottom: 1px solid ${BORDER}; white-space: nowrap;
         }
         .att-table tbody td { padding: 12px 14px; border-bottom: 1px solid ${BORDER}; vertical-align: middle; }
@@ -625,21 +747,21 @@ const GlobalStyle = () => (
         .att-table-compact tbody td { padding-top: 6px; padding-bottom: 6px; }
         .att-table-compact .duty-avatar { width: 28px; height: 28px; }
         .att-table tbody tr:last-child td { border-bottom: none; }
-        .att-table tbody tr:hover { background: ${BG}55; }
+        .att-table tbody tr:hover { background: #FCFAF5; }
         .att-table th:nth-child(1), .att-table td:nth-child(1) { width: 52px; }
-        .att-table th:nth-child(2) { width: 220px; }
-        .att-table th:nth-child(3) { width: 140px; }
-        .att-table th:nth-child(4) { width: 190px; }
-        .att-table th:nth-child(5) { width: 140px; }
-        .att-table th:nth-child(6) { width: 150px; }
-        .att-table th:nth-child(7) { width: 130px; }
-        .att-table th:nth-child(8) { width: 160px; }
-        .att-table th:nth-child(9) { width: 118px; }
+        .att-table th:nth-child(2) { width: 210px; }
+        .att-table th:nth-child(3) { width: 130px; }
+        .att-table th:nth-child(4) { width: 180px; }
+        .att-table th:nth-child(5) { width: 130px; }
+        .att-table th:nth-child(6) { width: 140px; }
+        .att-table th:nth-child(7) { width: 120px; }
+        .att-table th:nth-child(8) { width: 150px; }
+        .att-table th:nth-child(9) { width: 110px; }
         .col-num { color: ${MUTED}; font-size: 0.8rem; }
         .scholar-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
         .duty-avatar {
-            width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
-            background: ${PRIMARY}1A; display: flex; align-items: center; justify-content: center;
+            width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+            background: ${PRIMARY}12; border: 1px solid ${PRIMARY}26; display: flex; align-items: center; justify-content: center;
         }
         .duty-avatar span { color: ${PRIMARY}; font-size: 0.68rem; font-weight: 700; }
         .cell-title { font-size: 0.84rem; font-weight: 600; color: ${INK}; margin: 0; }
@@ -647,79 +769,66 @@ const GlobalStyle = () => (
         .cell-text { font-size: 0.82rem; color: ${INK}; }
         .clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
         .loc-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
-        .dt-line { display: block; line-height: 1.4; }
-        .dt-time { color: ${MUTED}; }
         .status-badge {
             display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0;
-            font-size: 0.74rem; font-weight: 600; border-radius: 999px; padding: 5px 12px;
+            font-size: 0.72rem; font-weight: 700; border-radius: 999px; padding: 4px 11px;
         }
 
+        /* Table on wide screens, cards below */
+        .rec-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+        @media (min-width: 700px) { .rec-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+        .rec-table { display: none; }
+        @media (min-width: 1180px) {
+            .rec-table { display: block; }
+            .rec-cards { display: none; }
+        }
+        .rec-card { background: #fff; border: 1px solid ${BORDER}; border-radius: 14px; padding: 14px; min-width: 0; }
+        .rec-card-top { display: flex; align-items: center; gap: 10px; }
+        .rec-duty { margin: 12px 0 0; padding-top: 12px; border-top: 1px solid ${BORDER}; font-size: 0.82rem; font-weight: 600; color: ${INK}; word-break: break-word; }
+        .rec-meta { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; margin-top: 10px; }
+        .meta-cell { min-width: 0; }
+        .meta-label { display: block; font-size: 0.66rem; font-weight: 600; color: ${MUTED}; }
+        .meta-value { display: block; font-size: 0.78rem; color: ${INK}; margin-top: 2px; word-break: break-word; }
+        .rec-loc { display: flex; align-items: center; gap: 6px; margin: 10px 0 0; font-size: 0.76rem; color: ${MUTED}; }
+
         /* ── Loading / empty ── */
-        .skeleton-tr td { padding: 10px 14px; }
-        .skeleton-bar { height: 40px; background: ${BG}; border-radius: 10px; }
-        .empty-cell { padding: 0 !important; }
-        .empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 44px 20px; }
-        .empty-icon { width: 52px; height: 52px; border-radius: 16px; background: ${GOLD}16; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+        .skeleton-list { display: grid; gap: 8px; }
+        .skeleton-bar { height: 64px; background: ${BORDER}66; border-radius: 12px; }
+        .empty-state { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 44px 20px; border: 1.5px dashed ${BORDER}; border-radius: 14px; background: #fff; }
+        .empty-icon { width: 52px; height: 52px; border-radius: 16px; background: ${GOLD}18; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
         .empty-title { font-family: 'Lora', Georgia, serif; font-size: 1.05rem; font-weight: 700; color: ${INK}; margin: 0; }
         .empty-text { font-size: 0.8rem; color: ${MUTED}; margin: 4px 0 0; }
 
         /* ── Pagination ── */
-        .pager { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
-        .pager-left { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-        .pager-info { font-size: 0.8rem; color: ${MUTED}; }
-        .pager-size { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: ${MUTED}; }
-        .pager-size select {
-            height: 32px; padding: 0 8px; border: 1px solid ${BORDER}; border-radius: 10px; background: #fff;
-            font-family: 'Inter', sans-serif; font-size: 0.8rem; color: ${INK}; cursor: pointer;
-        }
-        .pager-controls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+        .pager { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+        .pager-left { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+        .pager-info { font-size: 0.78rem; color: ${MUTED}; }
+        .pager-controls { display: flex; align-items: center; gap: 6px; }
         .page-btn {
             min-width: 34px; height: 34px; padding: 0 8px; border-radius: 10px;
-            background: ${SURFACE}; border: 1px solid ${BORDER}; color: ${INK};
+            background: #fff; border: 1px solid ${BORDER}; color: ${INK};
             font-family: 'Inter', sans-serif; font-size: 0.8rem; font-weight: 600; cursor: pointer;
             display: inline-flex; align-items: center; justify-content: center;
         }
         .page-btn:hover:not(:disabled) { background: ${BG}; }
         .page-btn:disabled { opacity: 0.45; cursor: default; }
         .page-btn-active, .page-btn-active:hover:not(:disabled) { background: ${PRIMARY}; border-color: ${PRIMARY}; color: #fff; }
-        .page-of { font-size: 0.76rem; color: ${MUTED}; margin-left: 8px; white-space: nowrap; }
+        .page-of { display: none; font-size: 0.76rem; color: ${MUTED}; padding: 0 6px; white-space: nowrap; }
 
-        /* ── Follow-up ── */
-        .followup-card { padding: 16px 20px; }
-        .followup-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-        .followup-kicker { display: inline-flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 700; color: ${WARNING}; }
-        .followup-note { font-size: 0.76rem; color: ${MUTED}; }
-        .followup-empty { font-size: 0.8rem; color: ${MUTED}; margin: 6px 0 0; }
-        .followup-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 28px; }
-        .followup-row {
-            display: flex; align-items: center; justify-content: space-between; gap: 12px;
-            padding: 10px 0; border-top: 1px solid ${BORDER};
-        }
-        .followup-count {
-            flex-shrink: 0; font-size: 0.72rem; font-weight: 700; color: ${DANGER};
-            background: ${DANGER}16; border-radius: 999px; padding: 4px 10px;
-        }
 
-        /* ── Responsive ── */
-        @media (max-width: 1100px) {
-            .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-        }
-        @media (max-width: 900px) {
-            .hub-header { grid-template-columns: 1fr; }
-        }
-        @media (max-width: 640px) {
-            .hub-inner { padding: 16px 12px 40px; }
-            .kpi-grid { grid-template-columns: 1fr; }
-            .hub-title-card { flex-wrap: wrap; padding: 16px; }
-            .field { flex: 1 1 100%; }
-            .records-card { padding: 14px; }
+        /* ── Phones ── */
+        @media (max-width: 639px) {
+            .hub-title-card { flex-wrap: wrap; }
             .export-toolbar { width: 100%; }
-            .export-toolbar .btn-outline, .export-toolbar .btn-filled { flex: 1 1 auto; }
-            .followup-list { grid-template-columns: 1fr; }
-            .page-of { display: none; }
+            .export-toolbar .btn-outline, .export-toolbar .btn-filled { flex: 1 1 0; }
+            .pager { flex-direction: column; align-items: stretch; }
+            .pager-left { justify-content: space-between; }
+            .pager-controls { justify-content: space-between; }
+            .page-num:not(.page-btn-active) { display: none; }
+            .page-of { display: inline; }
         }
         @media (prefers-reduced-motion: reduce) {
-            .reports-hub * { animation-duration: 0.01ms !important; }
+            .reports-hub * { transition: none !important; animation-duration: 0.01ms !important; }
         }
     `}</style>
 );

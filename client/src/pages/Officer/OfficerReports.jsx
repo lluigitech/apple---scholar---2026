@@ -1,28 +1,26 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
-import { BarChart3, FileText, ChevronRight } from "lucide-react";
+import { BarChart3, FileText, AlertTriangle } from "lucide-react";
 import { API_BASE, authHeaders } from "../../components/Officer/Reports/ReportsHelpers";
 import MonthlyReportsTab from "../../components/Officer/Reports/MonthlyReportsTab";
 import SubmissionRecordsTab from "../../components/Officer/Reports/SubmissionRecordsTab";
 
-// ── Design tokens — shared Apple Scholar brand system (unchanged) ──
-const MAROON_DEEP = '#6D2140';
+// ── Apple Scholar design system — same tokens as the other Officer pages ──
+const PRIMARY = '#6D2140';
 const GOLD = '#A9784E';
 const BG = '#F7F4EE';
-const CARD = '#FFFDF9';
-const RULE = '#E5D8CA';
+const SURFACE = '#FFFDF9';
+const BORDER = '#E7D8C7';
 const INK = '#241512';
 const MUTED = '#8A7A68';
+const DANGER = '#A24A4A';
+const RADIUS = 16;
+const SHADOW = '0 12px 28px -20px rgba(36,21,18,0.22)';
 
-const display = { fontFamily: "'Playfair Display', Georgia, 'Times New Roman', serif" };
+const display = { fontFamily: "'Lora', Georgia, 'Times New Roman', serif" };
 const body = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
-// Shared bento tile: one radius, one border, one shadow for every card.
-const tile = {
-  background: CARD,
-  border: `1px solid ${RULE}`,
-  borderRadius: 16,
-  boxShadow: '0 1px 2px rgba(36,21,18,0.04)',
-};
+
+const card = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, boxShadow: SHADOW };
 
 const tabItems = [
   { key: "compliance", label: "Compliance Reports", sub: "All requirements and document submissions", Icon: FileText },
@@ -59,85 +57,126 @@ export default function OfficerReports() {
     return () => { active = false; };
   }, []);
 
+  // Arrow keys move between tabs (standard tablist behaviour)
+  const handleTabKeyDown = (e) => {
+    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    e.preventDefault();
+    const index = tabItems.findIndex(t => t.key === activeTab);
+    const next = (index + (e.key === 'ArrowRight' ? 1 : -1) + tabItems.length) % tabItems.length;
+    setActiveTab(tabItems[next].key);
+    document.getElementById(`or-tab-${tabItems[next].key}`)?.focus();
+  };
+
+  const yearLevelsPending = assignedYearLevelsLoading || Boolean(assignedYearLevelsError);
+
   return (
-    <div className="min-h-screen p-4 sm:p-6" style={{ ...body, background: BG }}>
+    <div className="or-page" style={{ ...body, background: BG }}>
       <style>{`
-        .or-tabs-scroll { scrollbar-width: none; -ms-overflow-style: none; }
-        .or-tabs-scroll::-webkit-scrollbar { display: none; }
+        .or-page { width: 100%; min-height: 100vh; overflow-x: hidden; box-sizing: border-box; padding: 16px 16px 48px; }
+        @media (min-width: 640px) { .or-page { padding: 24px 24px 48px; } }
+        @media (min-width: 1024px) { .or-page { padding: 32px 32px 48px; } }
+
+        .or-tab { transition: background-color 150ms ease, color 150ms ease; }
+        .or-tab:hover:not([aria-selected="true"]) { background: ${BG}; }
         .or-tab:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
+
+        @media (prefers-reduced-motion: reduce) {
+          .or-page * { transition: none !important; }
+        }
       `}</style>
 
-      {/* ── Reports header ── */}
-      <header className="mb-4">
-        <div style={{ ...tile, flex: 1, minWidth: 0, padding: '20px 24px' }}>
-          <span style={{ ...body, display: 'block', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.18em', textTransform: 'uppercase', color: GOLD, marginBottom: 6 }}>
-            Officer Portal
-          </span>
-          <h1 style={{ ...display, fontSize: 'clamp(1.7rem, 3.4vw, 2.3rem)', fontWeight: 600, lineHeight: 1.1, letterSpacing: '-0.01em', color: MAROON_DEEP, margin: 0 }}>
-            Reports &amp; Analytics
-          </h1>
-          <p style={{ ...body, fontSize: '0.88rem', color: '#7a6a62', marginTop: 8, maxWidth: 560, lineHeight: 1.5 }}>
-            View submission summaries and generate reports for your assigned scholars.
-          </p>
-        </div>
+      <div className="flex flex-col gap-5">
 
-      </header>
+        {/* ── Page header — same layout as Announcements, Dashboard, Manual Validation and Task Assignment ── */}
+        <header
+          className="flex min-w-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between"
+          style={{ ...card, padding: 'clamp(14px, 3vw, 20px)' }}
+        >
+          <div className="min-w-0">
+            <p style={{ ...body, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: GOLD }}>
+              Officer Portal
+            </p>
+            <h1 style={{ ...display, fontSize: 'clamp(1.6rem, 4vw, 2rem)', fontWeight: 700, color: PRIMARY, lineHeight: 1.15, marginTop: 3 }}>
+              Reports &amp; Analytics
+            </h1>
+            <p style={{ ...body, fontSize: '0.9rem', color: MUTED, marginTop: 6, lineHeight: 1.55 }}>
+              View submission summaries and generate reports for your assigned scholars.
+            </p>
+          </div>
+        </header>
 
-      <nav aria-label="Report sections" className="mb-4">
-        <div role="tablist" className="grid gap-3 md:grid-cols-2">
-          {tabItems.map(({ key, label, sub, Icon }) => {
-            const isActive = activeTab === key;
-            return (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => setActiveTab(key)}
-                className="or-tab flex items-center gap-3.5"
-                style={{
-                  ...tile,
-                  minWidth: 0,
-                  textAlign: 'left',
-                  padding: '15px 18px',
-                  border: `1px solid ${isActive ? MAROON_DEEP : RULE}`,
-                  background: isActive ? MAROON_DEEP : CARD,
-                  cursor: 'pointer',
-                  transition: 'background 120ms ease, color 120ms ease',
-                }}
-              >
-                <span className="flex shrink-0 items-center justify-center rounded-full" style={{ width: 40, height: 40, background: isActive ? 'rgba(255,255,255,0.16)' : `${MAROON_DEEP}0f`, color: isActive ? '#fff' : MAROON_DEEP }}>
-                  <Icon size={19} strokeWidth={1.8} aria-hidden="true" />
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block" style={{ ...display, fontSize: '1rem', fontWeight: 600, color: isActive ? '#fff' : INK }}>{label}</span>
-                  <span className="mt-0.5 block" style={{ ...body, fontSize: '0.76rem', color: isActive ? '#EBD9E0' : MUTED }}>{sub}</span>
-                </span>
-                <span className="flex shrink-0 items-center justify-center rounded-full" style={{ width: 28, height: 28, background: isActive ? '#fff' : `${MAROON_DEEP}0f`, color: MAROON_DEEP }}>
-                  <ChevronRight size={16} />
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+        {/* ── Section switcher: one segmented card instead of two big tiles ── */}
+        <nav aria-label="Report sections">
+          <div
+            role="tablist"
+            aria-label="Report sections"
+            onKeyDown={handleTabKeyDown}
+            className="grid grid-cols-1 gap-1.5 md:grid-cols-2"
+            style={{ ...card, padding: 6 }}
+          >
+            {tabItems.map(({ key, label, sub, Icon }) => {
+              const isActive = activeTab === key;
+              return (
+                <button
+                  key={key}
+                  id={`or-tab-${key}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  aria-controls={`or-panel-${key}`}
+                  tabIndex={isActive ? 0 : -1}
+                  onClick={() => setActiveTab(key)}
+                  className="or-tab flex min-w-0 items-center gap-3.5 text-left"
+                  style={{
+                    padding: '12px 14px',
+                    borderRadius: 12,
+                    border: 'none',
+                    background: isActive ? PRIMARY : 'transparent',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <span
+                    className="flex flex-shrink-0 items-center justify-center rounded-full"
+                    style={{ width: 38, height: 38, background: isActive ? 'rgba(255,255,255,0.16)' : `${PRIMARY}0F`, color: isActive ? '#fff' : PRIMARY }}
+                  >
+                    <Icon size={18} strokeWidth={1.8} aria-hidden="true" />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block" style={{ ...display, fontSize: '0.98rem', fontWeight: 700, color: isActive ? '#fff' : INK }}>{label}</span>
+                    <span className="mt-0.5 block" style={{ ...body, fontSize: '0.74rem', color: isActive ? '#EBD9E0' : MUTED }}>{sub}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
 
-      {/* ── Content surface ── */}
-      <div style={{ minWidth: 0 }}>
+        {/* ── Content ── */}
+        <div style={{ minWidth: 0 }}>
           {assignedYearLevelsError && (
-            <div role="alert" className="mb-3 rounded-xl px-4 py-3" style={{ ...tile, borderColor: "#A24A4A", color: "#A24A4A", ...body, fontSize: "0.82rem" }}>
-              {assignedYearLevelsError}
+            <div
+              role="alert"
+              className="mb-4 flex items-start gap-2.5"
+              style={{ borderRadius: 12, padding: '12px 14px', border: `1px solid ${DANGER}35`, background: `${DANGER}0d`, color: DANGER, ...body, fontSize: '0.82rem', fontWeight: 600 }}
+            >
+              <AlertTriangle size={15} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <span>{assignedYearLevelsError}</span>
             </div>
           )}
+
           {activeTab === "compliance" && (
-            <SubmissionRecordsTab assignedYearLevels={assignedYearLevels} assignedYearLevelsLoading={assignedYearLevelsLoading || Boolean(assignedYearLevelsError)} />
+            <div role="tabpanel" id="or-panel-compliance" aria-labelledby="or-tab-compliance">
+              <SubmissionRecordsTab assignedYearLevels={assignedYearLevels} assignedYearLevelsLoading={yearLevelsPending} />
+            </div>
           )}
 
           {activeTab === "monthly-reports" && (
-            <MonthlyReportsTab assignedYearLevels={assignedYearLevels} assignedYearLevelsLoading={assignedYearLevelsLoading || Boolean(assignedYearLevelsError)} />
+            <div role="tabpanel" id="or-panel-monthly-reports" aria-labelledby="or-tab-monthly-reports">
+              <MonthlyReportsTab assignedYearLevels={assignedYearLevels} assignedYearLevelsLoading={yearLevelsPending} />
+            </div>
           )}
+        </div>
       </div>
-
     </div>
   );
 }

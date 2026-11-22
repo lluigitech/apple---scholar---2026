@@ -13,8 +13,8 @@ router.use(verifyToken, requireRole(['officer'], {
 
 // ── Announcements ──────────────────────────────────────────
 router.get('/announcements',  officerController.getAnnouncements);
-router.post('/announcements', officerController.createAnnouncement);
-router.post('/announcements/:id/notify', officerController.notifyAnnouncement);
+router.post('/announcements',  officerController.createAnnouncement);
+router.post('/announcements/:id/notify', requireRole(['admin']), officerController.notifyAnnouncement);
 
 // ── Account settings ─────────────────────────────────────────
 router.get('/profile', officerSettingsController.getProfile);

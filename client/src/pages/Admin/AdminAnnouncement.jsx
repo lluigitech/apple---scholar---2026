@@ -1,42 +1,44 @@
+import { API_ORIGIN } from '../../utils/apiConfig.js';
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import {
-    Trash2, ToggleRight, Clock, Users,
-    ChevronDown, X, Search, Send, RefreshCw,
-    Archive, SlidersHorizontal, Megaphone, AlertCircle, AlertTriangle, Info, List,
+    Megaphone, Search, X, Trash2, Bell,
+    ChevronDown, AlertCircle, AlertTriangle, Info, Send, FilterX,
+    Plus, Users, RefreshCw, ToggleRight,
 } from 'lucide-react';
 import { formatAdminDate } from '../../utils/adminPreferences';
-import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
-const API_BASE = (import.meta.env?.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
-const API = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
+const API = `${API_ORIGIN}/api`;
 const authHeaders = () => ({
     headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
 });
 
-// ── Design tokens — single source of truth for this page ──
-const BG = '#F7F4EE';
+// ── Apple Scholar design system — same tokens as Officer/Staff Announcement ──
+const PRIMARY = '#6D2140';
+const GOLD = '#A9784E';
+const BG = '#F3EEE6';
 const SURFACE = '#FFFDF9';
 const BORDER = '#E7D8C7';
-const PRIMARY = '#6D2140';
-const PRIMARY_DEEP = '#4A1730';
-const PRIMARY_TINT = 'rgba(109, 33, 64, 0.08)';
 const INK = '#241512';
 const MUTED = '#8A7A68';
-const BRONZE = '#A9784E';
-const SUCCESS = '#6B8F71';
-const SUCCESS_TINT = 'rgba(107,143,113,.12)';
-const WARNING = '#C08A3E';
-const WARNING_TINT = 'rgba(192,138,62,.12)';
-const DANGER = '#A24A4A';
-const DANGER_TINT = 'rgba(162,74,74,.12)';
-const NEUTRAL_TINT = 'rgba(138,122,104,.12)';
+const SUCCESS = '#3F8A55';
+const WARNING = '#B8863F';
+const DANGER = '#C1666B';
 const RADIUS = 16;
-const SHADOW = '0 1px 2px rgba(74, 23, 48, 0.04), 0 6px 18px rgba(74, 23, 48, 0.04)';
 
-const display = { fontFamily: "'Playfair Display', Georgia, 'Times New Roman', serif" };
+const display = { fontFamily: "'Lora', Georgia, 'Times New Roman', serif" };
 const body = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
+const mono = { fontFamily: "'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace" };
 
+const cardShadow = { boxShadow: '0 12px 28px -20px rgba(36,21,18,0.22)' };
+const cardWrap = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, ...cardShadow };
+
+const fieldStyle = {
+    width: '100%', padding: '11px 14px', border: `1px solid ${BORDER}`, borderRadius: 10,
+    background: '#FCFAF5', ...body, fontSize: '0.875rem', color: INK, outline: 'none',
+};
+
+// ─── Year Level Config ──────────────────────────────────────────────────────
 const AUDIENCE_GROUPS = [
     { label: 'Junior High School', options: [
         { value: 'grade_7',  label: 'Grade 7'  },
@@ -59,110 +61,105 @@ const AUDIENCE_GROUPS = [
 const ALL_LEVELS = AUDIENCE_GROUPS.flatMap(g => g.options);
 const getLevelLabel = (val) => ALL_LEVELS.find(o => o.value === val)?.label || val;
 
-const PRIORITY_ORDER = ['critical', 'important', 'info'];
-const PRIORITY_CONFIG = {
-    critical:  { color: DANGER,  tint: DANGER_TINT,  label: 'Critical',  icon: AlertTriangle },
-    important: { color: WARNING, tint: WARNING_TINT, label: 'Important', icon: AlertCircle   },
-    info:      { color: MUTED,   tint: NEUTRAL_TINT, label: 'Info',      icon: Info          },
-};
-const cfgFor = (p) => PRIORITY_CONFIG[p] || PRIORITY_CONFIG.info;
-
 const ROLE_OPTIONS = [
     { value: 'scholar', label: 'Scholars' },
     { value: 'staff',   label: 'Staff'    },
     { value: 'officer', label: 'Officers' },
 ];
+const ALL_ROLES = ROLE_OPTIONS.map(r => r.value);
+
+const PRIORITY_CONFIG = {
+    critical:  { color: DANGER,  label: 'Critical'  },
+    important: { color: WARNING, label: 'Important' },
+    info:      { color: GOLD,    label: 'Info'      },
+};
+
+const PRIORITY_TABS = [
+    { key: 'all',       label: 'All'       },
+    { key: 'critical',  label: 'Critical'  },
+    { key: 'important', label: 'Important' },
+    { key: 'info',      label: 'Info'      },
+];
+
+const STATUS_TABS = [
+    { key: 'all',       label: 'All statuses' },
+    { key: 'published', label: 'Published'    },
+    { key: 'withdrawn', label: 'Withdrawn'    },
+];
+
+function PriorityIcon({ priority, size = 12 }) {
+    if (priority === 'critical')  return <AlertCircle  size={size} />;
+    if (priority === 'important') return <AlertTriangle size={size} />;
+    return <Info size={size} />;
+}
 
 const formatDate = (d) => formatAdminDate(d, { month: 'short' });
 
-const labelStyle = {
-    ...body,
-    display: 'block',
-    fontSize: '0.74rem',
-    fontWeight: 600,
-    color: MUTED,
-};
-
-const fieldStyle = {
-    ...body,
-    fontSize: '0.85rem',
-    color: INK,
-    background: SURFACE,
-    border: `1px solid ${BORDER}`,
-    borderRadius: 10,
-    padding: '10px 13px',
-    outline: 'none',
-    width: '100%',
-};
-
-const cardStyle = { background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, boxShadow: SHADOW };
-
-const Skeleton = ({ style }) => (
-    <div className="skeleton-pulse" style={{ background: '#EFE7D8', borderRadius: 8, ...style }} />
+// KPI card (same as Officer/Staff)
+const KPICard = ({ icon: Icon, label, value, accent }) => (
+    <div className="min-w-0 h-full" style={{ ...cardWrap, padding: 'clamp(14px, 3vw, 18px)' }}>
+        <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex items-center justify-center flex-shrink-0" style={{ width: 44, height: 44, borderRadius: 12, background: `${accent}18`, color: accent }}>
+                <Icon size={20} />
+            </div>
+            <div className="min-w-0">
+                <p style={{ ...display, fontSize: 'clamp(1.35rem, 4vw, 1.7rem)', fontWeight: 700, color: PRIMARY, lineHeight: 1 }}>{value}</p>
+                <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 5 }}>{label}</p>
+            </div>
+        </div>
+    </div>
 );
 
-// Small section heading used inside the composer
-const SectionLabel = ({ children }) => (
-    <p style={{ ...body, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: BRONZE }}>{children}</p>
-);
-
-const IconBadge = ({ icon: Icon, color = PRIMARY, tint = PRIMARY_TINT, size = 40 }) => (
-    <span className="flex items-center justify-center shrink-0" style={{ width: size, height: size, borderRadius: '50%', background: tint, color }}>
-        <Icon size={Math.round(size * 0.45)} strokeWidth={2} />
-    </span>
-);
-
-const Tick = ({ label, checked, onChange }) => (
-    <button type="button" role="checkbox" aria-checked={checked} onClick={onChange}
-        className="exec-focus flex items-center gap-2.5 select-none text-left"
-        style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
-        <span className="w-[18px] h-[18px] rounded flex items-center justify-center shrink-0 transition-all"
-            style={{ border: `2px solid ${checked ? PRIMARY : BORDER}`, background: checked ? PRIMARY : '#fff' }}>
-            {checked && (
-                <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="#fff" strokeWidth={3.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-            )}
-        </span>
-        <span style={{ ...body, fontSize: '0.84rem', fontWeight: 500, color: INK }}>{label}</span>
-    </button>
-);
-
+// ─── Year Level Multi-select ─────────────────────────────────────────────────
 function LevelSelector({ value, onChange }) {
     const [open, setOpen] = useState(false);
     const toggle = (val) => onChange(value.includes(val) ? value.filter(v => v !== val) : [...value, val]);
     const displayLabel = () => {
-        if (!value.length) return 'Any year level';
+        if (!value.length) return 'All year levels';
         if (value.length <= 2) return value.map(getLevelLabel).join(', ');
         return `${getLevelLabel(value[0])} +${value.length - 1} more`;
     };
+
     return (
         <div className="relative">
-            <button type="button" onClick={() => setOpen(v => !v)}
-                aria-haspopup="listbox" aria-expanded={open}
-                className="exec-focus w-full flex items-center justify-between"
-                style={{ ...fieldStyle, height: 44, color: value.length ? INK : MUTED, cursor: 'pointer' }}>
+            <button
+                type="button"
+                onClick={() => setOpen(v => !v)}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+                className="w-full flex items-center justify-between"
+                style={{ ...fieldStyle, cursor: 'pointer', color: value.length ? INK : '#B7A99E' }}
+            >
                 <span className="truncate">{displayLabel()}</span>
                 <ChevronDown size={14} style={{ color: MUTED, flexShrink: 0, marginLeft: 8 }} />
             </button>
             {open && (
                 <>
-                    <div className="absolute z-50 top-full left-0 right-0 mt-1.5 overflow-auto" style={{ maxHeight: 260, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 10, boxShadow: '0 16px 40px -18px rgba(36,21,18,0.35)' }}>
+                    <div
+                        className="absolute z-50 top-full left-0 right-0 mt-2 overflow-auto"
+                        style={{ maxHeight: 240, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 12, boxShadow: '0 16px 32px -18px rgba(36,21,18,0.3)' }}
+                    >
                         {AUDIENCE_GROUPS.map(group => (
                             <div key={group.label}>
-                                <p className="px-3.5 pt-3 pb-1" style={{ ...body, fontSize: '0.68rem', fontWeight: 600, color: MUTED }}>{group.label}</p>
+                                <p style={{ padding: '10px 14px 4px', ...body, fontSize: '0.68rem', fontWeight: 700, color: GOLD }}>
+                                    {group.label}
+                                </p>
                                 {group.options.map(opt => {
                                     const selected = value.includes(opt.value);
                                     return (
-                                        <button key={opt.value} type="button" onClick={() => toggle(opt.value)}
-                                            role="checkbox" aria-checked={selected}
-                                            className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors"
-                                            style={{ ...body, fontSize: '0.82rem', color: INK, background: 'none', border: 'none', cursor: 'pointer' }}
-                                            onMouseEnter={(e) => e.currentTarget.style.background = BG}
-                                            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}>
-                                            <span className="w-4 h-4 rounded flex-shrink-0 flex items-center justify-center" style={{ border: `1.5px solid ${selected ? PRIMARY : BORDER}`, backgroundColor: selected ? PRIMARY : '#fff' }}>
+                                        <button
+                                            key={opt.value}
+                                            type="button"
+                                            onClick={() => toggle(opt.value)}
+                                            className="w-full flex items-center gap-2.5 transition-colors hover:bg-[#F3EEE6]"
+                                            style={{ padding: '9px 14px', textAlign: 'left', ...body, fontSize: '0.875rem', color: INK, border: 'none', background: 'none', cursor: 'pointer' }}
+                                        >
+                                            <span
+                                                className="flex items-center justify-center flex-shrink-0"
+                                                style={{ width: 15, height: 15, borderRadius: 4, border: `1.5px solid ${selected ? PRIMARY : BORDER}`, background: selected ? PRIMARY : '#fff' }}
+                                            >
                                                 {selected && (
-                                                    <svg width="10" height="8" viewBox="0 0 10 8" fill="none">
+                                                    <svg width="9" height="7" viewBox="0 0 10 8" fill="none">
                                                         <path d="M1 4L3.5 6.5L9 1" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                                                     </svg>
                                                 )}
@@ -181,32 +178,379 @@ function LevelSelector({ value, onChange }) {
     );
 }
 
+// ─── Create Modal — "Communication composer" ────────────────────────────────
+function CreateModal({ authorName, onClose, onCreated }) {
+    const [title,       setTitle]       = useState('');
+    const [content,     setContent]     = useState('');
+    const [priority,    setPriority]    = useState('info');
+    const [targetRoles, setTargetRoles] = useState(ALL_ROLES);
+    const [levels,      setLevels]      = useState([]);
+    const [error,       setError]       = useState('');
+    const [submitting,  setSubmitting]  = useState(false);
+    const authorId = localStorage.getItem('id') || localStorage.getItem('user_id') || null;
+
+    useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onClose]);
+
+    const toggleRole = (role) => {
+        setTargetRoles(prev => prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]);
+    };
+
+    const handleClear = () => {
+        setTitle('');
+        setContent('');
+        setPriority('info');
+        setTargetRoles(ALL_ROLES);
+        setLevels([]);
+        setError('');
+    };
+
+    const handleSubmit = async () => {
+        if (!title.trim() || !content.trim()) { setError('Write a subject and a message before sending it out.'); return; }
+        if (!targetRoles.length)              { setError('Pick at least one audience to route this to.');       return; }
+        setError('');
+        setSubmitting(true);
+
+        try {
+            await axios.post(`${API}/admin/announcements`, {
+                title:         title.trim(),
+                content:       content.trim(),
+                priority,
+                target_roles:  targetRoles,
+                target_levels: targetRoles.includes('scholar') ? levels : [],
+                created_by:    authorId,
+            }, authHeaders());
+            onCreated();
+            onClose();
+        } catch (err) {
+            console.error(err);
+            setError(err.response?.data?.error || 'Could not publish this announcement.');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const labelStyle = { ...body, fontSize: '0.74rem', fontWeight: 600, color: INK, display: 'block', marginBottom: 6 };
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+            style={{ background: 'rgba(36,21,18,0.5)' }}
+            role="dialog" aria-modal="true" aria-label="Create announcement"
+        >
+            <div className="composer w-full sm:max-w-lg overflow-hidden" style={{ background: SURFACE, border: `1px solid ${BORDER}`, maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
+
+                <div className="flex items-center justify-between gap-3 flex-shrink-0" style={{ padding: '18px 24px', borderBottom: `1px solid ${BORDER}`, background: SURFACE }}>
+                    <div className="min-w-0">
+                        <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', color: GOLD }}>NEW POST</p>
+                        <h2 style={{ ...display, fontSize: '1.2rem', fontWeight: 600, color: PRIMARY, marginTop: 2 }}>Communication composer</h2>
+                    </div>
+                    <button type="button" onClick={onClose} aria-label="Close" className="flex items-center justify-center flex-shrink-0" style={{ width: 32, height: 32, borderRadius: 10, border: `1px solid ${BORDER}`, background: '#fff', color: MUTED, cursor: 'pointer' }}>
+                        <X size={15} />
+                    </button>
+                </div>
+
+                <div className="space-y-5" style={{ padding: '22px 24px', overflowY: 'auto', flex: 1 }}>
+                    <div>
+                        <label htmlFor="ann-title" style={labelStyle}>Subject</label>
+                        <input
+                            id="ann-title"
+                            type="text"
+                            value={title}
+                            onChange={e => setTitle(e.target.value)}
+                            placeholder="Subject of this announcement…"
+                            style={fieldStyle}
+                        />
+                    </div>
+
+                    <div>
+                        <span style={{ ...labelStyle, marginBottom: 8 }}>Priority</span>
+                        <div className="flex items-center gap-2" role="group" aria-label="Priority">
+                            {['info', 'important', 'critical'].map(p => {
+                                const cfg    = PRIORITY_CONFIG[p];
+                                const active = priority === p;
+                                return (
+                                    <button
+                                        key={p}
+                                        type="button"
+                                        onClick={() => setPriority(p)}
+                                        aria-pressed={active}
+                                        className="flex-1"
+                                        style={{
+                                            padding: '9px 0', borderRadius: 10, cursor: 'pointer',
+                                            border: `1.5px solid ${active ? cfg.color : BORDER}`,
+                                            background: active ? `${cfg.color}14` : '#FCFAF5',
+                                            color: active ? cfg.color : MUTED,
+                                            ...body, fontSize: '0.78rem', fontWeight: 700,
+                                        }}
+                                    >
+                                        {cfg.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div>
+                        <span style={{ ...labelStyle, marginBottom: 8 }}>Send to</span>
+                        <div className="flex items-center gap-2" role="group" aria-label="Send to">
+                            {ROLE_OPTIONS.map(opt => {
+                                const active = targetRoles.includes(opt.value);
+                                return (
+                                    <button
+                                        key={opt.value}
+                                        type="button"
+                                        onClick={() => toggleRole(opt.value)}
+                                        aria-pressed={active}
+                                        className="flex-1 flex items-center justify-center gap-1.5"
+                                        style={{
+                                            padding: '9px 0', borderRadius: 10, cursor: 'pointer',
+                                            border: `1.5px solid ${active ? PRIMARY : BORDER}`,
+                                            background: active ? PRIMARY : '#FCFAF5',
+                                            color: active ? '#fff' : MUTED,
+                                            ...body, fontSize: '0.78rem', fontWeight: 700,
+                                        }}
+                                    >
+                                        <Users size={13} />
+                                        {opt.label}
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {targetRoles.includes('scholar') && (
+                        <div>
+                            <span style={labelStyle}>
+                                Scholar year level <span style={{ color: '#B7A99E', fontWeight: 400 }}>(optional — leave blank for all)</span>
+                            </span>
+                            <LevelSelector value={levels} onChange={setLevels} />
+                            {levels.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5" style={{ marginTop: 8 }}>
+                                    {levels.map(a => (
+                                        <span key={a} className="flex items-center gap-1" style={{ ...body, fontSize: '0.72rem', fontWeight: 600, padding: '3px 9px', borderRadius: 999, border: `1px solid ${PRIMARY}44`, color: PRIMARY, background: `${PRIMARY}0d` }}>
+                                            {getLevelLabel(a)}
+                                            <button type="button" aria-label={`Remove ${getLevelLabel(a)}`} onClick={() => setLevels(levels.filter(v => v !== a))}
+                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: PRIMARY, display: 'flex' }}>
+                                                <X size={10} />
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    <div>
+                        <label htmlFor="ann-content" style={labelStyle}>Message</label>
+                        <textarea
+                            id="ann-content"
+                            value={content}
+                            onChange={e => setContent(e.target.value)}
+                            placeholder="What should people know?"
+                            rows={4}
+                            style={{ ...fieldStyle, resize: 'none', lineHeight: 1.6 }}
+                        />
+                    </div>
+
+                    <p style={{ ...mono, fontSize: '0.72rem', color: MUTED }}>
+                        Posting as <span style={{ color: PRIMARY, fontWeight: 700 }}>{authorName}</span>
+                    </p>
+
+                    {error && (
+                        <p role="alert" style={{ ...body, fontSize: '0.8rem', fontWeight: 600, color: DANGER, borderLeft: `3px solid ${DANGER}`, borderRadius: 8, padding: '8px 12px', background: `${DANGER}0d` }}>{error}</p>
+                    )}
+                </div>
+
+                <div className="flex gap-3 flex-shrink-0" style={{ padding: '16px 24px', borderTop: `1px solid ${BORDER}` }}>
+                    <button
+                        type="button"
+                        onClick={handleClear}
+                        disabled={submitting}
+                        className="flex-1"
+                        style={{ padding: '11px 0', border: `1px solid ${BORDER}`, borderRadius: 10, background: '#fff', color: MUTED, ...body, fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}
+                    >
+                        Clear
+                    </button>
+                    <button
+                        type="button"
+                        onClick={handleSubmit}
+                        disabled={submitting}
+                        className="flex-1 flex items-center justify-center gap-2 transition-opacity hover:opacity-90"
+                        style={{
+                            padding: '11px 0', border: 'none', borderRadius: 10, cursor: submitting ? 'wait' : 'pointer',
+                            background: PRIMARY, color: '#fff',
+                            ...body, fontSize: '0.82rem', fontWeight: 700, opacity: submitting ? 0.6 : 1,
+                        }}
+                    >
+                        <Send size={13} />
+                        {submitting ? 'Publishing…' : 'Publish announcement'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Delete Modal ───────────────────────────────────────────────────────────
+function DeleteModal({ ann, onCancel, onConfirm }) {
+    useEffect(() => {
+        const onKey = (e) => { if (e.key === 'Escape') onCancel(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [onCancel]);
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(36,21,18,0.5)' }}>
+            <div role="dialog" aria-modal="true" aria-labelledby="delete-ann-title"
+                className="w-full max-w-sm overflow-hidden text-center"
+                style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 20, boxShadow: '0 24px 64px -20px rgba(36,21,18,0.4)' }}>
+                <div style={{ padding: 28 }}>
+                    <div className="flex items-center justify-center mx-auto" style={{ width: 54, height: 54, borderRadius: 16, background: `${DANGER}18`, marginBottom: 16 }}>
+                        <Trash2 size={22} style={{ color: DANGER }} />
+                    </div>
+                    <h3 id="delete-ann-title" style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color: INK }}>Delete this announcement?</h3>
+                    <p className="break-words" style={{ ...body, fontSize: '0.83rem', color: MUTED, marginTop: 8, marginBottom: 24, lineHeight: 1.55 }}>
+                        "{ann.title}" will be permanently removed. This can't be undone.
+                    </p>
+                    <div className="flex gap-3">
+                        <button type="button" onClick={onCancel} className="flex-1"
+                            style={{ padding: '11px 0', border: `1px solid ${BORDER}`, borderRadius: 10, background: '#fff', color: MUTED, ...body, fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>
+                            Cancel
+                        </button>
+                        <button type="button" onClick={onConfirm} className="flex-1 hover-lift"
+                            style={{ padding: '11px 0', border: 'none', borderRadius: 10, background: DANGER, color: '#fff', ...body, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}>
+                            Delete
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ─── Feed row — one compact line per announcement, click to expand ──────────
+function AnnouncementRow({ ann, isLatest, isNotifying, feedback, onNotify, onToggle, onDelete }) {
+    const [open, setOpen] = useState(false);   // presentation-only
+    const levels = ann.target_levels || [];
+    const roles  = ann.target_roles || [];
+    const cfg    = PRIORITY_CONFIG[ann.priority] || PRIORITY_CONFIG.info;
+    const active = !!ann.is_active;
+    const everyone = roles.length === ALL_ROLES.length;
+
+    return (
+        <article className={`ann-row ${open ? 'ann-row-open' : ''}`} style={{ opacity: active ? 1 : 0.8 }}>
+            <div className="ann-row-main">
+                <span className="ann-icon" style={{ background: `${cfg.color}18`, color: cfg.color }} aria-hidden="true">
+                    <PriorityIcon priority={ann.priority} size={17} />
+                </span>
+
+                <button type="button" className="ann-row-body" onClick={() => setOpen(v => !v)} aria-expanded={open} style={body}>
+                    <span className="ann-row-title">
+                        <span style={{ ...display, fontSize: '1rem', fontWeight: 700, color: INK, wordBreak: 'break-word' }}>{ann.title}</span>
+                        {isLatest && <span className="new-dot">New</span>}
+                    </span>
+                    <span className={open ? 'ann-text-open' : 'ann-text'}>{ann.content}</span>
+                    <span className="ann-meta">
+                        <span style={{ color: cfg.color, fontWeight: 700 }}>{cfg.label}</span>
+                        <span className="ann-sep" />
+                        <span style={{ color: active ? SUCCESS : MUTED, fontWeight: 700 }}>{active ? 'Published' : 'Withdrawn'}</span>
+                        <span className="ann-sep" />
+                        <span>{everyone ? 'Everyone' : roles.map(r => ROLE_OPTIONS.find(o => o.value === r)?.label || r).join(', ')}</span>
+                        {ann.created_at && (
+                            <>
+                                <span className="ann-sep" />
+                                <span>{formatDate(ann.created_at)}</span>
+                            </>
+                        )}
+                    </span>
+                </button>
+
+                <div className="ann-actions">
+                    <button
+                        type="button"
+                        className="notify-btn"
+                        onClick={() => onNotify(ann.id)}
+                        disabled={isNotifying}
+                        aria-label={`Notify recipients about ${ann.title}`}
+                    >
+                        <Bell size={13} /> {isNotifying ? 'Sending…' : 'Notify'}
+                    </button>
+
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked={active}
+                        aria-label={`${active ? 'Withdraw' : 'Publish'} ${ann.title}`}
+                        title={active ? 'Withdraw announcement' : 'Publish announcement'}
+                        onClick={() => onToggle(ann.id)}
+                        className="switch-btn"
+                    >
+                        <span className="relative inline-block" style={{ width: 34, height: 19, borderRadius: 999, background: active ? SUCCESS : '#D8CCBB', transition: 'background 150ms ease' }}>
+                            <span className="absolute" style={{ top: 2, left: active ? 17 : 2, width: 15, height: 15, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(36,21,18,0.25)', transition: 'left 150ms ease' }} />
+                        </span>
+                    </button>
+
+                    <button type="button" className="chev-btn danger-btn" onClick={() => onDelete(ann)} aria-label={`Delete ${ann.title}`} title="Delete announcement">
+                        <Trash2 size={15} />
+                    </button>
+
+                    <button type="button" className="chev-btn" onClick={() => setOpen(v => !v)} aria-label={open ? 'Collapse' : 'Expand'}>
+                        <ChevronDown size={16} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 160ms ease' }} />
+                    </button>
+                </div>
+            </div>
+
+            {feedback && (
+                <p
+                    role={feedback.type === 'error' ? 'alert' : 'status'}
+                    style={{ ...body, fontSize: '0.76rem', fontWeight: 600, color: feedback.type === 'error' ? DANGER : SUCCESS, padding: '0 16px 12px 68px' }}
+                >
+                    {feedback.text}
+                </p>
+            )}
+
+            {open && (
+                <div className="ann-detail">
+                    <span style={{ ...body, fontSize: '0.72rem', fontWeight: 600, color: MUTED }}>Audience</span>
+                    <div className="flex flex-wrap gap-1.5">
+                        {roles.length === 0 && <span className="level-chip" style={body}>Everyone</span>}
+                        {roles.map(r => (
+                            <span key={r} className="role-chip capitalize" style={body}>
+                                <Users size={10} /> {r}
+                            </span>
+                        ))}
+                        {roles.includes('scholar') && (levels.length > 0
+                            ? levels.map(lv => <span key={lv} className="level-chip" style={body}>{getLevelLabel(lv)}</span>)
+                            : <span className="level-chip" style={body}>All year levels</span>
+                        )}
+                    </div>
+                </div>
+            )}
+        </article>
+    );
+}
+
+// ─── Main Component ─────────────────────────────────────────────────────────
 const AdminAnnouncement = () => {
-    const [title, setTitle] = useState('');
-    const [content, setContent] = useState('');
-    const [priority, setPriority] = useState('info');
-    const [targetRoles, setTargetRoles] = useState(['scholar', 'staff', 'officer']);
-    const [targetLevels, setTargetLevels] = useState([]);
-    const [announcements, setAnnouncements] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [submitting, setSubmitting] = useState(false);
-    const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [selectedAnn, setSelectedAnn] = useState(null);
-    const [notifyingId, setNotifyingId] = useState(null);
-    const [notifyMessage, setNotifyMessage] = useState('');
-    const [notifyError, setNotifyError] = useState('');
-    const [notifyFeedbackId, setNotifyFeedbackId] = useState(null); // which card the notify feedback belongs to
+    const adminName = localStorage.getItem('name') || 'Admin';
 
-    const [search, setSearch] = useState('');
+    const [announcements,  setAnnouncements]  = useState([]);
+    const [loading,        setLoading]        = useState(true);
+    const [search,         setSearch]         = useState('');
     const [priorityFilter, setPriorityFilter] = useState('all');
-
-    const createdBy = localStorage.getItem('id') || localStorage.getItem('user_id') || null;
+    const [statusFilter,   setStatusFilter]   = useState('all');
+    const [showModal,      setShowModal]      = useState(false);
+    const [selectedAnn,    setSelectedAnn]    = useState(null);   // delete target
+    const [notifyingId,    setNotifyingId]    = useState(null);
+    const [feedback,       setFeedback]       = useState(null);   // { id, type, text }
+    const [success,        setSuccess]        = useState('');
 
     const fetchAnnouncements = async () => {
         try {
-            setLoading(true);
             const res = await axios.get(`${API}/admin/announcements`, authHeaders());
             setAnnouncements(res.data);
         } catch (err) {
@@ -218,89 +562,28 @@ const AdminAnnouncement = () => {
 
     useEffect(() => { fetchAnnouncements(); }, []);
 
-    const toggleRole = (role) => {
-        setTargetRoles(prev => prev.includes(role) ? prev.filter(r => r !== role) : [...prev, role]);
+    const handleRefresh = () => {
+        setLoading(true);
+        fetchAnnouncements();
     };
 
-    const getAudienceLabel = (ann) => {
-        const roles = ann.target_roles || [];
-        if (roles.length === 3) return 'Everyone';
-        return roles.map(r => ROLE_OPTIONS.find(o => o.value === r)?.label || r).join(', ');
+    const handleCreated = () => {
+        setSuccess('Announcement published.');
+        fetchAnnouncements();
+        setTimeout(() => setSuccess(''), 3000);
     };
 
-    const handleBroadcast = async () => {
-        setError('');
-        setSuccess('');
-
-        if (!title.trim() || !content.trim()) {
-            setError('Write a subject and a message before sending it out.');
-            return;
-        }
-        if (!targetRoles.length) {
-            setError('Pick at least one audience to route this to.');
-            return;
-        }
-
-        try {
-            setSubmitting(true);
-            await axios.post(`${API}/admin/announcements`, {
-                title,
-                content,
-                priority,
-                target_roles: targetRoles,
-                target_levels: targetRoles.includes('scholar') ? targetLevels : [],
-                created_by: createdBy,
-            }, authHeaders());
-            setTitle('');
-            setContent('');
-            setPriority('info');
-            setTargetRoles(['scholar', 'staff', 'officer']);
-            setTargetLevels([]);
-            setSuccess('Announcement published.');
-            fetchAnnouncements();
-            setTimeout(() => setSuccess(''), 3000);
-        } catch (err) {
-            setError(err.response?.data?.error || 'Could not publish this announcement.');
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    // UI-only: resets the composer fields to their initial values (no request is made)
-    const handleClear = () => {
-        setTitle('');
-        setContent('');
-        setPriority('info');
-        setTargetRoles(['scholar', 'staff', 'officer']);
-        setTargetLevels([]);
-        setError('');
-        setSuccess('');
-    };
-
-    const handleNotifyAnnouncement = async (id) => {
-        setNotifyError('');
-        setNotifyMessage('');
-        setNotifyFeedbackId(id);
+    const handleNotify = async (id) => {
+        setFeedback(null);
         setNotifyingId(id);
-
         try {
             const res = await axios.post(`${API}/admin/announcements/${id}/notify`, {}, authHeaders());
             const sentCount = res.data?.sent_count ?? 0;
-            setNotifyMessage(`Sent to ${sentCount} recipient(s).`);
+            setFeedback({ id, type: 'success', text: `Sent to ${sentCount} recipient(s).` });
         } catch (err) {
-            setNotifyError(err.response?.data?.error || 'Could not send notifications.');
+            setFeedback({ id, type: 'error', text: err.response?.data?.error || 'Could not send notifications.' });
         } finally {
             setNotifyingId(null);
-        }
-    };
-
-    const handleDelete = async () => {
-        try {
-            await axios.delete(`${API}/admin/announcements/${selectedAnn.id}`, authHeaders());
-            setShowDeleteModal(false);
-            fetchAnnouncements();
-        } catch (err) {
-            console.error('Error deleting:', err);
         }
     };
 
@@ -313,503 +596,320 @@ const AdminAnnouncement = () => {
         }
     };
 
-    const filtered = announcements.filter(ann => {
-        const matchesSearch =
-            ann.title.toLowerCase().includes(search.toLowerCase()) ||
-            ann.content.toLowerCase().includes(search.toLowerCase());
-        const matchesPriority = priorityFilter === 'all' || ann.priority === priorityFilter;
-        return matchesSearch && matchesPriority;
-    });
-
-    const counts = {
-        critical:  announcements.filter(a => a.priority === 'critical').length,
-        important: announcements.filter(a => a.priority === 'important').length,
-        total:     announcements.length,
+    const handleDelete = async () => {
+        if (!selectedAnn) return;
+        try {
+            await axios.delete(`${API}/admin/announcements/${selectedAnn.id}`, authHeaders());
+            setSelectedAnn(null);
+            fetchAnnouncements();
+        } catch (err) {
+            console.error('Error deleting:', err);
+        }
     };
-    counts.info = counts.total - counts.critical - counts.important;
-    const activeCount = announcements.filter(a => a.is_active).length;
 
-    const kpiCards = [
-        { key: 'total',     label: 'Total',     value: counts.total,     icon: Megaphone,     color: PRIMARY,                    tint: PRIMARY_TINT },
-        { key: 'critical',  label: 'Critical',  value: counts.critical,  icon: AlertTriangle, color: PRIORITY_CONFIG.critical.color,  tint: PRIORITY_CONFIG.critical.tint },
-        { key: 'important', label: 'Important', value: counts.important, icon: AlertCircle,   color: PRIORITY_CONFIG.important.color, tint: PRIORITY_CONFIG.important.tint },
-        { key: 'info',      label: 'Info',      value: counts.info,      icon: Info,          color: PRIORITY_CONFIG.info.color,      tint: PRIORITY_CONFIG.info.tint },
-    ];
+    const filtered = announcements
+        .filter(ann => {
+            const matchesSearch =
+                ann.title.toLowerCase().includes(search.toLowerCase()) ||
+                ann.content.toLowerCase().includes(search.toLowerCase());
+            const matchesPriority = priorityFilter === 'all' || ann.priority === priorityFilter;
+            const matchesStatus =
+                statusFilter === 'all' ||
+                (statusFilter === 'published' && ann.is_active) ||
+                (statusFilter === 'withdrawn' && !ann.is_active);
+            return matchesSearch && matchesPriority && matchesStatus;
+        })
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    const clearFilters = () => {
+        setSearch('');
+        setPriorityFilter('all');
+        setStatusFilter('all');
+    };
+    const filtersActive = search !== '' || priorityFilter !== 'all' || statusFilter !== 'all';
+
+    const criticalCount  = announcements.filter(a => a.priority === 'critical').length;
+    const importantCount = announcements.filter(a => a.priority === 'important').length;
+    const activeCount    = announcements.filter(a => a.is_active).length;
 
     return (
-        <section className="min-h-full overflow-x-hidden" style={{ background: BG }}>
-            <style>{`
-                @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=Inter:wght@400;500;600;700&display=swap');
+        <div className="admin-hub" style={{ ...body, background: BG }}>
+            <div className="hub-inner">
 
-                .exec-input:focus, .exec-select:focus, textarea:focus {
-                    border-color: ${PRIMARY} !important;
-                    box-shadow: 0 0 0 3px ${PRIMARY_TINT};
-                }
-                .exec-focus:focus-visible, .exec-switch:focus-visible {
-                    outline: 2px solid ${PRIMARY};
-                    outline-offset: 2px;
-                    border-radius: 8px;
-                }
-                .exec-filter:focus-within { border-color: ${PRIMARY} !important; box-shadow: 0 0 0 3px ${PRIMARY_TINT}; }
-
-                .ann-card { transition: box-shadow 200ms ease; }
-                .ann-card:hover { box-shadow: 0 10px 24px -16px rgba(36,21,18,0.22); }
-
-                .priority-pill { transition: all 150ms ease; cursor: pointer; }
-                .priority-pill:focus-visible { outline: 2px solid ${PRIMARY}; outline-offset: 2px; }
-
-                .refresh-btn:hover { background: ${PRIMARY_TINT}; }
-                .action-link:hover { background: ${PRIMARY_TINT}; }
-                .danger-link:hover { background: ${DANGER_TINT}; }
-
-                .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-
-                .skeleton-pulse { animation: exec-pulse 1.4s ease-in-out infinite; }
-                @keyframes exec-pulse { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
-                @media (prefers-reduced-motion: reduce) { .skeleton-pulse { animation: none; } }
-            `}</style>
-
-            <div className="w-full px-4 sm:px-6 lg:px-8 flex flex-col" style={{ gap: 24 }}>
-
-                <AdminPageHeader
-                    title="Communication Center"
-                    description="Create, publish, and manage announcements across Scholars, Staff, and Officers."
-                    actions={
-                    <div className="flex flex-wrap gap-3">
-                        <div className="flex items-center gap-3 px-4 flex-1 sm:flex-none" style={{ ...cardStyle, borderRadius: RADIUS - 2, height: 60, minWidth: 180 }}>
-                            <IconBadge icon={ToggleRight} color={SUCCESS} tint={SUCCESS_TINT} size={34} />
-                            <div>
-                                <p style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: MUTED }}>Active Broadcasts</p>
-                                <p style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK, lineHeight: 1.2 }}>{loading ? '—' : activeCount}</p>
-                            </div>
+                {/* ── Page header ── */}
+                <div className="mb-5">
+                    <div
+                        className="staff-page-header-card flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 min-w-0"
+                        style={{ ...cardWrap, padding: 'clamp(14px, 3vw, 20px)' }}
+                    >
+                        <div className="min-w-0">
+                            <p className="staff-page-eyebrow">ADMIN PORTAL</p>
+                            <h1 className="staff-page-title">Communication Center</h1>
+                            <p className="staff-page-description">
+                                Create, publish, and manage announcements across Scholars, Staff, and Officers.
+                            </p>
+                        </div>
+                        <div className="flex items-center gap-2.5 flex-wrap flex-shrink-0">
+                            <button
+                                type="button"
+                                onClick={() => setShowModal(true)}
+                                className="flex items-center justify-center gap-2 hover-lift"
+                                style={{ ...body, fontSize: '0.78rem', fontWeight: 700, color: '#fff', padding: '9px 18px', border: 'none', borderRadius: 10, background: PRIMARY, cursor: 'pointer' }}
+                            >
+                                <Plus size={14} /> Create Announcement
+                            </button>
                         </div>
                     </div>
-                            }
-                        />
-
-                {/* ── 2. KPI statistics ──────────────────────────────────── */}
-                <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
-                    {loading ? (
-                        Array.from({ length: 4 }).map((_, i) => (
-                            <div key={i} style={{ ...cardStyle, padding: 20 }}>
-                                <Skeleton style={{ width: '55%', height: 12 }} />
-                                <Skeleton style={{ width: '35%', height: 28, marginTop: 14 }} />
-                            </div>
-                        ))
-                    ) : (
-                        kpiCards.map(({ key, label, value, icon: Icon, color, tint }) => (
-                            <div key={key} className="min-w-0" style={{ ...cardStyle, padding: 20 }}>
-                                <div className="flex items-center justify-between gap-3">
-                                    <p style={{ ...body, fontSize: '0.8rem', fontWeight: 500, color: MUTED }}>{label}</p>
-                                    <IconBadge icon={Icon} color={color} tint={tint} size={36} />
-                                </div>
-                                <p style={{ ...display, fontSize: '2rem', fontWeight: 700, color: INK, lineHeight: 1.1, marginTop: 14 }}>
-                                    {value}
-                                </p>
-                            </div>
-                        ))
-                    )}
                 </div>
 
-                {/* ── Workspace: composer (40%) + list (60%) ─────────────── */}
-                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] gap-6 items-start">
+                {/* ── KPI cards ── */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4 mb-5">
+                    <KPICard icon={Megaphone}     label="Total Announcements"     value={loading ? '—' : announcements.length} accent={PRIMARY} />
+                    <KPICard icon={ToggleRight}   label="Active Broadcasts"       value={loading ? '—' : activeCount}          accent={SUCCESS} />
+                    <KPICard icon={AlertCircle}   label="Critical Announcements"  value={loading ? '—' : criticalCount}        accent={DANGER} />
+                    <KPICard icon={AlertTriangle} label="Important Announcements" value={loading ? '—' : importantCount}       accent={WARNING} />
+                </div>
 
-                    {/* ── 3. Create announcement ────────────────────────── */}
-                    {loading ? (
-                        <div style={{ ...cardStyle, padding: 22 }}>
-                            <Skeleton style={{ width: '60%', height: 18 }} />
-                            <Skeleton style={{ width: '100%', height: 44, marginTop: 20 }} />
-                            <Skeleton style={{ width: '100%', height: 110, marginTop: 14 }} />
-                            <Skeleton style={{ width: '100%', height: 44, marginTop: 20 }} />
+                {/* ── Announcement feed ── */}
+                <section style={{ ...cardWrap, padding: 'clamp(14px, 3vw, 22px)' }}>
+                    <div className="feed-head">
+                        <h2 style={{ ...display, fontSize: '1.15rem', fontWeight: 600, color: INK }}>Announcements</h2>
+                        <div className="flex items-center gap-2">
+                            <span style={{ ...body, fontSize: '0.76rem', color: MUTED }}>
+                                {loading ? 'Loading…' : `Showing ${filtered.length} of ${announcements.length}`}
+                            </span>
+                            <button type="button" className="chev-btn" onClick={handleRefresh} disabled={loading} aria-label="Refresh announcements">
+                                <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+                            </button>
                         </div>
-                    ) : (
-                        <div className="min-w-0" style={{ ...cardStyle, padding: 22 }}>
-                            <div className="flex items-center gap-3 pb-5" style={{ borderBottom: `1px solid ${BORDER}` }}>
-                                <IconBadge icon={Megaphone} />
-                                <div className="min-w-0">
-                                    <h2 style={{ ...display, fontSize: '1.2rem', fontWeight: 700, color: INK }}>Create Announcement</h2>
-                                    <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 2 }}>Send important updates to scholars, staff, and officers.</p>
-                                </div>
-                            </div>
+                    </div>
 
-                            {/* Announcement details */}
-                            <div className="pt-5 space-y-4">
-                                <SectionLabel>Announcement Details</SectionLabel>
-                                <div>
-                                    <label htmlFor="ann-subject" style={labelStyle}>Subject</label>
-                                    <input
-                                        id="ann-subject"
-                                        type="text"
-                                        value={title}
-                                        placeholder="Subject of this announcement…"
-                                        onChange={(e) => setTitle(e.target.value)}
-                                        className="exec-input mt-1.5"
-                                        style={{ ...fieldStyle, height: 44 }}
-                                    />
-                                </div>
-                                <div>
-                                    <label htmlFor="ann-message" style={labelStyle}>Message</label>
-                                    <textarea
-                                        id="ann-message"
-                                        rows="5"
-                                        value={content}
-                                        placeholder="What should people know?"
-                                        onChange={(e) => setContent(e.target.value)}
-                                        className="mt-1.5 resize-none"
-                                        style={{ ...fieldStyle, lineHeight: 1.6 }}
-                                    />
-                                </div>
-                            </div>
+                    {success && <div role="status" className="notice-banner notice-success">{success}</div>}
 
-                            {/* Priority */}
-                            <div className="mt-5 pt-5 space-y-3" style={{ borderTop: `1px solid ${BORDER}` }}>
-                                <SectionLabel>Priority</SectionLabel>
-                                <div className="flex gap-2" role="group" aria-label="Priority">
-                                    {PRIORITY_ORDER.map(p => {
-                                        const cfg = cfgFor(p);
-                                        const active = priority === p;
-                                        return (
-                                            <button
-                                                key={p}
-                                                type="button"
-                                                onClick={() => setPriority(p)}
-                                                aria-pressed={active}
-                                                className="priority-pill flex-1 flex items-center justify-center gap-1.5"
-                                                style={{
-                                                    ...body, fontSize: '0.78rem', fontWeight: 600,
-                                                    padding: '10px 0', borderRadius: 999,
-                                                    border: `1px solid ${active ? PRIMARY : BORDER}`,
-                                                    background: active ? PRIMARY : BG,
-                                                    color: active ? '#fff' : MUTED,
-                                                }}
-                                            >
-                                                <span className="rounded-full" style={{ width: 7, height: 7, background: active ? '#fff' : cfg.color }} />
-                                                {cfg.label}
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </div>
-
-                            {/* Audience */}
-                            <div className="mt-5 pt-5 space-y-3" style={{ borderTop: `1px solid ${BORDER}` }}>
-                                <SectionLabel>Audience</SectionLabel>
-                                <div className="flex flex-wrap gap-x-6 gap-y-2.5">
-                                    <Tick label="Scholars" checked={targetRoles.includes('scholar')} onChange={() => toggleRole('scholar')} />
-                                    <Tick label="Staff" checked={targetRoles.includes('staff')} onChange={() => toggleRole('staff')} />
-                                    <Tick label="Officers" checked={targetRoles.includes('officer')} onChange={() => toggleRole('officer')} />
-                                </div>
-                            </div>
-
-                            {/* Year level */}
-                            {targetRoles.includes('scholar') && (
-                                <div className="mt-5 pt-5 space-y-3" style={{ borderTop: `1px solid ${BORDER}` }}>
-                                    <SectionLabel>Year Level</SectionLabel>
-                                    <div>
-                                        <label style={labelStyle}>Year level (optional)</label>
-                                        <div className="mt-1.5">
-                                            <LevelSelector value={targetLevels} onChange={setTargetLevels} />
-                                        </div>
-                                    </div>
-                                    {targetLevels.length > 0 && (
-                                        <div className="flex flex-wrap gap-1.5">
-                                            {targetLevels.map(lv => (
-                                                <span key={lv} className="flex items-center gap-1 px-2 py-0.5 rounded-full" style={{ ...body, fontSize: '0.68rem', fontWeight: 600, background: PRIMARY_TINT, color: PRIMARY }}>
-                                                    {getLevelLabel(lv)}
-                                                    <button type="button" aria-label={`Remove ${getLevelLabel(lv)}`} onClick={() => setTargetLevels(targetLevels.filter(v => v !== lv))} className="exec-focus" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: PRIMARY, display: 'flex' }}>
-                                                        <X size={11} />
-                                                    </button>
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Feedback + actions */}
-                            <div className="mt-5 pt-5" style={{ borderTop: `1px solid ${BORDER}` }}>
-                                {error && <p role="alert" className="mb-3" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: DANGER }}>{error}</p>}
-                                {success && <p role="status" className="mb-3" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: SUCCESS }}>{success}</p>}
-
-                                <div className="flex gap-3">
-                                    <button
-                                        type="button"
-                                        onClick={handleClear}
-                                        disabled={submitting}
-                                        className="refresh-btn exec-focus disabled:opacity-60"
-                                        style={{
-                                            ...body, fontSize: '0.85rem', fontWeight: 600, height: 46, borderRadius: 12, padding: '0 20px',
-                                            background: 'transparent', color: PRIMARY, border: `1px solid ${PRIMARY}`, cursor: 'pointer',
-                                        }}
-                                    >
-                                        Clear
-                                    </button>
-                                    <button
-                                        onClick={handleBroadcast}
-                                        disabled={submitting}
-                                        className="exec-focus flex-1 flex items-center justify-center gap-2 transition-opacity hover:opacity-90 disabled:opacity-60"
-                                        style={{
-                                            ...body, fontSize: '0.85rem', fontWeight: 700, height: 46, borderRadius: 12,
-                                            background: PRIMARY, color: '#fff', border: 'none',
-                                            cursor: submitting ? 'wait' : 'pointer',
-                                        }}
-                                    >
-                                        <Send size={15} /> {submitting ? 'Publishing…' : 'Publish Announcement'}
-                                    </button>
-                                </div>
-                            </div>
+                    <div className="toolbar" role="search">
+                        <div className="toolbar-search">
+                            <Search size={15} style={{ color: MUTED, flexShrink: 0 }} aria-hidden="true" />
+                            <input
+                                type="text"
+                                placeholder="Search announcements…"
+                                aria-label="Search announcements"
+                                value={search}
+                                onChange={e => setSearch(e.target.value)}
+                                style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.875rem', color: INK }}
+                            />
                         </div>
-                    )}
-
-                    {/* ── RIGHT: announcements list ─────────────────────── */}
-                    <div className="min-w-0" style={{ ...cardStyle, padding: 22 }}>
-                        <div className="flex items-center gap-3 pb-5" style={{ borderBottom: `1px solid ${BORDER}` }}>
-                            <IconBadge icon={List} />
-                            <div className="min-w-0">
-                                <h2 style={{ ...display, fontSize: '1.2rem', fontWeight: 700, color: INK }}>Announcements List</h2>
-                                <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 2 }}>View and manage all announcements.</p>
-                            </div>
-                        </div>
-
-                        {/* ── 4. Toolbar ──────────────────────────────────── */}
-                        {loading ? (
-                            <div className="flex flex-wrap gap-3 pt-5">
-                                <Skeleton style={{ flex: 1, minWidth: 200, height: 40 }} />
-                                <Skeleton style={{ width: 150, height: 40 }} />
-                            </div>
-                        ) : (
-                            <div className="flex flex-wrap items-center gap-3 pt-5">
-                                <div className="relative flex-1" style={{ minWidth: 200 }}>
-                                    <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: MUTED }} aria-hidden="true" />
-                                    <input
-                                        type="text"
-                                        aria-label="Search announcements"
-                                        placeholder="Search announcements…"
-                                        value={search}
-                                        onChange={e => setSearch(e.target.value)}
-                                        className="exec-input"
-                                        style={{ ...fieldStyle, paddingLeft: 34, height: 40 }}
-                                    />
-                                </div>
-
-                                <div className="exec-filter flex items-center gap-1.5 px-3" style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 10, height: 40 }}>
-                                    <SlidersHorizontal size={13} style={{ color: MUTED }} aria-hidden="true" />
-                                    <select
-                                        aria-label="Filter by priority"
-                                        value={priorityFilter}
-                                        onChange={e => setPriorityFilter(e.target.value)}
-                                        className="exec-select appearance-none outline-none"
-                                        style={{ ...body, fontSize: '0.8rem', fontWeight: 500, color: INK, background: 'none', border: 'none', cursor: 'pointer' }}
-                                    >
-                                        <option value="all">All priorities</option>
-                                        <option value="critical">Critical</option>
-                                        <option value="important">Important</option>
-                                        <option value="info">Info</option>
-                                    </select>
-                                </div>
-
-                                <button
-                                    onClick={fetchAnnouncements}
-                                    className="refresh-btn exec-focus flex items-center gap-2 sm:ml-auto"
-                                    style={{
-                                        ...body, fontSize: '0.8rem', fontWeight: 600, color: PRIMARY,
-                                        background: 'transparent', border: `1px solid ${PRIMARY}`,
-                                        borderRadius: 10, height: 40, padding: '0 14px', cursor: 'pointer',
-                                    }}
-                                >
-                                    <RefreshCw size={14} /> Refresh
-                                </button>
-                            </div>
+                        <select className="toolbar-select" aria-label="Filter by status" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={body}>
+                            {STATUS_TABS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+                        </select>
+                        <select className="toolbar-select" aria-label="Filter by priority" value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)} style={body}>
+                            {PRIORITY_TABS.map(f => <option key={f.key} value={f.key}>{f.key === 'all' ? 'All priorities' : f.label}</option>)}
+                        </select>
+                        {filtersActive && (
+                            <button type="button" onClick={clearFilters} className="clear-filters-btn" style={body}>
+                                <FilterX size={13} /> Clear
+                            </button>
                         )}
+                    </div>
 
-                        {/* ── 5. Announcement feed ────────────────────────── */}
-                        <div className="grid gap-3.5 mt-5">
-                            {loading && Array.from({ length: 4 }).map((_, i) => (
-                                <div key={i} style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: RADIUS - 2, padding: 18 }}>
-                                    <div className="flex justify-between">
-                                        <Skeleton style={{ width: 90, height: 18, borderRadius: 999 }} />
-                                        <Skeleton style={{ width: 70, height: 12 }} />
-                                    </div>
-                                    <Skeleton style={{ width: '45%', height: 16, marginTop: 16 }} />
-                                    <Skeleton style={{ width: '85%', height: 12, marginTop: 10 }} />
-                                    <Skeleton style={{ width: '65%', height: 12, marginTop: 6 }} />
-                                </div>
+                    {loading ? (
+                        <div className="ann-list">
+                            {Array(4).fill(0).map((_, i) => (
+                                <div key={i} className="animate-pulse" style={{ background: `${BORDER}66`, height: 82, borderBottom: '1px solid #fff' }} />
                             ))}
-
-                            {!loading && filtered
-                                .slice()
-                                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-                                .map((ann) => {
-                                    const cfg = cfgFor(ann.priority);
-                                    const PriorityIcon = cfg.icon;
-                                    const isNotifying = notifyingId === ann.id;
-                                    const showFeedback = notifyFeedbackId === ann.id && (notifyMessage || notifyError);
-                                    return (
-                                        <article
-                                            key={ann.id}
-                                            className="ann-card"
-                                            style={{
-                                                background: ann.is_active ? SURFACE : BG,
-                                                border: `1px solid ${BORDER}`,
-                                                borderLeft: `3px solid ${ann.is_active ? cfg.color : BORDER}`,
-                                                borderRadius: RADIUS - 2,
-                                                padding: 18,
-                                                opacity: ann.is_active ? 1 : 0.8,
-                                            }}
-                                        >
-                                            <div className="flex gap-3.5">
-                                                <IconBadge icon={PriorityIcon} color={cfg.color} tint={cfg.tint} size={38} />
-
-                                                <div className="min-w-0 flex-1">
-                                                    {/* top: badges + date */}
-                                                    <div className="flex items-center justify-between flex-wrap gap-2">
-                                                        <div className="flex items-center gap-2 flex-wrap">
-                                                            <span
-                                                                className="inline-flex items-center px-2.5 py-1"
-                                                                style={{ ...body, fontSize: '0.68rem', fontWeight: 700, color: cfg.color, background: cfg.tint, borderRadius: 999 }}
-                                                            >
-                                                                {cfg.label}
-                                                            </span>
-                                                            <span
-                                                                className="inline-flex items-center px-2.5 py-1"
-                                                                style={{
-                                                                    ...body, fontSize: '0.68rem', fontWeight: 700, borderRadius: 999,
-                                                                    color: ann.is_active ? SUCCESS : MUTED,
-                                                                    background: ann.is_active ? SUCCESS_TINT : NEUTRAL_TINT,
-                                                                }}
-                                                            >
-                                                                {ann.is_active ? 'Published' : 'Withdrawn'}
-                                                            </span>
-                                                        </div>
-                                                        <span className="flex items-center gap-1" style={{ ...body, fontSize: '0.72rem', color: MUTED }}>
-                                                            <Clock size={11} aria-hidden="true" /> {formatDate(ann.created_at)}
-                                                        </span>
-                                                    </div>
-
-                                                    {/* middle: title + preview */}
-                                                    <h3 className="mt-2.5 break-words" style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK }}>
-                                                        {ann.title}
-                                                    </h3>
-                                                    <p className="mt-1 line-clamp-2 break-words" style={{ ...body, fontSize: '0.84rem', lineHeight: 1.6, color: MUTED }}>
-                                                        {ann.content}
-                                                    </p>
-
-                                                    {/* bottom: audience + actions */}
-                                                    <div className="flex items-center flex-wrap gap-x-3 gap-y-2 mt-3.5 pt-3.5" style={{ borderTop: `1px solid ${BORDER}` }}>
-                                                        <span className="flex items-center gap-1.5" style={{ ...body, fontSize: '0.74rem', fontWeight: 600, color: BRONZE }}>
-                                                            <Users size={13} aria-hidden="true" /> {getAudienceLabel(ann)}
-                                                        </span>
-
-                                                        <div className="flex items-center gap-1.5 ml-auto">
-                                                            <button
-                                                                onClick={() => handleNotifyAnnouncement(ann.id)}
-                                                                disabled={isNotifying}
-                                                                aria-label={`Notify recipients about ${ann.title}`}
-                                                                className="action-link exec-focus"
-                                                                style={{ ...body, fontSize: '0.76rem', fontWeight: 700, color: PRIMARY, background: 'none', border: 'none', cursor: isNotifying ? 'wait' : 'pointer', opacity: isNotifying ? 0.5 : 1, padding: '6px 10px', borderRadius: 8 }}
-                                                            >
-                                                                {isNotifying ? 'Sending…' : 'Notify'}
-                                                            </button>
-
-                                                            <button
-                                                                type="button"
-                                                                role="switch"
-                                                                aria-checked={!!ann.is_active}
-                                                                aria-label={`${ann.is_active ? 'Withdraw' : 'Publish'} ${ann.title}`}
-                                                                title={ann.is_active ? 'Withdraw announcement' : 'Publish announcement'}
-                                                                onClick={() => handleToggle(ann.id)}
-                                                                className="exec-switch flex items-center gap-2"
-                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 8px' }}
-                                                            >
-                                                                <span className="relative inline-block" style={{ width: 36, height: 20, borderRadius: 999, background: ann.is_active ? SUCCESS : '#D8CCBB', transition: 'background 150ms ease' }}>
-                                                                    <span className="absolute" style={{ top: 2, left: ann.is_active ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 2px rgba(36,21,18,0.25)', transition: 'left 150ms ease' }} />
-                                                                </span>
-                                                                <span style={{ ...body, fontSize: '0.76rem', fontWeight: 600, color: ann.is_active ? MUTED : SUCCESS }}>
-                                                                    {ann.is_active ? 'Withdraw' : 'Publish'}
-                                                                </span>
-                                                            </button>
-
-                                                            <button
-                                                                onClick={() => { setSelectedAnn(ann); setShowDeleteModal(true); }}
-                                                                aria-label={`Delete ${ann.title}`}
-                                                                title="Delete announcement"
-                                                                className="danger-link exec-focus"
-                                                                style={{ background: 'none', border: 'none', cursor: 'pointer', lineHeight: 0, color: DANGER, padding: 8, borderRadius: 8 }}
-                                                            >
-                                                                <Trash2 size={15} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-
-                                                    {showFeedback && (
-                                                        <p
-                                                            role={notifyError ? 'alert' : 'status'}
-                                                            className="mt-2.5"
-                                                            style={{ ...body, fontSize: '0.76rem', fontWeight: 600, color: notifyError ? DANGER : SUCCESS }}
-                                                        >
-                                                            {notifyError || notifyMessage}
-                                                        </p>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </article>
-                                    );
-                                })}
-
-                            {!loading && filtered.length === 0 && (
-                                <div className="flex flex-col items-center gap-3 text-center" style={{ padding: '48px 24px' }}>
-                                    <IconBadge icon={Archive} size={46} />
-                                    <p style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: INK }}>
-                                        {announcements.length === 0 ? 'No announcements yet' : 'Nothing matches that search'}
-                                    </p>
-                                    <p className="max-w-sm" style={{ ...body, fontSize: '0.83rem', lineHeight: 1.6, color: MUTED }}>
-                                        {announcements.length === 0
-                                            ? 'Compose your first announcement to get started.'
-                                            : 'Try a different search term or priority filter.'}
-                                    </p>
-                                </div>
+                        </div>
+                    ) : filtered.length === 0 ? (
+                        <div className="empty-state">
+                            <div className="empty-icon"><Megaphone size={24} style={{ color: GOLD }} /></div>
+                            <p style={{ ...display, fontSize: '1.05rem', fontWeight: 700, color: INK }}>
+                                {filtersActive ? 'No matching announcements' : 'No announcements yet'}
+                            </p>
+                            <p style={{ ...body, fontSize: '0.85rem', color: MUTED, marginTop: 4 }}>
+                                {filtersActive ? 'Try a different search or clear your filters.' : 'Compose your first announcement to get started.'}
+                            </p>
+                            {filtersActive && (
+                                <button type="button" onClick={clearFilters} className="clear-filters-btn" style={{ ...body, margin: '14px auto 0' }}>
+                                    <FilterX size={13} /> Clear filters
+                                </button>
                             )}
                         </div>
-                    </div>
-                </div>
+                    ) : (
+                        <div className="ann-list">
+                            {filtered.map((ann, idx) => (
+                                <AnnouncementRow
+                                    key={ann.id}
+                                    ann={ann}
+                                    isLatest={idx === 0 && !filtersActive}
+                                    isNotifying={notifyingId === ann.id}
+                                    feedback={feedback && feedback.id === ann.id ? feedback : null}
+                                    onNotify={handleNotify}
+                                    onToggle={handleToggle}
+                                    onDelete={setSelectedAnn}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </section>
             </div>
 
-            {/* ── 7. Delete modal ──────────────────────────────────── */}
-            {showDeleteModal && selectedAnn && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(36,21,18,0.5)' }}>
-                    <div role="dialog" aria-modal="true" aria-labelledby="delete-ann-title"
-                        className="w-full max-w-sm overflow-hidden text-center"
-                        style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 20, boxShadow: '0 24px 64px -20px rgba(36,21,18,0.4)' }}>
-                        <div className="p-8">
-                            <div className="w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: DANGER_TINT }}>
-                                <Trash2 size={22} style={{ color: DANGER }} />
-                            </div>
-                            <h3 id="delete-ann-title" style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color: INK }}>Delete this announcement?</h3>
-                            <p className="break-words" style={{ ...body, fontSize: '0.83rem', color: MUTED, marginTop: 8, marginBottom: 24, lineHeight: 1.55 }}>
-                                "{selectedAnn.title}" will be permanently removed. This can't be undone.
-                            </p>
-                            <div className="flex gap-3">
-                                <button
-                                    onClick={() => setShowDeleteModal(false)}
-                                    className="exec-focus flex-1"
-                                    style={{ ...body, fontSize: '0.82rem', fontWeight: 600, height: 46, borderRadius: 12, border: `1.5px solid ${BORDER}`, color: MUTED, background: '#fff', cursor: 'pointer' }}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    onClick={handleDelete}
-                                    className="exec-focus flex-1"
-                                    style={{ ...body, fontSize: '0.82rem', fontWeight: 700, height: 46, borderRadius: 12, background: DANGER, color: '#fff', border: 'none', cursor: 'pointer' }}
-                                >
-                                    Delete
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            {showModal && (
+                <CreateModal authorName={adminName} onClose={() => setShowModal(false)} onCreated={handleCreated} />
             )}
-        </section>
+
+            {selectedAnn && (
+                <DeleteModal ann={selectedAnn} onCancel={() => setSelectedAnn(null)} onConfirm={handleDelete} />
+            )}
+
+            <GlobalStyle />
+        </div>
     );
 };
+
+const GlobalStyle = () => (
+    <style>{`
+        .admin-hub { width: 100%; min-height: 100vh; overflow-x: hidden; }
+        .hub-inner { box-sizing: border-box; padding: 16px 16px 48px; width: 100%; max-width: none; margin: 0; }
+        @media (min-width: 640px) { .hub-inner { padding: 24px 24px 48px; } }
+        @media (min-width: 1024px) { .hub-inner { padding: 32px 32px 48px; } }
+
+        .admin-hub button:focus-visible,
+        .admin-hub input:focus-visible,
+        .admin-hub textarea:focus-visible {
+            outline: 2px solid ${GOLD}; outline-offset: 2px;
+        }
+        .hover-lift { transition: opacity 160ms ease, background-color 160ms ease; }
+        .hover-lift:hover:not(:disabled) { opacity: 0.9; }
+
+        /* ── Page header (same classes as Officer/Staff; :where() = zero specificity) ── */
+        :where(.staff-page-eyebrow) { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; color: ${GOLD}; }
+        :where(.staff-page-title) { font-family: 'Lora', Georgia, 'Times New Roman', serif; font-size: clamp(1.6rem, 4vw, 2rem); font-weight: 700; color: ${PRIMARY}; line-height: 1.15; margin-top: 3px; }
+        :where(.staff-page-description) { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 0.9rem; color: ${MUTED}; margin-top: 6px; line-height: 1.55; }
+
+        /* ── Composer modal: bottom sheet on mobile, centered card on larger screens ── */
+        .composer { border-radius: 20px 20px 0 0; }
+        @media (min-width: 640px) { .composer { border-radius: 20px; } }
+
+        /* ── Feed header + toolbar ── */
+        .feed-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 14px; }
+        .toolbar-search {
+            display: flex; align-items: center; gap: 8px;
+            flex: 1 1 260px; min-width: 200px;
+            background: #fff; border: 1px solid ${BORDER}; border-radius: 10px;
+            padding: 9px 12px;
+        }
+        .toolbar-search:focus-within { border-color: ${GOLD}; }
+        .toolbar-select {
+            appearance: none; -webkit-appearance: none;
+            padding: 9px 32px 9px 12px; border-radius: 10px;
+            border: 1px solid ${BORDER}; color: ${INK}; font-size: 0.8rem; font-weight: 600; cursor: pointer;
+            background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238A7A68' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") no-repeat right 11px center;
+        }
+        .toolbar-select:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 2px; }
+        .clear-filters-btn {
+            display: flex; align-items: center; gap: 6px;
+            padding: 8px 14px; border-radius: 10px;
+            border: 1px solid ${BORDER}; background: #fff; color: ${PRIMARY};
+            font-size: 0.76rem; font-weight: 700; cursor: pointer;
+        }
+        .clear-filters-btn:hover { background: ${BG}; }
+        @media (max-width: 640px) { .toolbar-select { flex: 1 1 140px; } }
+
+        .notice-banner { border-radius: 10px; padding: 10px 14px; font-size: 0.8rem; font-weight: 600; margin-top: 14px; }
+        .notice-success { border-left: 3px solid ${SUCCESS}; background: #EAF6EC; color: #2F5039; }
+        .notice-error { border-left: 3px solid ${DANGER}; background: #FBEAEA; color: #8E2631; }
+
+        /* ── Announcement list: one bordered block, rows divided by hairlines ── */
+        .ann-list {
+            margin-top: 16px; background: #fff;
+            border: 1px solid ${BORDER}; border-radius: 14px; overflow: hidden;
+        }
+        .ann-row { border-bottom: 1px solid ${BORDER}; transition: background-color 150ms ease; }
+        .ann-row:last-child { border-bottom: none; }
+        .ann-row:hover, .ann-row-open { background: #FCFAF5; }
+        .ann-row-main { display: flex; align-items: center; gap: 14px; padding: 14px 16px; }
+        .ann-icon {
+            width: 38px; height: 38px; border-radius: 12px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center; align-self: flex-start;
+        }
+        .ann-row-body {
+            flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px;
+            text-align: left; background: none; border: none; padding: 0; cursor: pointer;
+        }
+        .ann-row-body:focus-visible { outline: 2px solid ${GOLD}; outline-offset: 4px; border-radius: 6px; }
+        .ann-row-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .ann-text {
+            font-size: 0.84rem; color: #5c4a3f; line-height: 1.5;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .ann-text-open { font-size: 0.86rem; color: #5c4a3f; line-height: 1.65; white-space: pre-wrap; word-break: break-word; }
+        .ann-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; font-size: 0.72rem; color: ${MUTED}; margin-top: 2px; }
+        .ann-sep { width: 3px; height: 3px; border-radius: 50%; background: ${BORDER}; flex-shrink: 0; }
+        .ann-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .chev-btn {
+            width: 30px; height: 30px; border-radius: 8px; border: none; background: none;
+            color: ${MUTED}; display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+        .chev-btn:hover { background: ${BG}; }
+        .chev-btn:disabled { opacity: 0.5; cursor: default; }
+        .danger-btn { color: ${DANGER}; }
+        .danger-btn:hover { background: ${DANGER}18; }
+        .switch-btn {
+            background: none; border: none; cursor: pointer; padding: 5px 6px; border-radius: 8px;
+            display: flex; align-items: center;
+        }
+        .switch-btn:hover { background: ${BG}; }
+        .ann-detail {
+            display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+            padding: 0 16px 14px 68px;
+        }
+        @media (max-width: 640px) {
+            .ann-row-main { flex-wrap: wrap; }
+            .ann-actions { width: 100%; justify-content: space-between; padding-left: 52px; }
+            .ann-detail { padding-left: 16px; }
+        }
+
+        .new-dot {
+            font-size: 0.66rem; font-weight: 700; color: ${PRIMARY};
+            background: ${PRIMARY}14; border-radius: 999px; padding: 2px 8px;
+        }
+        .level-chip {
+            font-size: 0.7rem; font-weight: 500; color: ${MUTED};
+            border: 1px solid ${BORDER}; border-radius: 999px; padding: 3px 10px; background: ${BG};
+        }
+        .role-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            font-size: 0.7rem; font-weight: 600; color: ${PRIMARY};
+            border: 1px solid ${PRIMARY}44; border-radius: 999px; padding: 3px 10px; background: ${PRIMARY}0d;
+        }
+        .notify-btn {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 14px; border-radius: 999px;
+            border: 1px solid ${SUCCESS}66; background: transparent; color: ${SUCCESS};
+            font-size: 0.76rem; font-weight: 700; cursor: pointer; white-space: nowrap;
+            transition: background-color 150ms ease;
+        }
+        .notify-btn:hover:not(:disabled) { background: #EAF6EC; }
+        .notify-btn:disabled { opacity: 0.5; cursor: default; }
+
+        .empty-state {
+            text-align: center;
+            border: 1.5px dashed ${BORDER};
+            background: #fff;
+            border-radius: 14px;
+            padding: 48px 20px;
+            margin-top: 16px;
+        }
+        .empty-icon {
+            width: 52px; height: 52px; border-radius: 16px;
+            background: ${GOLD}18;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 16px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            .admin-hub * { transition: none !important; animation-duration: 0.01ms !important; }
+        }
+    `}</style>
+);
 
 export default AdminAnnouncement;
