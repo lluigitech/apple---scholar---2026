@@ -14,8 +14,9 @@ RUN apt-get update \
 WORKDIR /app/server
 
 COPY server/package*.json ./
-RUN npm ci --omit=dev
-RUN npx puppeteer browsers install chrome --install-deps
+RUN PUPPETEER_SKIP_DOWNLOAD=true npm ci --omit=dev \
+    && npx puppeteer browsers clear \
+    && npx puppeteer browsers install chrome --install-deps
 
 COPY server/ ./
 COPY shared/ /app/shared/
