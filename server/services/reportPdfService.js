@@ -19,6 +19,9 @@ const findChromeExecutable = () => {
 
 const generateReportPdf = async (htmlString) => {
   const launchOptions = { headless: 'new' };
+  if (process.platform === 'linux' && typeof process.getuid === 'function' && process.getuid() === 0) {
+    launchOptions.args = ['--no-sandbox', '--disable-setuid-sandbox'];
+  }
   const executablePath = findChromeExecutable();
   if (executablePath) launchOptions.executablePath = executablePath;
   const browser = await puppeteer.launch(launchOptions);
