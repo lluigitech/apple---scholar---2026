@@ -28,8 +28,10 @@ const buildReportSummaryHTML = ({
     || detailRows.some(row => row.attendanceStatus || row.attendanceDate || row.attendanceTime);
   const isComplianceSummary = String(reportType || '').toLowerCase() === 'compliance summary'
     || detailRows.some(row => row.riskStatus || String(row.compliance || '').toLowerCase().includes('credits'));
-  const isExportReport = String(reportType || '').toLowerCase() === 'export reports'
-    || detailRows.some(row => row.requirement || row.deadline || row.approvedAt || row.approved_at);
+  const isExportReport = (
+    String(reportType || '').toLowerCase() === 'export reports'
+    || detailRows.some(row => row.requirement || row.deadline || row.approvedAt || row.approved_at)
+  ) && !isSubmissionRecords && !isMonthlyLetterReview && !isTaskCompletion && !isAttendanceReport && !isComplianceSummary;
   const totalScholars = detailRows.length;
   const submittedScholars = detailRows.filter(row => isExportReport
     ? row.reviewStatus !== 'Not Submitted'
@@ -45,21 +47,39 @@ const buildReportSummaryHTML = ({
   }), { assigned: 0, completed: 0, missing: 0, pending: 0 });
   const formatDate = value => value ? new Date(value).toLocaleDateString('en-PH') : '—';
   const formatDateTime = value => value ? new Date(value).toLocaleString('en-PH') : '—';
+  const formatYearLevel = value => String(value || '—').replace(/[_-]+/g, ' ').replace(/\b\w/g, character => character.toUpperCase());
+  const normalizeReviewStatus = value => String(value || '').trim().toLowerCase();
+  const submissionRecordPillClass = value => {
+    const status = normalizeReviewStatus(value);
+    return status === 'accepted' ? 'pill-good' : status === 'pending' ? 'pill-late' : 'pill-bad';
+  };
+  const submissionRecordAcceptedCount = isSubmissionRecords
+    ? detailRows.filter(row => normalizeReviewStatus(row.reviewStatus) === 'accepted').length
+    : 0;
+  const submissionRecordPendingCount = isSubmissionRecords
+    ? detailRows.filter(row => normalizeReviewStatus(row.reviewStatus) === 'pending').length
+    : 0;
+  const submissionRecordMissingCount = isSubmissionRecords
+    ? detailRows.filter(row => normalizeReviewStatus(row.reviewStatus) === 'not submitted').length
+    : 0;
+  const submissionRecordMissingNames = isSubmissionRecords
+    ? detailRows.filter(row => normalizeReviewStatus(row.reviewStatus) === 'not submitted').map(row => row.scholarName)
+    : [];
   const submissionRecordRows = isSubmissionRecords ? detailRows.map(row => `
       <tr>
         <td>${escapeHtml(row.scholarName)}</td>
-        <td>${escapeHtml(row.studentId || '—')}</td>
-        <td>${escapeHtml(row.yearLevel || '—')}</td>
+        <td class="nowrap">${escapeHtml(row.studentId || '—')}</td>
+        <td>${escapeHtml(formatYearLevel(row.yearLevel))}</td>
         <td>${escapeHtml(row.requirement || '—')}</td>
         <td>${escapeHtml(row.period || '—')}</td>
         <td>${escapeHtml(formatDate(row.submittedAt))}</td>
-        <td><span class="status-pill ${row.reviewStatus === 'Not Submitted' ? 'muted' : 'good'}">${escapeHtml(row.reviewStatus || '—')}</span></td>
+        <td><span class="status-pill ${submissionRecordPillClass(row.reviewStatus)}">${escapeHtml(String(row.reviewStatus || '—').trim())}</span></td>
       </tr>`).join('') : '';
   const monthlyLetterReviewRows = isMonthlyLetterReview ? detailRows.map(row => `
       <tr>
         <td>${escapeHtml(row.scholarName)}</td>
         <td>${escapeHtml(row.studentId || '—')}</td>
-        <td>${escapeHtml(row.yearLevel || '—')}</td>
+        <td>${escapeHtml(formatYearLevel(row.yearLevel))}</td>
         <td>${escapeHtml(row.qualityScore ?? '—')}</td>
         <td>${escapeHtml(row.sentiment || '—')}</td>
         <td>${escapeHtml(formatDate(row.submittedAt))}</td>
@@ -95,7 +115,7 @@ const buildReportSummaryHTML = ({
         <td>${escapeHtml(formatDate(row.deadline))}</td>
         <td>${escapeHtml(formatDate(row.submittedAt))}</td>
         <td>${escapeHtml(formatDate(row.approvedAt))}</td>
-        <td><span class="status-pill ${row.reviewStatus === 'Not Submitted' ? 'muted' : 'good'}">${escapeHtml(row.reviewStatus || 'Not Submitted')}</span></td>
+        <td><span class="status-pill ${normalizeReviewStatus(row.reviewStatus) === 'pending' ? 'pill-late' : row.reviewStatus === 'Not Submitted' ? 'muted' : 'good'}">${escapeHtml(row.reviewStatus || 'Not Submitted')}</span></td>
       </tr>`).join('');
   const exportGroups = isExportReport ? (() => {
     const monthGroups = new Map();
@@ -141,15 +161,6 @@ const buildReportSummaryHTML = ({
   const lowRiskCount = isComplianceSummary ? detailRows.filter(row => String(row.riskStatus || 'low').toLowerCase() === 'low').length : 0;
   const highRiskCount = isComplianceSummary ? detailRows.filter(row => String(row.riskStatus || '').toLowerCase() === 'high').length : 0;
   const generatedDate = escapeHtml(new Date().toLocaleDateString('en-PH'));
-  const submissionRecordSubmittedCount = isSubmissionRecords
-    ? detailRows.filter(row => row.reviewStatus !== 'Not Submitted').length
-    : 0;
-  const submissionRecordMissingCount = isSubmissionRecords
-    ? detailRows.filter(row => row.reviewStatus === 'Not Submitted').length
-    : 0;
-  const submissionRecordMissingNames = isSubmissionRecords
-    ? detailRows.filter(row => row.reviewStatus === 'Not Submitted').map(row => row.scholarName)
-    : [];
   const summaryHTML = isExportReport
     ? `<section class="summary summary-breakdown">${exportGroups.map(group => {
         const submitted = group.rows.filter(row => row.reviewStatus !== 'Not Submitted').length;
@@ -179,13 +190,21 @@ const buildReportSummaryHTML = ({
               <div class="summary-card" style="border-top-color:var(--maroon)"><span class="summary-label">ABSENT</span><strong>${attendanceAbsentCount}</strong></div>
               <div class="summary-card" style="border-top-color:var(--ink-soft)"><span class="summary-label">TOTAL RECORDS</span><strong>${detailRows.length}</strong></div>
             </section>`
+          : isSubmissionRecords
+            ? `<section class="summary submission-records-summary">
+                <div class="summary-card" style="border-top-color:var(--good)"><span class="summary-label">ACCEPTED</span><strong>${submissionRecordAcceptedCount}</strong></div>
+                <div class="summary-card" style="border-top-color:var(--bronze)"><span class="summary-label">PENDING</span><strong>${submissionRecordPendingCount}</strong></div>
+                <div class="summary-card" style="border-top-color:var(--maroon)"><span class="summary-label">NOT SUBMITTED</span><strong>${submissionRecordMissingCount}</strong></div>
+                <div class="summary-card" style="border-top-color:var(--ink-soft)"><span class="summary-label">TOTAL RECORDS</span><strong>${detailRows.length}</strong></div>
+              </section>
+              ${submissionRecordMissingNames.length ? `<section class="missing-names-card"><span class="summary-label">SCHOLARS WITHOUT SUBMISSION</span><span>${escapeHtml(submissionRecordMissingNames.join(', ') || 'None')}</span></section>` : ''}`
           : detailRows.length
             ? `<section class="summary">
-                <div class="summary-card" style="border-top-color:var(--good)"><span class="summary-label">${isSubmissionRecords ? 'SUBMITTED' : 'SUBMITTED'}</span><strong>${isSubmissionRecords ? submissionRecordSubmittedCount : submittedScholars.length}/${isSubmissionRecords ? detailRows.length : totalScholars}</strong></div>
-                <div class="summary-card" style="border-top-color:var(--maroon)"><span class="summary-label">${isSubmissionRecords ? 'NOT SUBMITTED' : 'NOT SUBMITTED'}</span><strong>${isSubmissionRecords ? submissionRecordMissingCount : missingScholars.length}</strong></div>
+                <div class="summary-card" style="border-top-color:var(--good)"><span class="summary-label">SUBMITTED</span><strong>${submittedScholars.length}/${totalScholars}</strong></div>
+                <div class="summary-card" style="border-top-color:var(--maroon)"><span class="summary-label">NOT SUBMITTED</span><strong>${missingScholars.length}</strong></div>
                 <div class="summary-card" style="border-top-color:var(--bronze)"><span class="summary-label">TOTAL</span><strong>${detailRows.length}</strong></div>
               </section>
-              ${(isSubmissionRecords ? submissionRecordMissingNames : missingScholars).length ? `<section class="missing-names-card"><span class="summary-label">SCHOLARS WITHOUT SUBMISSION</span><span>${escapeHtml((isSubmissionRecords ? submissionRecordMissingNames : missingScholars).join(', ') || 'None')}</span></section>` : ''}`
+              ${missingScholars.length ? `<section class="missing-names-card"><span class="summary-label">SCHOLARS WITHOUT SUBMISSION</span><span>${escapeHtml(missingScholars.join(', ') || 'None')}</span></section>` : ''}`
             : '';
   const safeRows = isAttendanceReport
     ? attendanceRows
@@ -267,8 +286,12 @@ const buildReportSummaryHTML = ({
       td.compliance { color: var(--maroon); font-weight: 600; }
       .nowrap { white-space: nowrap; }
       .status-pill { display:inline-block; padding:3px 10px; border-radius:99px; border:1px solid currentColor; font-size:10px; font-weight:700; white-space:nowrap; }
-      .status-pill.good { color:var(--good); }
+      .status-pill.good, .status-pill.pill-good { color:var(--good); }
       .status-pill.muted { color:var(--maroon); }
+      .status-pill.pill-late { color:var(--bronze-dark, #8A5E38); }
+      .status-pill.pill-bad { color:var(--maroon); }
+      .submission-records-table .status-pill { padding:3px 8px; font-size:9.5px; }
+      .submission-records-table td:last-child { padding-right:10px; }
       .pill { display:inline-block; padding:3px 10px; border-radius:99px; border:1px solid currentColor; font-size:10px; font-weight:700; white-space:nowrap; text-transform:capitalize; }
       .pill-good { color:var(--good); }
       .pill-late { color:var(--bronze-dark, #8A5E38); }
@@ -276,8 +299,8 @@ const buildReportSummaryHTML = ({
       .empty { color:var(--ink-soft); font-style:italic; text-align:center; }
       .summary { display:flex; gap:16px; margin-top:24px; }
       .summary-card { flex:1; min-width:0; background:var(--surface); border:1px solid var(--border); border-top:3px solid var(--bronze); padding:14px 16px; }
-      .attendance-summary { gap:12px; }
-      .attendance-summary .summary-card { flex:1 1 0; }
+      .attendance-summary, .submission-records-summary { gap:12px; }
+      .attendance-summary .summary-card, .submission-records-summary .summary-card { flex:1 1 0; }
       .attendance-table td:last-child { padding-right:10px; }
       .compliance-summary, .task-summary, .summary-breakdown, .attendance-summary { grid-template-columns:none; }
       .breakdown-detail { display:block; color:var(--ink-soft); font-size:9px; line-height:1.4; margin-top:4px; }
@@ -305,8 +328,8 @@ const buildReportSummaryHTML = ({
       </header>
       <div class="divider"></div>
       ${summaryHTML}
-      ${isSubmissionRecords ? `<table>
-        <colgroup><col style="width:20%"><col style="width:14%"><col style="width:13%"><col style="width:15%"><col style="width:13%"><col style="width:13%"><col style="width:12%"></colgroup>
+      ${isSubmissionRecords ? `<table class="submission-records-table">
+        <colgroup><col style="width:20%"><col style="width:15%"><col style="width:12%"><col style="width:14%"><col style="width:12%"><col style="width:12%"><col style="width:15%"></colgroup>
         <thead><tr><th>SCHOLAR</th><th>STUDENT ID</th><th>YEAR LEVEL</th><th>REQUIREMENT</th><th>PERIOD</th><th>SUBMITTED AT</th><th>STATUS</th></tr></thead>
         <tbody>${safeRows || '<tr><td colspan="7" class="empty">No submission records available</td></tr>'}</tbody>
       </table>` : isTaskCompletion ? `<table>
