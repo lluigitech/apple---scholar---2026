@@ -8,6 +8,7 @@ RUN apt-get update \
         ca-certificates \
         clamav \
         clamav-freshclam \
+        unzip \
     && freshclam --stdout \
     && rm -rf /var/lib/apt/lists/*
 
@@ -15,7 +16,6 @@ WORKDIR /app/server
 
 COPY server/package*.json ./
 RUN PUPPETEER_SKIP_DOWNLOAD=true npm ci --omit=dev \
-    && npx puppeteer browsers clear \
     && npx puppeteer browsers install chrome --install-deps
 
 COPY server/ ./
