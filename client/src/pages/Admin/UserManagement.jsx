@@ -750,7 +750,7 @@ const UserManagement = () => {
             <div className="w-full px-4 sm:px-6 lg:px-8">
 
                 <AdminPageHeader
-                    title="Identity & Access Center"
+                    title="User Management"
                     description="Manage scholars, staff, officers, and administrators from one secure registry."
                     actions={
                         <div className="flex flex-wrap items-center gap-3 flex-shrink-0">
