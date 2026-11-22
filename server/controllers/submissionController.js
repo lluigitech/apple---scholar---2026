@@ -2349,8 +2349,8 @@ exports.submitGradesResumable = async (req, res) => {
     if (!uploadId) return res.status(400).json({ error: 'A completed resumable proof upload is required' });
     try {
         req.file = await consumeCompleted(uploadId, req.user.scholar_id);
-        await submitGrades(req, res);
         await removeSession(uploadId);
+        return exports.submitGrades(req, res);
     } catch (error) {
         return res.status(error.statusCode || 500).json({ error: error.message || 'Could not use resumable proof upload' });
     }
