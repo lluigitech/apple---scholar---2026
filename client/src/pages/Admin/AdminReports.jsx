@@ -510,7 +510,7 @@ export default function AdminReports() {
     <div className="min-h-screen w-full" style={{ background: BG, color: INK }}>
       <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 pb-10 flex flex-col gap-5">
         <AdminPageHeader
-          title="System Reports"
+          title="Reports"
           description="Review scholar compliance submissions, compliance status, and attendance records in one place."
           className="mb-1"
         />

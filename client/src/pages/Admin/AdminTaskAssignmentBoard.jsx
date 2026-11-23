@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, Calendar, ClipboardList, Clock3,
-  Plus, Users, UserX, X, Search, MoreHorizontal, Pencil, ChevronLeft,
+  Plus, Users, UserX, X, Search, MoreHorizontal, Pencil, Send, ChevronLeft,
   ChevronRight, ChevronDown, FilterX,
 } from 'lucide-react';
-import { formatAdminDate } from '../../utils/adminPreferences';
+import { formatAdminDate, getAdminPageSize } from '../../utils/adminPreferences';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
 const normalizeApiBase = (url) => {
@@ -29,9 +29,11 @@ const parseTargetYearLevels = (value) => {
 const GRADE_LEVELS = LEVELS.slice(0, 6);
 const COLLEGE_LEVELS = LEVELS.slice(6);
 const TYPES = ['Monthly Report', 'Report Card', 'COR Upload', 'Other Documents'];
-const PAGE_SIZE = 10;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const UPCOMING_WINDOW_DAYS = 7;
+const ROW_ACTION_MENU_HEIGHT = 120;
+const ROW_ACTION_MENU_WIDTH = 176;
+const VIEWPORT_GAP = 8;
 
 // ── Apple Scholar Admin Portal design system (same tokens as Donor Reporting) ──
 const colors = {
@@ -296,6 +298,7 @@ const LevelOption = ({ level, checked, onToggle }) => (
 // ─── Main component ─────────────────────────────────────────────────────────
 
 const AdminTaskAssignmentBoard = () => {
+  const pageSize = getAdminPageSize();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -303,6 +306,8 @@ const AdminTaskAssignmentBoard = () => {
   const [showCreate, setShowCreate] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [menu, setMenu] = useState(null); // { task, top, right } for the row-actions dropdown
+  const [notifyingTaskId, setNotifyingTaskId] = useState(null);
+  const [taskNotice, setTaskNotice] = useState(null);
   const [form, setForm] = useState({ title: '', type: TYPES[0], dueDate: '', instructions: '', targetYearLevels: [] });
 
   // UI-only: client-side filters + pagination over the already-loaded
@@ -474,6 +479,34 @@ const AdminTaskAssignmentBoard = () => {
     else setError('Unable to delete task.');
   };
 
+  const notifyTask = async (task) => {
+    const confirmed = window.confirm(
+      `Send an email about "${task.title}" to active scholars in its assigned year levels and their assigned officers?`
+    );
+    if (!confirmed) return;
+
+    setNotifyingTaskId(task.id);
+    setTaskNotice(null);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/tasks/${task.id}/notify`, {
+        method: 'POST',
+        headers: headers(),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.message || result.error || 'Unable to send task notifications.');
+      setTaskNotice({
+        message: result.message,
+        partial: result.failed_count > 0,
+      });
+    } catch (notifyError) {
+      setError(notifyError.message || 'Unable to send task notifications.');
+    } finally {
+      setNotifyingTaskId(null);
+      setMenu(null);
+    }
+  };
+
   // ── Client-side filtering (UI-only, over the loaded `tasks` array) ──
   const filteredTasks = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -493,9 +526,9 @@ const AdminTaskAssignmentBoard = () => {
 
   useEffect(() => { setPage(1); }, [search, typeFilter, statusFilter, levelFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredTasks.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredTasks.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const paginatedTasks = filteredTasks.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const paginatedTasks = filteredTasks.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const filtersActive = search !== '' || typeFilter !== 'all' || statusFilter !== 'all' || levelFilter !== 'all';
 
   const clearFilters = () => {
@@ -526,6 +559,20 @@ const AdminTaskAssignmentBoard = () => {
         {error && !showCreate && (
           <div role="alert" className="flex items-center gap-2" style={{ marginBottom: 16, padding: '11px 14px', borderRadius: 10, background: '#FBEFEE', color: colors.danger, ...body, fontSize: '0.82rem', fontWeight: 600 }}>
             <AlertTriangle size={15} style={{ flexShrink: 0 }} /> {error}
+          </div>
+        )}
+        {taskNotice && (
+          <div role={taskNotice.partial ? 'alert' : 'status'} style={{
+            marginBottom: 16,
+            padding: '11px 14px',
+            borderRadius: 10,
+            background: taskNotice.partial ? '#FBF3E4' : '#EAF4EC',
+            color: taskNotice.partial ? colors.warning : colors.success,
+            ...body,
+            fontSize: '0.82rem',
+            fontWeight: 600,
+          }}>
+            {taskNotice.message}
           </div>
         )}
 
@@ -661,7 +708,7 @@ const AdminTaskAssignmentBoard = () => {
                 <tbody>
                   {loading ? <SkeletonRows /> : paginatedTasks.map((task, idx) => {
                     const status = getTaskStatus(task);
-                    const rowNumber = (currentPage - 1) * PAGE_SIZE + idx + 1;
+                    const rowNumber = (currentPage - 1) * pageSize + idx + 1;
                     const officers = Array.isArray(task.assigned_officer_names) ? task.assigned_officer_names : [];
                     const levels = parseTargetYearLevels(task.target_year_levels);
                     const createdBy = getCreatedBy(task);
@@ -694,7 +741,23 @@ const AdminTaskAssignmentBoard = () => {
                             onClick={(e) => {
                               if (menu?.task.id === task.id) { setMenu(null); return; }
                               const rect = e.currentTarget.getBoundingClientRect();
-                              setMenu({ task, top: rect.bottom + 6, right: window.innerWidth - rect.right });
+                              const spaceBelow = window.innerHeight - rect.bottom;
+                              const top = spaceBelow >= ROW_ACTION_MENU_HEIGHT + 6
+                                ? rect.bottom + 6
+                                : Math.max(VIEWPORT_GAP, rect.top - ROW_ACTION_MENU_HEIGHT - 6);
+                              const right = Math.max(
+                                VIEWPORT_GAP,
+                                Math.min(
+                                  window.innerWidth - rect.right,
+                                  window.innerWidth - ROW_ACTION_MENU_WIDTH - VIEWPORT_GAP
+                                )
+                              );
+                              setMenu({
+                                task,
+                                top,
+                                right,
+                                maxHeight: Math.max(0, window.innerHeight - VIEWPORT_GAP * 2),
+                              });
                             }}
                             title="Task actions"
                             style={{ border: `1px solid ${colors.border}`, background: colors.surface, color: colors.ink, borderRadius: 9, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background .15s ease, border-color .15s ease' }}
@@ -711,10 +774,10 @@ const AdminTaskAssignmentBoard = () => {
           )}
 
           {/* ── Pagination ── */}
-          {!loading && filteredTasks.length > PAGE_SIZE && (
+          {!loading && filteredTasks.length > pageSize && (
             <div className="flex items-center justify-between flex-wrap gap-3" style={{ padding: '14px 20px', borderTop: `1px solid ${colors.border}` }}>
               <p style={{ ...body, fontSize: '0.78rem', color: colors.muted }}>
-                Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredTasks.length)} of {filteredTasks.length} tasks
+                Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredTasks.length)} of {filteredTasks.length} tasks
               </p>
               <div className="flex items-center gap-1.5">
                 <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}
@@ -744,7 +807,17 @@ const AdminTaskAssignmentBoard = () => {
       {menu && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenu(null)} />
-          <div role="menu" className="fixed z-20" style={{ top: menu.top, right: menu.right, background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 10, boxShadow: '0 12px 28px -14px rgba(36,21,18,0.4)', minWidth: 150, overflow: 'hidden' }}>
+          <div role="menu" className="fixed z-20" style={{ top: menu.top, right: menu.right, background: colors.surface, border: `1px solid ${colors.border}`, borderRadius: 10, boxShadow: '0 12px 28px -14px rgba(36,21,18,0.4)', minWidth: 150, maxHeight: menu.maxHeight, overflowY: 'auto', overflowX: 'hidden' }}>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => notifyTask(menu.task)}
+              disabled={notifyingTaskId === menu.task.id}
+              className="at-ghost flex w-full items-center gap-2 text-left"
+              style={{ padding: '10px 14px', border: 'none', background: 'none', color: colors.ink, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: notifyingTaskId === menu.task.id ? 'wait' : 'pointer', opacity: notifyingTaskId === menu.task.id ? 0.65 : 1 }}
+            >
+              <Send size={14} /> {notifyingTaskId === menu.task.id ? 'Sending...' : 'Notify Assignees'}
+            </button>
             <button
               type="button"
               role="menuitem"

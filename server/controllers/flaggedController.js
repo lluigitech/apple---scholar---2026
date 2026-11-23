@@ -263,7 +263,7 @@ exports.getFlaggedScholars = (req, res) => {
                                 today,
                             });
                             const overallCompliance = score.overallCompliance;
-                            const riskLevel = getComplianceRiskTier(overallCompliance, score.minComplianceNum);
+                            const riskLevel = getComplianceRiskTier(overallCompliance);
                             const negativeSentimentMonthStats = getNegativeSentimentMonthStats(sub?.negative_sentiment_months);
                             const hasScatteredNegativeSentimentFlag = negativeSentimentMonthStats.monthCount >= NEGATIVE_SENTIMENT_SPREAD_MONTH_THRESHOLD;
                             const hasConsecutiveNegativeSentimentFlag = negativeSentimentMonthStats.longestStreak >= NEGATIVE_SENTIMENT_CONSECUTIVE_MONTH_THRESHOLD;

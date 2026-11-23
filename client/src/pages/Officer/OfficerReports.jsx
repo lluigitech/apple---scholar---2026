@@ -97,7 +97,7 @@ export default function OfficerReports() {
               Officer Portal
             </p>
             <h1 style={{ ...display, fontSize: 'clamp(1.6rem, 4vw, 2rem)', fontWeight: 700, color: PRIMARY, lineHeight: 1.15, marginTop: 3 }}>
-              Reports &amp; Analytics
+              Reports
             </h1>
             <p style={{ ...body, fontSize: '0.9rem', color: MUTED, marginTop: 6, lineHeight: 1.55 }}>
               View submission summaries and generate reports for your assigned scholars.

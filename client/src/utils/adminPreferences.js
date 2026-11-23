@@ -1,4 +1,6 @@
 const SETTINGS_KEY = 'admin-system-settings';
+const ADMIN_PAGE_SIZES = new Set([10, 20, 50]);
+const DEFAULT_ADMIN_PAGE_SIZE = 10;
 
 const TIMEZONES = {
   '(GMT+8) Manila, Philippines': 'Asia/Manila',
@@ -14,6 +16,11 @@ export const getAdminPreferences = () => {
     console.error('Unable to read administrator preferences:', error);
     return {};
   }
+};
+
+export const getAdminPageSize = (preferences = getAdminPreferences()) => {
+  const pageSize = Number(preferences?.paginationPageSize);
+  return ADMIN_PAGE_SIZES.has(pageSize) ? pageSize : DEFAULT_ADMIN_PAGE_SIZE;
 };
 
 export const getAdminLocale = () => 'en-PH';

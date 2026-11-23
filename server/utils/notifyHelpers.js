@@ -2,10 +2,12 @@ const nodemailer = require('nodemailer');
 const db = require('../config/db');
 const {
     buildDutyReminderEmail,
+    buildDutyAttendanceStatusEmail,
     buildMakeupDutyAssignmentEmail,
     buildWelcomeEmail,
     buildPasswordResetEmail,
     buildAnnouncementEmail,
+    buildTaskAssignmentEmail,
     buildDeadlineReminderEmail,
     buildRepeatedRiskEmail,
     buildUnsubmittedTaskSummaryEmail,
@@ -81,6 +83,13 @@ const LEVEL_MAP = {
     college_3: ['3rd Year College', '3rd Year'],
     college_4: ['4th Year College', '4th Year'],
     college_5: ['5th Year College', '5th Year'],
+};
+
+const TASK_SUBMISSION_TYPES = {
+    'Monthly Report': 'letter',
+    'Report Card': 'report_card',
+    'COR Upload': 'cor',
+    'Other Documents': 'other',
 };
 
 const normalizeTargetLevels = (levels) => {
@@ -186,6 +195,135 @@ const getAnnouncementRecipients = async (announcementId) => {
     return { announcement, recipients: eligibleRecipients };
 };
 
+exports.sendTaskAssignmentEmails = (taskId, cb) => {
+    (async () => {
+        const tasks = await queryDb(
+            `SELECT id, title, type, due_date, instructions, target_year_levels
+             FROM tasks
+             WHERE id = ? AND is_active = 1
+             LIMIT 1`,
+            [taskId]
+        );
+        if (!tasks.length) {
+            const error = new Error('Task not found.');
+            error.statusCode = 404;
+            throw error;
+        }
+
+        const task = tasks[0];
+        const targetLevels = new Set(normalizeTargetLevels(task.target_year_levels).map(normalizeYearLevel));
+        if (!targetLevels.size) {
+            return cb(null, { ok: false, error: 'This task has no assigned year levels.', sent_count: 0, failed_count: 0 });
+        }
+
+        const [scholars, officers] = await Promise.all([
+            queryDb(`
+                SELECT scholar_id, full_name, email, year_level
+                FROM users
+                WHERE role = 'scholar' AND status = 'active'
+                  AND email IS NOT NULL AND email <> ''
+            `),
+            queryDb(`
+                SELECT DISTINCT u.id, u.full_name, u.email, oya.year_level
+                FROM officer_year_level_assignments oya
+                JOIN users u ON u.id = oya.officer_id
+                WHERE u.role = 'officer' AND u.status = 'active'
+                  AND u.email IS NOT NULL AND u.email <> ''
+            `),
+        ]);
+        const matchesTaskLevels = (recipient) => targetLevels.has(normalizeYearLevel(recipient.year_level));
+        const recipientsByAccount = new Map();
+        scholars.filter(matchesTaskLevels).forEach((recipient) => {
+            recipientsByAccount.set(`scholar:${recipient.scholar_id}`, { ...recipient, role: 'scholar' });
+        });
+        officers.filter(matchesTaskLevels).forEach((recipient) => {
+            recipientsByAccount.set(`officer:${recipient.id}`, { ...recipient, role: 'officer' });
+        });
+        const recipients = [...recipientsByAccount.values()];
+        if (!recipients.length) {
+            return cb(null, {
+                ok: false,
+                error: 'No active scholars or assigned officers with email addresses were found for this task.',
+                sent_count: 0,
+                failed_count: 0,
+            });
+        }
+
+        const transporter = getTransporter();
+        if (!transporter) {
+            return cb(null, { ok: false, error: 'SMTP not configured', sent_count: 0, failed_count: recipients.length });
+        }
+
+        const dueDate = task.due_date
+            ? task.due_date instanceof Date
+                ? task.due_date.toISOString().slice(0, 10)
+                : String(task.due_date).slice(0, 10)
+            : '';
+        const sentRecipients = [];
+        const failures = [];
+        for (const recipient of recipients) {
+            const actionPath = recipient.role === 'scholar' ? '/scholar/submission' : '/officer/task-assignment';
+            const text = [
+                `Hello ${recipient.full_name || (recipient.role === 'scholar' ? 'Scholar' : 'Officer')},`,
+                '',
+                recipient.role === 'scholar'
+                    ? 'A new requirement has been assigned to you.'
+                    : 'A new requirement has been assigned to scholars in your assigned year level.',
+                '',
+                `Task: ${task.title}`,
+                `Requirement: ${task.type}`,
+                `Deadline: ${dueDate || 'No deadline set'}`,
+                `Instructions: ${task.instructions || 'No additional instructions.'}`,
+                '',
+                `Open your portal: ${getPortalUrl(actionPath) || ''}`,
+            ].join('\n');
+            try {
+                const info = await transporter.sendMail({
+                    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+                    to: recipient.email,
+                    subject: `Kalinga Scholar — New task assigned: ${task.title}`,
+                    text,
+                    html: buildTaskAssignmentEmail({
+                        recipientName: recipient.full_name,
+                        taskTitle: task.title,
+                        taskType: task.type,
+                        dueDate,
+                        instructions: task.instructions,
+                        recipientRole: recipient.role,
+                        actionUrl: getPortalUrl(actionPath),
+                    }),
+                });
+                await logNotification({
+                    scholar_id: recipient.scholar_id || null,
+                    recipient: recipient.email,
+                    channel: 'email',
+                    type: 'task_assignment_notification',
+                    status: 'sent',
+                    detail: `task:${task.id}:${info.messageId || 'sent'}`,
+                });
+                sentRecipients.push(recipient.email);
+            } catch (sendError) {
+                await logNotification({
+                    scholar_id: recipient.scholar_id || null,
+                    recipient: recipient.email,
+                    channel: 'email',
+                    type: 'task_assignment_notification',
+                    status: 'failed',
+                    detail: `task:${task.id}:${String(sendError.message || sendError)}`,
+                });
+                failures.push({ recipient: recipient.email, error: String(sendError.message || sendError) });
+            }
+        }
+
+        cb(null, {
+            ok: failures.length === 0,
+            sent_count: sentRecipients.length,
+            failed_count: failures.length,
+            failures,
+        });
+    })().catch((error) => cb(error));
+};
+
 exports.sendDutyNotifyEmails = (dutyId, cb) => {
     (async () => {
         const { duty, recipients } = await getDutyRecipients(dutyId);
@@ -252,6 +390,103 @@ exports.sendDutyNotifyEmails = (dutyId, cb) => {
             failures,
         });
     })().catch((err) => cb(err));
+};
+
+exports.sendDutyAttendanceStatusEmails = (dutyId, records, cb) => {
+    (async () => {
+        const attendanceRecords = records.filter(record =>
+            ['present', 'absent'].includes(String(record.status || '').toLowerCase())
+        );
+        if (!attendanceRecords.length) {
+            return cb(null, { ok: true, sent_count: 0, failed_count: 0 });
+        }
+
+        const dutyRows = await queryDb(
+            `SELECT id, title, duty_date, time_start, time_end, location
+             FROM duties WHERE id = ? LIMIT 1`,
+            [dutyId]
+        );
+        if (!dutyRows.length) throw new Error('Duty not found');
+
+        const scholarIds = attendanceRecords.map(record => record.scholar_id);
+        const scholars = await queryDb(`
+            SELECT u.scholar_id, u.full_name, u.email, COALESCE(da.is_makeup, 0) AS is_makeup
+            FROM users u
+            LEFT JOIN duty_attendance da ON da.duty_id = ? AND da.scholar_id = u.scholar_id
+            WHERE u.scholar_id IN (?) AND u.role = 'scholar' AND u.status = 'active'
+        `, [dutyId, scholarIds]);
+        const scholarsById = new Map(scholars.map(scholar => [String(scholar.scholar_id), scholar]));
+        const transporter = getTransporter();
+        const failures = [];
+        let sentCount = 0;
+        const occurredAt = new Date().toISOString();
+
+        for (const record of attendanceRecords) {
+            const scholar = scholarsById.get(String(record.scholar_id));
+            const status = String(record.status).toLowerCase();
+            const detail = `duty:${dutyId}:scholar:${record.scholar_id}:status:${status}:at:${occurredAt}`;
+            if (!scholar?.email) {
+                failures.push({ scholar_id: record.scholar_id, error: 'Active scholar email not found.' });
+                continue;
+            }
+            if (!transporter) {
+                failures.push({ recipient: scholar.email, error: 'SMTP not configured' });
+                await logNotification({
+                    scholar_id: scholar.scholar_id,
+                    recipient: scholar.email,
+                    channel: 'email',
+                    type: 'duty_attendance_status',
+                    status: 'failed',
+                    detail: `${detail}:SMTP not configured`,
+                });
+                continue;
+            }
+
+            try {
+                await transporter.sendMail({
+                    from: process.env.SMTP_FROM || process.env.SMTP_USER,
+                    to: scholar.email,
+                    subject: `Duty attendance update: ${dutyRows[0].title} — ${status}`,
+                    text: `Hello ${scholar.full_name || 'Scholar'},\n\nYour attendance for "${dutyRows[0].title}" on ${dutyRows[0].duty_date} has been recorded as ${status}.${Number(scholar.is_makeup) === 1 ? '\nThis attendance is for your makeup duty.' : ''}\n\nPlease contact your assigned staff if you believe this record is incorrect.`,
+                    html: buildDutyAttendanceStatusEmail({
+                        recipientName: scholar.full_name,
+                        duty: dutyRows[0],
+                        status,
+                        isMakeup: Number(scholar.is_makeup) === 1,
+                        actionUrl: getPortalUrl('/scholar/duties'),
+                    }),
+                });
+                await logNotification({
+                    scholar_id: scholar.scholar_id,
+                    recipient: scholar.email,
+                    channel: 'email',
+                    type: 'duty_attendance_status',
+                    status: 'sent',
+                    detail,
+                });
+                sentCount += 1;
+            } catch (sendError) {
+                const message = String(sendError.message || sendError);
+                failures.push({ recipient: scholar.email, error: message });
+                await logNotification({
+                    scholar_id: scholar.scholar_id,
+                    recipient: scholar.email,
+                    channel: 'email',
+                    type: 'duty_attendance_status',
+                    status: 'failed',
+                    detail: `${detail}:${message}`,
+                });
+            }
+        }
+
+        cb(null, {
+            ok: failures.length === 0,
+            sent_count: sentCount,
+            failed_count: failures.length,
+            failures,
+            ...(!transporter ? { error: 'SMTP not configured' } : {}),
+        });
+    })().catch(error => cb(error));
 };
 
 exports.sendMakeupDutyAssignmentEmails = (scholarId, sourceDutyId, makeupDutyId, cb) => {
@@ -528,7 +763,9 @@ exports.sendTaskDeadlineReminders = async () => {
     if (!transporter) return { ok: false, skipped: true, reason: 'SMTP not configured' };
 
     const tasks = await queryDb(`
-        SELECT id, title, type, DATE_FORMAT(due_date, '%Y-%m-%d') AS due_date, target_year_levels
+        SELECT id, title, type, DATE_FORMAT(due_date, '%Y-%m-%d') AS due_date,
+               DATEDIFF(due_date, CURDATE()) AS days_left,
+               created_at, target_year_levels
         FROM tasks
         WHERE is_active = 1 AND due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 3 DAY)
         ORDER BY due_date ASC
@@ -545,16 +782,45 @@ exports.sendTaskDeadlineReminders = async () => {
 
     for (const task of tasks) {
         const targetLevels = parseLevels(task.target_year_levels);
-        const recipients = scholars.filter(scholar => !targetLevels.length || targetLevels.includes(String(scholar.year_level)));
-        const daysLeft = Math.ceil((new Date(`${task.due_date}T00:00:00`) - new Date()) / 86400000);
-        if (daysLeft !== 3 && daysLeft !== 0) continue;
-        const reminderStage = daysLeft === 0 ? 'due-today' : 'due-3-days';
+        let recipients = scholars.filter(scholar => !targetLevels.length || targetLevels.some(level =>
+            normalizeYearLevel(level) === normalizeYearLevel(scholar.year_level)
+        ));
+        const daysLeft = Number(task.days_left);
+        if (daysLeft !== 3 && daysLeft !== 1 && daysLeft !== 0) continue;
+
+        if (daysLeft === 1) {
+            const submissionType = TASK_SUBMISSION_TYPES[task.type];
+            if (!submissionType) {
+                console.error(`[deadline-reminder] Cannot check submissions for task type "${task.type}" (task ${task.id}).`);
+                continue;
+            }
+            const scholarIds = recipients.map(scholar => scholar.scholar_id);
+            if (!scholarIds.length) continue;
+            const placeholders = scholarIds.map(() => '?').join(', ');
+            const submittedRows = submissionType === 'report_card'
+                ? await queryDb(
+                    `SELECT DISTINCT scholar_id FROM grades
+                     WHERE created_at >= ? AND scholar_id IN (${placeholders})`,
+                    [task.created_at, ...scholarIds]
+                )
+                : await queryDb(
+                    `SELECT DISTINCT scholar_id FROM submissions
+                     WHERE submission_type = ? AND submitted_at >= ? AND scholar_id IN (${placeholders})`,
+                    [submissionType, task.created_at, ...scholarIds]
+                );
+            const submittedIds = new Set(submittedRows.map(row => String(row.scholar_id)));
+            recipients = recipients.filter(scholar => !submittedIds.has(String(scholar.scholar_id)));
+        }
+
+        const reminderStage = daysLeft === 0 ? 'due-today' : daysLeft === 1 ? 'due-tomorrow' : 'due-3-days';
         const dueDate = new Date(`${task.due_date}T00:00:00`).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
 
         for (const recipient of recipients) {
             const detail = `task:${task.id}:due:${task.due_date}:stage:${reminderStage}`;
             const existing = await queryDb(
-                `SELECT id FROM notification_logs WHERE scholar_id = ? AND type = 'deadline_reminder' AND detail = ? LIMIT 1`,
+                `SELECT id FROM notification_logs
+                 WHERE scholar_id = ? AND type = 'deadline_reminder' AND detail = ? AND status = 'sent'
+                 LIMIT 1`,
                 [recipient.scholar_id, detail]
             );
             if (existing.length) continue;
@@ -564,7 +830,7 @@ exports.sendTaskDeadlineReminders = async () => {
                     from: process.env.SMTP_FROM || process.env.SMTP_USER,
                     to: recipient.email,
                     subject: `Kalinga Scholar — Deadline Reminder: ${task.title}`,
-                    text: `Hello ${recipient.full_name || 'Scholar'},\n\nYour task is due ${daysLeft === 0 ? 'today' : 'in 3 days'}.\n\nTask: ${task.title}\nType: ${task.type}\nDeadline: ${dueDate}\n\nPlease submit the requirement through your Scholar Portal.`,
+                    text: `Hello ${recipient.full_name || 'Scholar'},\n\nYour task is due ${daysLeft === 0 ? 'today' : daysLeft === 1 ? 'tomorrow' : 'in 3 days'}.\n\nTask: ${task.title}\nType: ${task.type}\nDeadline: ${dueDate}\n\nPlease submit the requirement through your Scholar Portal.`,
                     html: buildDeadlineReminderEmail({
                         recipientName: recipient.full_name,
                         taskTitle: task.title,
@@ -640,18 +906,12 @@ exports.sendComplianceAlerts = async () => {
         }
     });
 
-    const submissionTypeMap = {
-        'Monthly Report': 'letter',
-        'Report Card': 'report_card',
-        'COR Upload': 'cor',
-        'Other Documents': 'other',
-    };
     const today = new Date().toISOString().slice(0, 10);
     let sentCount = 0;
 
     for (const task of tasks) {
         const targetLevels = normalizeTargetLevels(task.target_year_levels);
-        const submissionType = submissionTypeMap[task.type];
+        const submissionType = TASK_SUBMISSION_TYPES[task.type];
         if (!submissionType) continue;
         const targetedScholars = scholars.filter(scholar =>
             !targetLevels.length || targetLevels.some(level => normalizeYearLevel(level) === normalizeYearLevel(scholar.year_level))

@@ -481,7 +481,11 @@ const StaffDutyAttendance = () => {
       const savedStatus = response.data?.records?.find(record => record.scholar_id === scholarId)?.status
         || refreshedScholars.find(record => record.scholar_id === scholarId)?.attendance_status
         || status;
-      setSaveMsg(`${scholar?.full_name || scholarId} saved as ${savedStatus}.`);
+      const notification = response.data?.notification;
+      const notificationWarning = notification && !notification.ok
+        ? ` Email notification failed${notification.error ? `: ${notification.error}` : ` for ${notification.failed_count || 0} recipient(s)`}.`
+        : '';
+      setSaveMsg(`${scholar?.full_name || scholarId} saved as ${savedStatus}.${notificationWarning}`);
       setTimeout(() => setSaveMsg(''), 3500);
     } catch (err) {
       setSaveMsg(err.response?.data?.error

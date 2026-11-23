@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
 import {
   Bell, Check, Database, FileText, Lock, Mail, MessageSquare, Monitor, RefreshCw,
@@ -8,7 +7,6 @@ import {
 import ComplianceManager from './SettingsComponent/ComplianceManager';
 import BackupRecovery from './SettingsComponent/BackupRecovery';
 import SecurityAuditLogs from './SettingsComponent/SecurityAuditLogs';
-import AdminNotification from './AdminNotification';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 import { getPasswordRequirementError, isValidPassword } from '../../utils/passwordPolicy.js';
 
@@ -20,6 +18,7 @@ const DEFAULT_SETTINGS = {
   email: 'admin@applescholar.org',
   timezone: '(GMT+8) Manila, Philippines',
   dateFormat: 'MMMM DD, YYYY',
+  paginationPageSize: 10,
   tableDensity: 'comfortable',
   emailNotifications: true,
   inAppNotifications: true,
@@ -43,7 +42,6 @@ const display = { fontFamily: "'Playfair Display', Georgia, serif" };
 
 const TABS = [
   ['general', 'General', Settings],
-  ['notifications', 'Notifications', Bell],
   ['compliance', 'Risk & Flagging', ShieldCheck],
   ['backup', 'Backup & Recovery', Database],
   ['security', 'Security Audit', FileText],
@@ -258,10 +256,7 @@ const ChangePasswordDialog = ({ onClose, onChanged }) => {
 };
 
 const AdminSettings = () => {
-  const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(() => (
-    searchParams.get('tab') === 'notifications' ? 'notifications' : 'general'
-  ));
+  const [activeTab, setActiveTab] = useState('general');
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [passwordChanged, setPasswordChanged] = useState(false);
   const [initialState] = useState(() => {
@@ -276,6 +271,11 @@ const AdminSettings = () => {
       delete settings.language;
       if (!TIMEOUTS.some(([value]) => value === String(settings.sessionTimeout))) {
         settings.sessionTimeout = DEFAULT_SETTINGS.sessionTimeout;
+      }
+      if (![10, 20, 50].includes(Number(settings.paginationPageSize))) {
+        settings.paginationPageSize = DEFAULT_SETTINGS.paginationPageSize;
+      } else {
+        settings.paginationPageSize = Number(settings.paginationPageSize);
       }
       return {
         settings,
@@ -346,6 +346,7 @@ const AdminSettings = () => {
     preferences: {
       timezone: values.timezone,
       dateFormat: values.dateFormat,
+      paginationPageSize: values.paginationPageSize,
       tableDensity: values.tableDensity,
       compactTables: values.compactTables,
       emailNotifications: values.emailNotifications,
@@ -547,6 +548,13 @@ const AdminSettings = () => {
                 <CardHeader icon={SlidersHorizontal} title="System Preferences" subtitle="These preferences control this administrator workspace." />
                 <Row icon={Bell} title="Email notifications (Gmail)" description="Receive system alerts in the administrator email inbox."><Toggle label="Email notifications (Gmail)" checked={settings.emailNotifications} onChange={(v) => update('emailNotifications', v)} /></Row>
                 <Row icon={MessageSquare} title="Website notifications" description="Show new system alerts on the admin website."><Toggle label="Website notifications" checked={settings.inAppNotifications} onChange={(v) => update('inAppNotifications', v)} /></Row>
+                <Row icon={Rows3} title="Default page size" description="Rows shown on paginated admin lists.">
+                  <select aria-label="Default page size" value={settings.paginationPageSize}
+                    onChange={(event) => update('paginationPageSize', Number(event.target.value))}
+                    style={{ ...inputStyle, width: 120, minHeight: 36, padding: '7px 10px', cursor: 'pointer' }}>
+                    {[10, 20, 50].map((size) => <option key={size} value={size}>{size} rows</option>)}
+                  </select>
+                </Row>
                 <Row icon={Rows4} title="Compact tables" description="Use tighter spacing in registry and report tables."><Toggle label="Compact tables" checked={settings.compactTables} onChange={setCompact} /></Row>
                 <Row icon={RefreshCw} title="Auto-refresh dashboard" description="Automatically refresh dashboard data every 5 minutes." last><Toggle label="Auto-refresh dashboard" checked={settings.autoRefresh} onChange={(v) => update('autoRefresh', v)} /></Row>
               </section>
@@ -609,7 +617,6 @@ const AdminSettings = () => {
         )}
 
         {activeTab === 'compliance' && <ComplianceManager embedded />}
-        {activeTab === 'notifications' && <AdminNotification embedded />}
         {activeTab === 'backup' && <BackupRecovery embedded />}
         {activeTab === 'security' && <SecurityAuditLogs embedded />}
       </div>

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import axios from 'axios';
+import { getAdminPageSize } from '../../utils/adminPreferences';
 import {
     AlertTriangle, Mail, TrendingDown, MessageSquare, UserX, Clock,
     Flag, Users, Bookmark, Search, Download, MoreVertical, Calendar, Eye,
@@ -38,15 +39,13 @@ const fieldStyle = { width: '100%', padding: '9px 12px', border: `1px solid ${BO
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-const riskColor    = (l) => l === 'high' ? DANGER : WARNING;
+const riskColor    = (l) => l === 'high' ? DANGER : l === 'medium' ? WARNING : l === 'low' ? BRONZE : MUTED;
 const sevColor     = (s) => ({ high: DANGER, medium: WARNING, low: MUTED }[s] || MUTED);
 const qualityColor = (q) => q >= 80 ? SUCCESS : q >= 60 ? WARNING : DANGER;
-const riskLabel    = (l) => l === 'high' ? 'High' : 'Medium';
+const riskLabel    = (l) => ({ high: 'High Risk', medium: 'Needs Attention', low: 'Active Flag' }[l] || 'Unknown');
 
 const getRiskBucket = (riskLevel) => {
-    if (riskLevel === 'high') return 'high';
-    if (riskLevel === 'medium') return 'medium';
-    return 'low';
+    return ['high', 'medium'].includes(riskLevel) ? riskLevel : 'other';
 };
 
 const initialsOf = (name) =>
@@ -202,7 +201,9 @@ const RiskDial = ({ score, level, w = 150 }) => {
                 <span style={{ ...sans, fontSize: '0.62rem', color: MUTED }}>0</span>
                 <span className="text-center">
                     <span style={{ ...serif, fontSize: '1.5rem', fontWeight: 700, color: INK, display: 'block', lineHeight: 1 }}>{Math.round(score)}</span>
-                    <span style={{ ...sans, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color }}>{riskLabel(level)} risk</span>
+                    <span style={{ ...sans, fontSize: '0.6rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color }}>
+                        {riskLabel(level)}
+                    </span>
                 </span>
                 <span style={{ ...sans, fontSize: '0.62rem', color: MUTED }}>100</span>
             </div>
@@ -640,14 +641,16 @@ const ScholarModal = ({ onClose, titleId, children }) => {
 
 // ─── Main ─────────────────────────────────────────────────────
 
-const PAGE_SIZE = 8;
-
 const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
     const [searchParams] = useSearchParams();
+    const pageSize = getAdminPageSize();
     const [scholars,   setScholars]   = useState([]);
     const [loading,    setLoading]    = useState(true);
     const [error,      setError]      = useState('');
-    const [riskFilter, setRiskFilter] = useState(() => searchParams.get('risk') === 'high' ? 'high' : 'all');
+    const [riskFilter, setRiskFilter] = useState(() => {
+        const requestedRisk = searchParams.get('risk');
+        return ['high', 'medium'].includes(requestedRisk) ? requestedRisk : 'all';
+    });
     const [searchQuery, setSearchQuery] = useState('');
     const [gradeFilter, setGradeFilter] = useState('all');
     const [page, setPage] = useState(1);
@@ -720,7 +723,7 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
     }, [menu]);
 
     const highCount = scholars.filter(s => getRiskBucket(s.risk_level) === 'high').length;
-    const lowCount  = scholars.filter(s => getRiskBucket(s.risk_level) === 'low').length;
+    const mediumCount = scholars.filter(s => getRiskBucket(s.risk_level) === 'medium').length;
     const gradeCounts = scholars.reduce((acc, s) => {
         const value = String(s.year_level ?? 'N/A').trim() || 'N/A';
         acc[value] = (acc[value] || 0) + 1;
@@ -742,10 +745,10 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
     });
 
     // Pagination (client-side over the filtered list)
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
     const safePage = Math.min(page, totalPages);
-    const startIdx = (safePage - 1) * PAGE_SIZE;
-    const pageRows = filtered.slice(startIdx, startIdx + PAGE_SIZE);
+    const startIdx = (safePage - 1) * pageSize;
+    const pageRows = filtered.slice(startIdx, startIdx + pageSize);
     const pageWindowStart = Math.max(1, Math.min(safePage - 2, totalPages - 4));
     const pageNumbers = Array.from({ length: Math.min(5, totalPages) }, (_, i) => pageWindowStart + i);
 
@@ -834,13 +837,13 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
     const summary = [
         { title: 'Total Flagged', value: scholars.length, color: PRIMARY, icon: Users, desc: 'Scholars in this list' },
         { title: 'High Risk', value: highCount, color: DANGER, icon: AlertTriangle, desc: 'Requires immediate action' },
-        { title: 'Medium Risk', value: lowCount, color: WARNING, icon: Bookmark, desc: 'Flag recorded; monitor progress' },
+        { title: 'Needs Attention', value: mediumCount, color: WARNING, icon: Bookmark, desc: '50–74 compliance points' },
     ];
 
     const riskTabs = [
         { key: 'all', label: 'All', count: scholars.length },
         { key: 'high', label: 'High Risk', count: highCount },
-        { key: 'low', label: 'Medium Risk', count: lowCount },
+        { key: 'medium', label: 'Needs Attention', count: mediumCount },
     ];
 
     return (
@@ -868,11 +871,11 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
                 <div className="flex flex-col gap-5">
                 {/* ── KPI cards ── */}
                 {loading ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                         {[0, 1, 2, 3].map(i => <Skeleton key={i} style={{ height: 104 }} />)}
                     </div>
                 ) : (
-                    <section aria-label="Risk summary" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <section aria-label="Risk summary" className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
                         {summary.map(c => (
                             <div key={c.title} className="flex items-center gap-4 p-5" style={{ ...cardStyle, minHeight: 104 }}>
                                 <IconBubble icon={c.icon} color={c.color} size={52} iconSize={22} />
@@ -942,7 +945,7 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
                                                 { h: '#', cls: 'hidden sm:table-cell', w: 40 },
                                                 { h: 'Scholar', cls: '' },
                                                 { h: 'Year Level', cls: 'hidden md:table-cell' },
-                                                { h: 'Risk Level', cls: '' },
+                                                { h: 'Review Status', cls: '' },
                                                 { h: 'Compliance Points', cls: '' },
                                                 { h: 'Key Issue', cls: 'hidden lg:table-cell' },
                                                 { h: 'Actions', cls: '', align: 'right' },

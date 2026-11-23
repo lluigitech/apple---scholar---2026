@@ -1,6 +1,9 @@
 const db = require('../config/db');
 const nodemailer = require('nodemailer');
-const { buildDutyAbsenceEmail } = require('../utils/emailTemplates');
+const {
+    buildDutyAbsenceEmail,
+    buildDutyAttendanceStatusEmail,
+} = require('../utils/emailTemplates');
 
 const LOCK_NAME = 'apple-scholar-duty-absence-sweep';
 
@@ -21,7 +24,8 @@ const notifyDutyAbsences = async (connection, sweepStartedAt) => {
                creator.id AS creator_id, creator.full_name AS creator_name,
                creator.email AS creator_email, creator.role AS creator_role,
                creatorPreferences.settings_json AS creator_preferences,
-               scholar.scholar_id, scholar.full_name AS scholar_name,
+               scholar.scholar_id, scholar.full_name AS scholar_name, scholar.email AS scholar_email,
+               da.is_makeup,
                staff.id AS staff_id, staff.full_name AS staff_name, staff.email AS staff_email,
                staffPreferences.duty_attendance AS staff_duty_attendance
         FROM duty_attendance da
@@ -56,7 +60,7 @@ const notifyDutyAbsences = async (connection, sweepStartedAt) => {
         const group = dutyGroups.get(row.duty_id) || { duty: row, recipients: new Map() };
         const addRecipient = (recipient, scholar, role) => {
             if (!recipient.email) return;
-            const key = recipient.email.toLowerCase();
+            const key = `${role === 'scholar' ? 'scholar:' : 'staff:'}${recipient.email.toLowerCase()}`;
             const entry = group.recipients.get(key) || {
                 ...recipient,
                 role,
@@ -65,11 +69,24 @@ const notifyDutyAbsences = async (connection, sweepStartedAt) => {
             entry.scholars.set(scholar.scholar_id, {
                 scholar_id: scholar.scholar_id,
                 full_name: scholar.scholar_name,
+                is_makeup: Number(scholar.is_makeup) === 1,
             });
             group.recipients.set(key, entry);
         };
 
-        const scholar = { scholar_id: row.scholar_id, scholar_name: row.scholar_name };
+        const scholar = {
+            scholar_id: row.scholar_id,
+            scholar_name: row.scholar_name,
+            is_makeup: row.is_makeup,
+        };
+        if (row.scholar_email) {
+            addRecipient({
+                id: row.scholar_id,
+                scholar_id: row.scholar_id,
+                email: row.scholar_email,
+                full_name: row.scholar_name,
+            }, scholar, 'scholar');
+        }
         if (row.creator_email) {
             let shouldNotifyCreator = true;
             if (row.creator_role === 'admin') {
@@ -103,32 +120,52 @@ const notifyDutyAbsences = async (connection, sweepStartedAt) => {
     let failedCount = 0;
     for (const [dutyId, group] of dutyGroups) {
         for (const recipient of group.recipients.values()) {
-            const detail = `duty:${dutyId}:stage:system-absence`;
+            const isScholar = recipient.role === 'scholar';
+            const detail = isScholar
+                ? `duty:${dutyId}:scholar:${recipient.scholar_id}:status:absent:system`
+                : `duty:${dutyId}:stage:system-absence`;
+            const notificationType = isScholar ? 'duty_attendance_status' : 'duty_absence_notice';
             const [existing] = await connection.query(
                 `SELECT id FROM notification_logs
-                 WHERE recipient = ? AND type = 'duty_absence_notice' AND detail = ? AND status = 'sent'
+                 WHERE recipient = ? AND type = ? AND detail = ? AND status = 'sent'
                  LIMIT 1`,
-                [recipient.email, detail]
+                [recipient.email, notificationType, detail]
             );
             if (existing.length) continue;
 
             try {
                 const scholars = [...recipient.scholars.values()];
-                await transporter.sendMail({
-                    from: process.env.SMTP_FROM || process.env.SMTP_USER,
-                    to: recipient.email,
-                    subject: `Duty attendance: ${group.duty.title} — ${scholars.length} absent`,
-                    text: `Hello ${recipient.full_name || ''},\n\nThe check-in window for "${group.duty.title}" closed on ${group.duty.duty_date}. The following assigned scholars were recorded absent:\n${scholars.map(scholar => `- ${scholar.full_name || 'Unnamed Scholar'} (${scholar.scholar_id})`).join('\n')}\n\nPlease review attendance${recipient.role === 'creator' ? ' and arrange a makeup duty if needed' : ''}.`,
-                    html: buildDutyAbsenceEmail({
-                        recipientName: recipient.full_name,
-                        duty: group.duty,
-                        scholars,
-                    }),
-                });
+                if (isScholar) {
+                    await transporter.sendMail({
+                        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+                        to: recipient.email,
+                        subject: `Duty attendance update: ${group.duty.title} — absent`,
+                        text: `Hello ${recipient.full_name || 'Scholar'},\n\nYour attendance for "${group.duty.title}" on ${group.duty.duty_date} has been recorded as absent.${scholars[0]?.is_makeup ? '\nThis attendance is for your makeup duty.' : ''}\n\nPlease contact your assigned staff if you believe this record is incorrect.`,
+                        html: buildDutyAttendanceStatusEmail({
+                            recipientName: recipient.full_name,
+                            duty: group.duty,
+                            status: 'absent',
+                            isMakeup: Boolean(scholars[0]?.is_makeup),
+                            actionUrl: `${(process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/+$/, '')}/scholar/duties`,
+                        }),
+                    });
+                } else {
+                    await transporter.sendMail({
+                        from: process.env.SMTP_FROM || process.env.SMTP_USER,
+                        to: recipient.email,
+                        subject: `Duty attendance: ${group.duty.title} — ${scholars.length} absent`,
+                        text: `Hello ${recipient.full_name || ''},\n\nThe check-in window for "${group.duty.title}" closed on ${group.duty.duty_date}. The following assigned scholars were recorded absent:\n${scholars.map(scholar => `- ${scholar.full_name || 'Unnamed Scholar'} (${scholar.scholar_id})`).join('\n')}\n\nPlease review attendance${recipient.role === 'creator' ? ' and arrange a makeup duty if needed' : ''}.`,
+                        html: buildDutyAbsenceEmail({
+                            recipientName: recipient.full_name,
+                            duty: group.duty,
+                            scholars,
+                        }),
+                    });
+                }
                 await connection.query(
                     `INSERT INTO notification_logs (scholar_id, recipient, channel, type, status, detail)
-                     VALUES (NULL, ?, 'email', 'duty_absence_notice', 'sent', ?)`,
-                    [recipient.email, detail]
+                     VALUES (?, ?, 'email', ?, 'sent', ?)`,
+                    [isScholar ? recipient.scholar_id : null, recipient.email, notificationType, detail]
                 );
                 sentCount += 1;
             } catch (error) {
@@ -137,8 +174,8 @@ const notifyDutyAbsences = async (connection, sweepStartedAt) => {
                 try {
                     await connection.query(
                         `INSERT INTO notification_logs (scholar_id, recipient, channel, type, status, detail)
-                         VALUES (NULL, ?, 'email', 'duty_absence_notice', 'failed', ?)`,
-                        [recipient.email, `${detail}:${String(error.message || error)}`]
+                         VALUES (?, ?, 'email', ?, 'failed', ?)`,
+                        [isScholar ? recipient.scholar_id : null, recipient.email, notificationType, `${detail}:${String(error.message || error)}`]
                     );
                 } catch (logError) {
                     console.error('[duty-absence] Failed to record notification failure:', logError.message || logError);

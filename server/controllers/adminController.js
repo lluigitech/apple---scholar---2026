@@ -84,6 +84,7 @@ exports.updateAdminProfile = (req, res) => {
 const DEFAULT_ADMIN_PREFERENCES = {
     timezone: '(GMT+8) Manila, Philippines',
     dateFormat: 'MMMM DD, YYYY',
+    paginationPageSize: 10,
     tableDensity: 'comfortable',
     compactTables: false,
     emailNotifications: true,
@@ -131,6 +132,11 @@ exports.getAdminSettings = (req, res) => {
             } else {
                 savedPreferences.sessionTimeout = String(savedPreferences.sessionTimeout);
             }
+            if (![10, 20, 50].includes(Number(savedPreferences.paginationPageSize))) {
+                savedPreferences.paginationPageSize = DEFAULT_ADMIN_PREFERENCES.paginationPageSize;
+            } else {
+                savedPreferences.paginationPageSize = Number(savedPreferences.paginationPageSize);
+            }
             res.json({
                 displayName: rows[0].displayName,
                 email: rows[0].email,
@@ -172,6 +178,7 @@ exports.updateAdminSettings = (req, res) => {
     const validOptions = {
         timezone: ['(GMT+8) Manila, Philippines', '(GMT+0) UTC', '(GMT+9) Tokyo, Japan', '(GMT-5) New York, USA'],
         dateFormat: ['MMMM DD, YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'],
+        paginationPageSize: [10, 20, 50],
         tableDensity: ['comfortable', 'compact', 'condensed'],
         sessionTimeout: SESSION_TIMEOUT_OPTIONS,
     };
@@ -1318,10 +1325,10 @@ exports.getScholarComplianceSummary = (req, res) => {
                                             if (scoreErr) return res.status(500).json({ error: 'Error calculating scholar compliance' });
                                             const officialServiceHours = Number(score?.stats?.total_service_hours || 0);
                                             const overallCompliance = score?.overallCompliance ?? null;
-                                            const riskThresholds = getComplianceRiskThresholds(score?.minComplianceNum);
+                                            const riskThresholds = getComplianceRiskThresholds();
                                             const riskLevel = overallCompliance === null
                                                 ? null
-                                                : getComplianceRiskTier(overallCompliance, score?.minComplianceNum);
+                                                : getComplianceRiskTier(overallCompliance);
 
                                             res.json({
                                                 overall_compliance: overallCompliance,
@@ -1329,6 +1336,7 @@ exports.getScholarComplianceSummary = (req, res) => {
                                                 risk_level: riskLevel,
                                                 risk_thresholds: {
                                                     low_risk_min_compliance: riskThresholds.lowRiskMinCompliance,
+                                                    medium_risk_min_compliance: riskThresholds.mediumRiskMinCompliance,
                                                 },
                                                 compliance_points: score ? {
                                                     deductions: score.deductions || {},
@@ -1556,7 +1564,7 @@ exports.getComplianceSummary = (req, res) => {
                                 today,
                             });
                             const overallCompliance = Number(score?.overallCompliance ?? 0);
-                            const riskStatus = getComplianceRiskTier(overallCompliance, score?.minComplianceNum);
+                            const riskStatus = getComplianceRiskTier(overallCompliance);
 
                             return {
                                 id: scholar.id,

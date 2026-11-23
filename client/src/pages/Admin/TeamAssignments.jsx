@@ -3,9 +3,10 @@ import { useEffect, useState } from 'react';
 import axios from 'axios';
 import {
   Check, ChevronLeft, ChevronRight, Filter, Loader2, Pencil, Plus, Search,
-  Trash2, Users, X, Folder, ShieldCheck,
+  Trash2, Users, X, Folder, ShieldCheck, Shuffle,
   Layers, GraduationCap, ChevronDown,
 } from 'lucide-react';
+import { getAdminPageSize } from '../../utils/adminPreferences';
 import { formatYearLevelLabel } from '../../utils/yearLevelLabels';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
@@ -42,8 +43,6 @@ const YEAR_LEVELS = [
   '1st Year College', '2nd Year College', '3rd Year College',
   '4th Year College', '5th Year College',
 ];
-const SCHOLARS_PER_PAGE = 10;
-
 // ── Shared bits ──────────────────────────────────────────────
 const Alert = ({ type = 'error', children }) => {
   const color = type === 'error' ? DANGER : SUCCESS;
@@ -358,6 +357,7 @@ const OfficerPanel = ({ onStats }) => {
 
 // ── Staff tab ────────────────────────────────────────────────
 const StaffPanel = ({ onStats }) => {
+  const pageSize = getAdminPageSize();
   const [staff, setStaff] = useState([]);
   const [groups, setGroups] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -374,6 +374,7 @@ const StaffPanel = ({ onStats }) => {
   const [editing, setEditing] = useState(false);
   const [groupEditingId, setGroupEditingId] = useState(null);
   const [groupDraftName, setGroupDraftName] = useState('');
+  const [balancing, setBalancing] = useState(false);
 
   const load = async () => {
     try {
@@ -414,15 +415,37 @@ const StaffPanel = ({ onStats }) => {
     try { await axios.delete(`${API}/admin/scholar-groups/${groupId}/members/${scholarId}`, authHeaders()); await load(); }
     catch (err) { setError(err.response?.data?.error || 'Failed to remove scholar.'); }
   };
+  const balanceGroups = async () => {
+    if (!groups.length || !scholars.length) return;
+    const confirmed = window.confirm(
+      `Randomly distribute all ${scholars.length} active scholars as evenly as possible across ${groups.length} groups? This will replace all current group assignments.`
+    );
+    if (!confirmed) return;
+
+    setBalancing(true);
+    setMessage('');
+    setError('');
+    try {
+      const { data } = await axios.post(`${API}/admin/scholar-groups/balance`, {}, authHeaders());
+      await load();
+      setGroupFilter('');
+      setScholarPage(1);
+      setMessage(`Distributed ${data.scholar_count} scholars across ${data.group_count} groups as evenly as possible.`);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to balance scholar groups.');
+    } finally {
+      setBalancing(false);
+    }
+  };
   const visibleScholars = scholars.filter(s => {
     const query = scholarSearch.trim().toLowerCase();
     return (!query || s.full_name?.toLowerCase().includes(query) || s.scholar_id?.toLowerCase().includes(query))
       && (!groupFilter || (groupFilter === 'unassigned' ? !s.group_id : String(s.group_id) === groupFilter));
   });
-  const scholarPageCount = Math.max(1, Math.ceil(visibleScholars.length / SCHOLARS_PER_PAGE));
+  const scholarPageCount = Math.max(1, Math.ceil(visibleScholars.length / pageSize));
   const currentScholarPage = Math.min(scholarPage, scholarPageCount);
-  const scholarPageStart = (currentScholarPage - 1) * SCHOLARS_PER_PAGE;
-  const paginatedScholars = visibleScholars.slice(scholarPageStart, scholarPageStart + SCHOLARS_PER_PAGE);
+  const scholarPageStart = (currentScholarPage - 1) * pageSize;
+  const paginatedScholars = visibleScholars.slice(scholarPageStart, scholarPageStart + pageSize);
   const selectStaff = (person) => { setSelectedId(person.id); setSelectedGroups(person.assigned_groups?.map(group => group.id) || []); setEditing(false); setMessage(''); };
   const toggle = (id) => setSelectedGroups(current => current.includes(id) ? current.filter(item => item !== id) : [...current, id]);
   const save = async () => {
@@ -577,9 +600,21 @@ const StaffPanel = ({ onStats }) => {
       {/* Scholar directory + group management */}
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-5">
         <Card icon={Search} title="Scholar directory" action={
-          unfiledCount > 0 && (
-            <span style={{ ...body, fontSize: '0.68rem', fontWeight: 600, color: WARNING }}>{unfiledCount} unfiled</span>
-          )
+          <div className="flex items-center gap-2">
+            {unfiledCount > 0 && (
+              <span style={{ ...body, fontSize: '0.68rem', fontWeight: 600, color: WARNING }}>{unfiledCount} unfiled</span>
+            )}
+            <button
+              type="button"
+              onClick={balanceGroups}
+              disabled={balancing || loading || groups.length === 0 || scholars.length === 0}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 disabled:opacity-50"
+              style={{ ...body, height: 32, fontSize: '0.68rem', fontWeight: 700, color: '#fff', background: PRIMARY, border: 'none', cursor: balancing || loading || !groups.length || !scholars.length ? 'default' : 'pointer' }}
+            >
+              {balancing ? <Loader2 size={12} className="animate-spin" /> : <Shuffle size={12} />}
+              {balancing ? 'Assigning…' : 'Auto-assign scholars'}
+            </button>
+          </div>
         }>
           <div className="mb-4 flex flex-col gap-2 sm:flex-row">
             <div className="relative flex-1">
@@ -645,7 +680,7 @@ const StaffPanel = ({ onStats }) => {
           {!loading && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3" style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12 }}>
               <span style={{ ...body, fontSize: '0.72rem', color: MUTED }}>
-                Showing {visibleScholars.length === 0 ? 0 : `${scholarPageStart + 1}–${Math.min(scholarPageStart + SCHOLARS_PER_PAGE, visibleScholars.length)}`} of {visibleScholars.length} scholars
+                Showing {visibleScholars.length === 0 ? 0 : `${scholarPageStart + 1}–${Math.min(scholarPageStart + pageSize, visibleScholars.length)}`} of {visibleScholars.length} scholars
               </span>
               {scholarPageCount > 1 && (
                 <div className="flex items-center gap-2">
@@ -751,7 +786,7 @@ const TeamAssignments = () => {
       <div className="w-full px-4 sm:px-6 lg:px-8" style={{ paddingBottom: 40 }}>
 
         <AdminPageHeader
-          title="Access Control Center"
+          title="Access Control"
           description="Control visibility of scholars by year level and scholar groups across Officers and Staff."
           className="mb-6"
         />

@@ -43,7 +43,7 @@ import {
     XCircle,
     CalendarClock,
 } from 'lucide-react';
-import { formatAdminDate, getAdminLocale, getAdminTimezone } from '../../../utils/adminPreferences';
+import { formatAdminDate, getAdminLocale, getAdminPageSize, getAdminTimezone } from '../../../utils/adminPreferences';
 import AdminPageHeader from '../../../components/Admin/AdminPageHeader';
 
 const BG = '#F7F4EE';
@@ -58,8 +58,6 @@ const DANGER = '#A24A4A';
 const INK = '#241512';
 const MUTED = '#8A7A68';
 const RADIUS = 16;
-const PAGE_SIZE = 5;
-
 const display = { fontFamily: "'Playfair Display', Georgia, serif" };
 const body = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
 const cardSx = { backgroundColor: SURFACE, border: `1px solid ${BORDER}`, borderRadius: `${RADIUS}px`, boxShadow: '0 1px 2px rgba(36,21,18,0.04)' };
@@ -201,6 +199,7 @@ const EmptyState = () => (
 );
 
 const BackupRecovery = ({ embedded = false }) => {
+    const pageSize = getAdminPageSize();
     const [loading, setLoading] = useState(true);
     const [backups, setBackups] = useState([]);
     const [policy, setPolicy] = useState({
@@ -343,10 +342,10 @@ const BackupRecovery = ({ embedded = false }) => {
     );
     useEffect(() => { setPage(1); }, [typeFilter]);
 
-    const totalPages = Math.max(1, Math.ceil(filteredBackups.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(filteredBackups.length / pageSize));
     const currentPage = Math.min(page, totalPages);
-    const start = (currentPage - 1) * PAGE_SIZE;
-    const pageRows = filteredBackups.slice(start, start + PAGE_SIZE);
+    const start = (currentPage - 1) * pageSize;
+    const pageRows = filteredBackups.slice(start, start + pageSize);
 
     const latest = overview.latestDb;
     const latestStatus = latest ? (STATUS_CONFIG[latest.status] || STATUS_CONFIG.COMPLETED) : null;
@@ -563,7 +562,7 @@ const BackupRecovery = ({ embedded = false }) => {
 
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', mt: 1.75 }}>
                                     <Typography sx={{ ...body, color: MUTED, fontSize: '0.8rem' }}>
-                                        Showing {start + 1} to {Math.min(start + PAGE_SIZE, filteredBackups.length)} of {filteredBackups.length} backup{filteredBackups.length === 1 ? '' : 's'}
+                                        Showing {start + 1} to {Math.min(start + pageSize, filteredBackups.length)} of {filteredBackups.length} backup{filteredBackups.length === 1 ? '' : 's'}
                                     </Typography>
                                     <Box component="nav" aria-label="Pagination" sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
                                         <IconButton aria-label="Previous page" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)} sx={{ width: 32, height: 32, borderRadius: '8px', border: `1px solid ${BORDER}`, backgroundColor: '#fff', color: INK }}>

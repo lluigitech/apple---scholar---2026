@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const db = require('../config/db');
 const dutyController = require('./dutyController');
 const { markEndedDutyAbsences } = require('../services/dutyAbsenceService');
@@ -561,6 +562,68 @@ exports.getAllScholarsWithGroups = (req, res) => {
         if (err) return res.status(500).json({ error: 'Error fetching scholars' });
         res.json(data);
     });
+};
+
+exports.balanceScholarGroups = async (req, res) => {
+    let connection;
+    try {
+        connection = await db.promise().getConnection();
+        await connection.beginTransaction();
+
+        const [groups] = await connection.query('SELECT id FROM scholar_groups ORDER BY id FOR UPDATE');
+        if (!groups.length) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'Create at least one group before balancing scholars.' });
+        }
+
+        const [scholars] = await connection.query(
+            "SELECT scholar_id FROM users WHERE role = 'scholar' AND status = 'active' ORDER BY scholar_id FOR UPDATE"
+        );
+        if (!scholars.length) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'There are no active scholars to assign.' });
+        }
+
+        for (let index = scholars.length - 1; index > 0; index -= 1) {
+            const randomIndex = crypto.randomInt(index + 1);
+            [scholars[index], scholars[randomIndex]] = [scholars[randomIndex], scholars[index]];
+        }
+
+        const groupCounts = groups.map(group => ({ id: group.id, member_count: 0 }));
+        const assignments = scholars.map((scholar, index) => {
+            const groupIndex = index % groups.length;
+            groupCounts[groupIndex].member_count += 1;
+            return [groups[groupIndex].id, scholar.scholar_id];
+        });
+        const placeholders = assignments.map(() => '(?, ?)').join(', ');
+        const values = assignments.flat();
+
+        await connection.query('DELETE FROM scholar_group_members');
+        await connection.query(
+            `INSERT INTO scholar_group_members (group_id, scholar_id) VALUES ${placeholders}`,
+            values
+        );
+        await connection.commit();
+
+        return res.json({
+            message: 'Scholars distributed across groups.',
+            scholar_count: scholars.length,
+            group_count: groups.length,
+            groups: groupCounts,
+        });
+    } catch (error) {
+        if (connection) {
+            try {
+                await connection.rollback();
+            } catch (rollbackError) {
+                console.error('[scholar-groups] failed to roll back balancing transaction:', rollbackError);
+            }
+        }
+        console.error('[scholar-groups] failed to balance scholar groups:', error);
+        return res.status(500).json({ error: 'Failed to balance scholar groups.' });
+    } finally {
+        if (connection) connection.release();
+    }
 };
 
 // NOTE: exclusive membership -- kung kabilang na sa ibang group, mag-fail dahil

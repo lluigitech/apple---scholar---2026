@@ -10,14 +10,11 @@ const complianceTools = {
   logComplianceIncident: async () => {},
   clampCompliance: value => value,
   getComplianceSettings: async () => ({}),
-  getComplianceRiskThresholds: minimumCompliance => {
-    const lowRiskMinCompliance = Number(minimumCompliance ?? 50);
-    return { lowRiskMinCompliance };
-  },
-  getComplianceRiskTier: (score, minimumCompliance = 50) => {
-    const lowRiskMinimum = Number(minimumCompliance);
-    return score >= lowRiskMinimum ? 'low' : 'high';
-  },
+  getComplianceRiskThresholds: () => ({
+    lowRiskMinCompliance: 75,
+    mediumRiskMinCompliance: 50,
+  }),
+  getComplianceRiskTier: score => score >= 75 ? 'low' : score >= 50 ? 'medium' : 'high',
   calculateCurrentCompliance: (scholarId, callback) => callback(
     null,
     complianceScore.overallCompliance,
@@ -186,7 +183,8 @@ test('scholar compliance summary reports official scores and reviewed academic o
   assert.equal(response.body.risk_score, 16.75);
   assert.equal(response.body.risk_level, 'low');
   assert.deepEqual(response.body.risk_thresholds, {
-    low_risk_min_compliance: 70,
+    low_risk_min_compliance: 75,
+    medium_risk_min_compliance: 50,
   });
   assert.equal(response.body.compliance_points.total_deduction, 16.75);
   assert.equal(response.body.compliance_points.total_bonus_points, 0);
@@ -262,7 +260,7 @@ test('compliance settings reject missing or incorrect passwords without saving',
   assert.equal(writeAttempted, false);
 });
 
-test('scholar risk levels classify below-minimum scores as high risk', async () => {
+test('scholar risk levels follow the configured score bands', async () => {
   setQueryRows(sql => {
     if (sql.includes('SELECT scholar_id, year_level FROM users')) {
       return [{ scholar_id: 'SCH-1', year_level: 'College 1' }];
@@ -273,27 +271,26 @@ test('scholar risk levels classify below-minimum scores as high risk', async () 
     return [];
   });
 
-  for (const [score, minimum, expectedLevel] of [
-    [70, 70, 'low'],
-    [69.99, 70, 'high'],
-    [50, 70, 'high'],
-    [49.99, 70, 'high'],
-    [65, 65, 'low'],
-    [64.99, 65, 'high'],
-    [50, 50, 'low'],
-    [49.99, 50, 'high'],
+  for (const [score, expectedLevel] of [
+    [91, 'low'],
+    [81, 'low'],
+    [75, 'low'],
+    [74.99, 'medium'],
+    [50, 'medium'],
+    [49.99, 'high'],
   ]) {
     complianceScore = {
       overallCompliance: score,
       riskScore: 100 - score,
-      minComplianceNum: minimum,
+      minComplianceNum: 70,
       deductions: {},
       bonuses: {},
       stats: {},
     };
     const response = await invoke(adminController.getScholarComplianceSummary, { params: { id: '12' } });
     assert.equal(response.body.risk_level, expectedLevel, `compliance score ${score}`);
-    assert.equal(response.body.risk_thresholds.low_risk_min_compliance, minimum);
+    assert.equal(response.body.risk_thresholds.low_risk_min_compliance, 75);
+    assert.equal(response.body.risk_thresholds.medium_risk_min_compliance, 50);
   }
 });
 

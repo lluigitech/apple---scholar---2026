@@ -1,7 +1,7 @@
 import { X, Image as ImageIcon, ImageOff, AlertTriangle, CheckCircle, XCircle, Sparkles, ClipboardCheck } from "lucide-react";
 import ScoreRing from "../../shared/ScoreRing";
 
-// ── Design tokens — "Apple Scholar Executive" system (matches AdminDonorPage / AdminReports) ──
+// ── Design tokens — "Apple Scholar Executive" system (matches DonorReportingCenter / AdminReports) ──
 const BG = "#F7F4EE";
 const SURFACE = "#FFFDF9";
 const BORDER = "#E5D8CA";

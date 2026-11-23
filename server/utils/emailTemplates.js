@@ -276,6 +276,36 @@ const buildDutyAbsenceEmail = ({ recipientName, duty = {}, scholars = [], action
   });
 };
 
+const buildDutyAttendanceStatusEmail = ({ recipientName, duty = {}, status, isMakeup = false, actionUrl } = {}) => {
+  const isAbsent = String(status || '').toLowerCase() === 'absent';
+  const dateText = formatDate(duty.duty_date) || 'To be announced';
+  const statusText = isAbsent ? 'Absent' : 'Present';
+  return renderLayout({
+    preheader: `${duty.title || 'Duty'} attendance recorded as ${statusText.toLowerCase()}`,
+    title: 'Duty Attendance Update',
+    intro: `${greeting(recipientName)}\nYour attendance for this duty has been recorded.`,
+    accentColor: isAbsent ? COLORS.danger : COLORS.success,
+    contentHtml: detailRows([
+      { label: 'Duty', value: duty.title },
+      { label: 'Date', value: dateText },
+      { label: 'Time', value: duty.time_start ? `${formatTime(duty.time_start)}${duty.time_end ? ` - ${formatTime(duty.time_end)}` : ''}` : null },
+      { label: 'Location', value: duty.location },
+      { label: 'Attendance', value: statusText },
+      ...(isMakeup ? [{ label: 'Duty type', value: 'Makeup duty' }] : []),
+    ]),
+    statusPanelHtml: statusPanel({
+      tone: isAbsent ? 'warning' : 'success',
+      title: isAbsent ? 'Recorded absent' : 'Recorded present',
+      body: isAbsent
+        ? 'If you believe this is incorrect, please contact your assigned staff.'
+        : isMakeup ? 'Your makeup duty attendance has been recorded.' : 'Your duty attendance has been recorded.',
+    }),
+    actionLabel: 'View My Duties',
+    actionUrl,
+    footerNote: 'You are receiving this message because your duty attendance was recorded.',
+  });
+};
+
 const buildMakeupDutyAssignmentEmail = ({ recipientName, scholarName, scholarId, duty = {}, recipientRole, actionUrl } = {}) => {
   const dateText = formatDate(duty.duty_date) || 'To be announced';
   const isScholar = recipientRole === 'scholar';
@@ -411,14 +441,41 @@ const buildAnnouncementEmail = ({ title, content, meta = [], actionUrl, maxConte
   });
 };
 
-/** E. Task deadline reminder. daysLeft: 0 = due today; any other number = due in N days. */
+/** Task assignment notice sent to scholars and their assigned officers. */
+const buildTaskAssignmentEmail = ({ recipientName, taskTitle, taskType, dueDate, instructions, recipientRole, actionUrl } = {}) => {
+  const isScholar = recipientRole === 'scholar';
+  return renderLayout({
+    preheader: `New task assigned: ${taskTitle || ''}`.trim(),
+    title: 'New Task Assignment',
+    intro: isScholar
+      ? `${greeting(recipientName)}\nA new requirement has been assigned to you. Please review the task details and submit it through your Scholar Portal before the deadline.`
+      : `${greeting(recipientName)}\nA new requirement has been assigned to scholars in your assigned year level. Please review the task details and follow up as needed.`,
+    contentHtml: detailRows([
+      { label: 'Task', value: taskTitle },
+      { label: 'Requirement', value: taskType },
+      { label: 'Deadline', value: formatDate(dueDate) || 'No deadline set' },
+      { label: 'Instructions', value: instructions || 'No additional instructions.' },
+    ]),
+    statusPanelHtml: statusPanel({
+      tone: 'info',
+      title: 'Task assigned',
+      body: dueDate ? `Deadline: ${formatDate(dueDate)}` : 'Please review the task details in the portal.',
+    }),
+    actionLabel: isScholar ? 'Open Scholar Portal' : 'Open Officer Portal',
+    actionUrl,
+    footerNote: 'You are receiving this message because this task applies to your assigned year level.',
+  });
+};
+
+/** F. Task deadline reminder. daysLeft: 0 = due today; 1 = due tomorrow. */
 const buildDeadlineReminderEmail = ({ recipientName, taskTitle, taskType, dueDate, daysLeft, actionUrl } = {}) => {
   const dueToday = Number(daysLeft) === 0;
+  const dueTomorrow = Number(daysLeft) === 1;
   const dueText = formatDate(dueDate);
-  const whenText = dueToday ? 'today' : `in ${Number.isFinite(Number(daysLeft)) ? Number(daysLeft) : 3} days`;
+  const whenText = dueToday ? 'today' : dueTomorrow ? 'tomorrow' : `in ${Number.isFinite(Number(daysLeft)) ? Number(daysLeft) : 3} days`;
   return renderLayout({
     preheader: `${taskTitle || 'A task'} is due ${whenText}`,
-    title: dueToday ? 'Deadline Today' : 'Upcoming Deadline',
+    title: dueToday ? 'Deadline Today' : dueTomorrow ? 'Deadline Tomorrow' : 'Upcoming Deadline',
     intro: `${greeting(recipientName)}\nYour task is due ${whenText}. Please submit the requirement through your Scholar Portal.`,
     accentColor: COLORS.warning,
     contentHtml: detailRows([
@@ -428,7 +485,7 @@ const buildDeadlineReminderEmail = ({ recipientName, taskTitle, taskType, dueDat
     ]),
     statusPanelHtml: statusPanel({
       tone: dueToday ? 'urgent' : 'warning',
-      title: dueToday ? 'Due today' : `Due in ${Number.isFinite(Number(daysLeft)) ? Number(daysLeft) : 3} days`,
+      title: dueToday ? 'Due today' : dueTomorrow ? 'Due tomorrow' : `Due in ${Number.isFinite(Number(daysLeft)) ? Number(daysLeft) : 3} days`,
       body: dueText ? `Deadline: ${dueText}` : '',
     }),
     actionLabel: 'Open Scholar Portal',
@@ -619,11 +676,13 @@ module.exports = {
   BRAND_NAME,
   buildDutyReminderEmail,
   buildDutyAbsenceEmail,
+  buildDutyAttendanceStatusEmail,
   buildMakeupDutyAssignmentEmail,
   buildComplianceThresholdEmail,
   buildWelcomeEmail,
   buildPasswordResetEmail,
   buildAnnouncementEmail,
+  buildTaskAssignmentEmail,
   buildDeadlineReminderEmail,
   buildOverdueEmail,
   buildRepeatedRiskEmail,

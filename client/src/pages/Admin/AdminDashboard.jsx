@@ -2,14 +2,14 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
-    Cell, BarChart, Bar, AreaChart, Area, LabelList, Legend,
+    Cell, BarChart, Bar, AreaChart, Area, LabelList,
     XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
     Users, ShieldCheck, Megaphone,
     AlertTriangle, Clock,
     ArrowRight, MessageSquare, ShieldAlert, CalendarDays,
-    ClipboardList, Settings, Star, BarChart3,
+    ClipboardList, Settings, Star, BarChart3, TrendingUp, UserPlus, Gauge,
 } from 'lucide-react';
 import { formatAdminDate, formatAdminMonth } from '../../utils/adminPreferences';
 import AdminNotifications from '../../components/Admin/AdminNotifications';
@@ -80,20 +80,36 @@ const IconBubble = ({ icon: Icon, color = PRIMARY, size = 40, iconSize = 18 }) =
 );
 
 const EmptyState = ({ children }) => (
-    <div className="flex items-center justify-center text-center" style={{ height: 230 }}>
-        <p style={{ ...sans, fontSize: '0.8rem', color: MUTED, maxWidth: 260 }}>{children}</p>
+    <div className="flex items-center justify-center text-center" style={{ minHeight: 200 }}>
+        <p style={{ ...sans, fontSize: '0.82rem', color: MUTED, maxWidth: 260, lineHeight: 1.5 }}>{children}</p>
+    </div>
+);
+
+// ── KPI card (top summary strip) ──────────────────────────────────
+const KpiCard = ({ icon, label, value, note, color = PRIMARY, loading }) => (
+    <div className="min-w-0 p-3.5 sm:p-5" style={cardStyle}>
+        <div className="flex items-start justify-between gap-2">
+            <p style={{ ...sans, fontSize: '0.74rem', fontWeight: 600, color: MUTED, lineHeight: 1.3 }}>{label}</p>
+            <IconBubble icon={icon} color={color} size={32} iconSize={15} />
+        </div>
+        {loading ? (
+            <div className="animate-pulse mt-3" style={{ height: 30, width: '55%', borderRadius: 8, background: '#EFE6D8' }} />
+        ) : (
+            <p style={{ ...serif, fontWeight: 700, color: INK, lineHeight: 1.1, marginTop: 10 }} className="text-[1.5rem] sm:text-[1.9rem]">{value}</p>
+        )}
+        <p style={{ ...sans, fontSize: '0.7rem', color: MUTED, marginTop: 6, lineHeight: 1.35 }}>{loading ? '\u00A0' : note}</p>
     </div>
 );
 
 // ── Chart card ────────────────────────────────────────────────────
 const ChartCard = ({ icon, title, subtitle, headerAction, children, className = '' }) => (
-    <div className={`min-w-0 ${className}`} style={{ ...cardStyle, padding: 22 }}>
-        <div className="flex items-start justify-between gap-3 mb-4">
-            <div className="flex min-w-0 items-center gap-3">
+    <div className={`min-w-0 p-4 sm:p-6 ${className}`} style={cardStyle}>
+        <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+            <div className="flex min-w-0 flex-1 items-center gap-3" style={{ minWidth: 180 }}>
                 <IconBubble icon={icon} color={PRIMARY} size={40} iconSize={18} />
                 <div className="min-w-0">
-                    <h3 style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY }}>{title}</h3>
-                    {subtitle && <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1 }}>{subtitle}</p>}
+                    <h3 style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.25 }}>{title}</h3>
+                    {subtitle && <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1, lineHeight: 1.4 }}>{subtitle}</p>}
                 </div>
             </div>
             {headerAction}
@@ -102,24 +118,24 @@ const ChartCard = ({ icon, title, subtitle, headerAction, children, className = 
     </div>
 );
 
-// ── Panel with icon header (bottom row + operations) ──────────────
+// ── Panel with icon header (lists + operations) ───────────────────
 const PanelHeader = ({ icon, title, subtitle, action }) => (
     <div className="flex items-start justify-between gap-3 mb-4">
         <div className="flex items-center gap-3 min-w-0">
             <IconBubble icon={icon} color={PRIMARY} size={40} iconSize={18} />
             <div className="min-w-0">
-                <h3 style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY }}>{title}</h3>
-                {subtitle && <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1 }}>{subtitle}</p>}
+                <h3 style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.25 }}>{title}</h3>
+                {subtitle && <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1, lineHeight: 1.4 }}>{subtitle}</p>}
             </div>
         </div>
         {action}
     </div>
 );
 
-const OutlineButton = ({ onClick, children }) => (
+const OutlineButton = ({ onClick, children, full = false }) => (
     <button type="button" onClick={onClick}
-        className="dash-focus inline-flex items-center gap-1.5 flex-shrink-0 transition-colors hover:bg-[#6D21400D]"
-        style={{ ...sans, fontSize: '0.72rem', fontWeight: 600, color: PRIMARY, background: SURFACE, border: `1px solid ${PRIMARY}55`, borderRadius: 8, padding: '7px 12px', cursor: 'pointer' }}>
+        className={`dash-focus inline-flex items-center justify-center gap-1.5 flex-shrink-0 transition-colors hover:bg-[#6D21400D] ${full ? 'w-full sm:w-auto' : ''}`}
+        style={{ ...sans, fontSize: '0.74rem', fontWeight: 600, color: PRIMARY, background: SURFACE, border: `1px solid ${PRIMARY}55`, borderRadius: 10, padding: '9px 14px', minHeight: 40, cursor: 'pointer', whiteSpace: 'nowrap' }}>
         {children} <ArrowRight size={12} />
     </button>
 );
@@ -145,6 +161,14 @@ const AdminDashboard = () => {
     const [qualityScoreAvailable, setQualityScoreAvailable] = useState(false);
     const [riskDistribution, setRiskDistribution] = useState([]);
     const [sentimentBreakdown, setSentimentBreakdown] = useState([]);
+
+    // UI-only: narrower chart axes / heights on phones.
+    const [isNarrow, setIsNarrow] = useState(() => typeof window !== 'undefined' && window.innerWidth < 640);
+    useEffect(() => {
+        const onResize = () => setIsNarrow(window.innerWidth < 640);
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+    }, []);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -197,8 +221,9 @@ const AdminDashboard = () => {
                 }
 
                 const riskLevels = [
-                    { level: 'Moderate', riskLevel: 'medium', value: 0, color: WARNING },
+                    { level: 'Medium', riskLevel: 'medium', value: 0, color: WARNING },
                     { level: 'High', riskLevel: 'high', value: 0, color: DANGER },
+                    { level: 'Low', riskLevel: 'low', value: 0, color: SUCCESS },
                 ];
                 flaggedScholars.forEach(({ risk_level: riskLevel }) => {
                     const level = riskLevels.find((item) => item.riskLevel === riskLevel);
@@ -353,31 +378,43 @@ const AdminDashboard = () => {
         : 0;
     const todayLabel = formatAdminDate(new Date(), { weekday: 'long' });
 
+    // ── Presentation-only derived values for the KPI strip (existing state only) ──
+    const flaggedTotal = riskDistribution.reduce((sum, item) => sum + item.value, 0);
+    const highRiskTotal = riskDistribution.find((item) => item.riskLevel === 'high')?.value || 0;
+    const newScholarsTotal = scholarGrowth.reduce((sum, item) => sum + item.total, 0);
+    const lettersTotal = sentimentBreakdown.reduce((sum, item) => sum + item.value, 0);
+    const negativeLetters = sentimentBreakdown.find((item) => item.label === 'Negative')?.value || 0;
+    const hasAverage = qualityScoreAvailable && selectedMonthScoredTotal > 0;
+
+    const chartHeight = isNarrow ? 220 : 250;
+
     return (
-        <div className="min-h-screen" style={{ background: BG, ...sans }}>
+        <div className="min-h-screen w-full max-w-full min-w-0" style={{ background: BG, ...sans, overflowX: 'hidden' }}>
             <style>{`
                 .dash-focus:focus-visible { outline: 2px solid ${PRIMARY}; outline-offset: 2px; }
                 .dash-hover { transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
                 .dash-hover:hover { border-color: ${PRIMARY}55 !important; box-shadow: 0 10px 24px -14px ${PRIMARY}55 !important; transform: translateY(-1px); }
                 @media (prefers-reduced-motion: reduce) { .dash-hover { transition: none; } .dash-hover:hover { transform: none; } }
             `}</style>
-            <div className="w-full px-5 sm:px-8 py-8" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <div className="w-full max-w-full min-w-0 px-3 sm:px-6 lg:px-8 py-4 sm:py-8 flex flex-col gap-3 sm:gap-5">
 
-                {/* ── Page header ── */}
-                <header className="flex flex-col lg:flex-row lg:items-start justify-between gap-5">
+                {/* ── Page header (unchanged design; only made responsive) ── */}
+                <header className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 sm:gap-5">
                     <div className="min-w-0">
                         <span style={{ ...sans, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.24em', textTransform: 'uppercase', color: BRONZE }}>Admin Portal</span>
-                        <h1 style={{ ...serif, fontSize: '2rem', fontWeight: 700, color: PRIMARY, marginTop: 4, letterSpacing: '-0.01em', lineHeight: 1.15 }}>Executive Intelligence Dashboard</h1>
+                        <h1 style={{ ...serif, fontWeight: 700, color: PRIMARY, marginTop: 4, letterSpacing: '-0.01em', lineHeight: 1.15 }} className="text-[1.55rem] sm:text-[2rem]">Executive Intelligence Dashboard</h1>
                         <p style={{ ...sans, fontSize: '0.85rem', color: MUTED, marginTop: 6, maxWidth: 640 }}>
                             Real-time operational overview of scholars, compliance, governance, security, and institutional performance.
                         </p>
                         <p style={{ ...sans, fontSize: '0.8rem', color: MUTED, marginTop: 8 }}>Welcome back, {name || 'Admin'}.</p>
                     </div>
-                    <div className="flex items-center gap-4 px-4 py-3 flex-shrink-0" style={{ ...cardStyle, borderRadius: 14 }}>
-                        <CalendarDays size={18} style={{ color: BRONZE }} />
-                        <div>
-                            <p style={{ ...sans, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED }}>Today</p>
-                            <p style={{ ...sans, fontSize: '0.8rem', fontWeight: 600, color: INK, whiteSpace: 'nowrap' }}>{todayLabel}</p>
+                    <div className="flex items-center justify-between lg:justify-start gap-4 px-4 py-3 w-full lg:w-auto flex-shrink-0" style={{ ...cardStyle, borderRadius: 14 }}>
+                        <div className="flex items-center gap-3 min-w-0">
+                            <CalendarDays size={18} style={{ color: BRONZE, flexShrink: 0 }} />
+                            <div className="min-w-0">
+                                <p style={{ ...sans, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED }}>Today</p>
+                                <p style={{ ...sans, fontSize: '0.8rem', fontWeight: 600, color: INK, whiteSpace: 'nowrap' }}>{todayLabel}</p>
+                            </div>
                         </div>
                         <div aria-hidden="true" style={{ alignSelf: 'stretch', width: 1, background: BORDER, margin: '0 2px' }} />
                         <AdminNotifications
@@ -391,93 +428,104 @@ const AdminDashboard = () => {
                     </div>
                 </header>
                 {dashboardError && (
-                    <p role="alert" style={{ ...sans, color: DANGER, background: `${DANGER}12`, border: `1px solid ${DANGER}44`, borderRadius: 10, padding: '10px 14px', fontSize: '0.8rem' }}>
+                    <p role="alert" style={{ ...sans, color: DANGER, background: `${DANGER}12`, border: `1px solid ${DANGER}44`, borderRadius: 10, padding: '10px 14px', fontSize: '0.8rem', lineHeight: 1.5 }}>
                         {dashboardError}
                     </p>
                 )}
 
-                {/* ── Recent Users + System Activity ── */}
-                <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-5">
-                    {/* Recent Users */}
-                    <section className="min-w-0 overflow-hidden" style={{ ...cardStyle, padding: 22 }}>
-                        <PanelHeader icon={Users} title="Recent Users" subtitle="Latest registered users in the system."
-                            action={<OutlineButton onClick={() => navigate('/admin/users')}>View Registry</OutlineButton>} />
+                {/* ── KPI strip ── */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+                    <KpiCard icon={AlertTriangle} color={DANGER} label="Flagged scholars" loading={loading}
+                        value={flaggedTotal} note={`${highRiskTotal} high risk`} />
+                    <KpiCard icon={Gauge} color={SUCCESS} label="Average letter score" loading={loading}
+                        value={hasAverage ? `${selectedMonthAverageScore}%` : '—'}
+                        note={hasAverage ? `${selectedMonthScoredTotal} scored this month` : 'No scored letters yet'} />
+                    <KpiCard icon={UserPlus} color={PRIMARY} label="New scholars" loading={loading}
+                        value={newScholarsTotal} note="Registered in the last 6 months" />
+                    <KpiCard icon={TrendingUp} color={WARNING} label="Negative letters" loading={loading}
+                        value={negativeLetters} note={`Out of ${lettersTotal} letters analysed`} />
+                </div>
 
-                        {loading ? (
-                            <div className="flex flex-col gap-3">
-                                {Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-12" />)}
+                {/* ── Quick access zone: Operations (wide) + Governance (side) ── */}
+                <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-3 sm:gap-5 items-stretch">
+
+                    {/* Operations Overview */}
+                    <section aria-labelledby="ops-heading" className="min-w-0 p-4 sm:p-6 flex flex-col" style={cardStyle}>
+                        <div className="flex items-center gap-3 mb-4">
+                            <IconBubble icon={Settings} color={PRIMARY} size={40} iconSize={18} />
+                            <div className="min-w-0">
+                                <h2 id="ops-heading" style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.25 }}>Operations Overview</h2>
+                                <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1, lineHeight: 1.4 }}>Quick access to key administrative operations.</p>
                             </div>
-                        ) : recentUsers.length === 0 ? (
-                            <p style={{ ...sans, fontSize: '0.82rem', color: MUTED, textAlign: 'center', padding: '32px 0' }}>No users yet.</p>
-                        ) : (
-                            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-                                {recentUsers.map((user, idx) => {
-                                    const badge = getRoleBadge(user.role);
-                                    return (
-                                        <li key={user.id} className="flex items-center gap-3 py-2.5"
-                                            style={{ borderTop: idx === 0 ? 'none' : `1px solid ${BORDER}` }}>
-                                            <div className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_DEEP} 100%)` }}>
-                                                <span style={{ ...serif, color: '#fff', fontSize: '0.78rem', fontWeight: 600 }}>
-                                                    {(user.full_name || '?').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
-                                                </span>
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p style={{ ...sans, fontSize: '0.82rem', fontWeight: 600, color: INK }} className="truncate">{user.full_name}</p>
-                                                <p style={{ ...sans, fontSize: '0.72rem', color: MUTED }} className="truncate">{user.email}</p>
-                                            </div>
-                                            <span className="px-2.5 py-1 rounded-full flex-shrink-0" style={{ ...sans, fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', ...badge }}>
-                                                {user.role}
-                                            </span>
-                                        </li>
-                                    );
-                                })}
-                            </ul>
-                        )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 flex-1">
+                            {operationsCards.map((card) => {
+                                const showCount = card.count !== null && card.count !== undefined && !loading;
+                                const count = showCount && (
+                                    <span style={{ ...serif, fontSize: '1.7rem', fontWeight: 700, color: INK, lineHeight: 1 }}>{card.count}</span>
+                                );
+                                return (
+                                    <button key={card.title} type="button" onClick={() => navigate(card.path)}
+                                        aria-label={card.action}
+                                        className="dash-focus dash-hover text-left min-w-0 flex items-center sm:items-stretch sm:flex-col gap-3 p-3.5 sm:p-4"
+                                        style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, cursor: 'pointer' }}>
+                                        <div className="flex items-center justify-between sm:w-full flex-shrink-0">
+                                            <IconBubble icon={card.icon} color={PRIMARY} size={42} iconSize={19} />
+                                            <span className="hidden sm:block">{count}</span>
+                                        </div>
+                                        <div className="min-w-0 flex-1">
+                                            <h3 style={{ ...serif, fontSize: '0.98rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.25 }}>{card.title}</h3>
+                                            <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 3, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{card.desc}</p>
+                                        </div>
+                                        <span className="sm:hidden flex-shrink-0">{count}</span>
+                                        <span className="hidden sm:flex items-center gap-1.5 pt-3" style={{ ...sans, fontSize: '0.74rem', fontWeight: 600, color: PRIMARY, borderTop: `1px solid ${BORDER}` }}>
+                                            {card.action} <ArrowRight size={12} />
+                                        </span>
+                                        <ArrowRight size={14} className="sm:hidden flex-shrink-0" style={{ color: PRIMARY }} />
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </section>
 
-                    {/* System Activity */}
-                    <section className="min-w-0 overflow-hidden" style={{ ...cardStyle, padding: 22 }}>
-                        <PanelHeader icon={Clock} title="System Activity" subtitle="Latest system events."
-                            action={<OutlineButton onClick={() => navigate('/admin/security')}>View Audit Log</OutlineButton>} />
-                        <div>
-                            {recentActivity.length === 0 ? (
-                                <p style={{ ...sans, fontSize: '0.82rem', color: MUTED, textAlign: 'center', padding: '32px 0' }}>No recent activity.</p>
-                            ) : recentActivity.slice(0, 5).map((item, i, visibleActivity) => (
-                                <div key={item.id} className="relative pl-6" style={{ paddingBottom: i < visibleActivity.length - 1 ? 12 : 0 }}>
-                                    {i < visibleActivity.length - 1 && (
-                                        <span className="absolute" style={{ left: 4.5, top: 14, bottom: -2, width: 1, background: BORDER }} />
-                                    )}
-                                    <span className="absolute rounded-full" style={{ width: 10, height: 10, left: 0, top: 4, background: activityDotColor(item.status) }} />
-                                    <p title={item.message} style={{ ...sans, fontSize: '0.76rem', fontWeight: 600, color: INK, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{item.message}</p>
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <span style={{ ...sans, fontSize: '0.68rem', color: MUTED, display: 'flex', alignItems: 'center', gap: 3 }}>
-                                            <Clock size={10} /> {item.time}
-                                        </span>
-                                        <span className="max-w-[120px] truncate px-1.5 py-0.5 rounded-full" title={item.type} style={{ ...sans, fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', background: `${BRONZE}14`, color: BRONZE }}>
-                                            {item.type}
-                                        </span>
-                                    </div>
-                                </div>
-                            ))}
+                    {/* Governance Shortcuts */}
+                    <section className="min-w-0 p-4 sm:p-6 flex flex-col" style={cardStyle}>
+                        <PanelHeader icon={Star} title="Governance Shortcuts" subtitle="Quick access to commonly used tools." />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2.5 flex-1 content-start">
+                            {quickLinks.map(link => {
+                                const Icon = link.icon;
+                                return (
+                                    <button key={link.path} type="button" onClick={() => navigate(link.path)}
+                                        className="dash-focus dash-hover flex items-center gap-3 p-3 text-left min-w-0"
+                                        style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, cursor: 'pointer', minHeight: 60 }}>
+                                        <IconBubble icon={Icon} color={PRIMARY} size={38} iconSize={16} />
+                                        <div className="flex-1 min-w-0">
+                                            <p style={{ ...sans, fontSize: '0.82rem', fontWeight: 700, color: INK }}>{link.label}</p>
+                                            <p style={{ ...sans, fontSize: '0.7rem', color: MUTED, marginTop: 1 }}>{link.desc}</p>
+                                        </div>
+                                        <ArrowRight size={14} style={{ color: PRIMARY, flexShrink: 0 }} />
+                                    </button>
+                                );
+                            })}
                         </div>
                     </section>
                 </div>
 
-                {/* ── Analytics: two balanced rows ── */}
+                {/* ── Analytics ── */}
                 {loading ? (
-                    <div className="grid grid-cols-1 gap-5">
-                        <Skeleton className="h-72" />
-                        <Skeleton className="h-72" />
+                    <div className="grid grid-cols-1 gap-3 sm:gap-5">
+                        <Skeleton className="h-64 sm:h-72" />
+                        <Skeleton className="h-64 sm:h-72" />
                     </div>
                 ) : (
                     <>
                         {/* Row 1: Scholar Growth + Scoring Status */}
-                        <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-5">
+                        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-3 sm:gap-5">
                             <ChartCard icon={BarChart3} title="Scholar Growth" subtitle="Monthly registrations of scholars.">
                                 {scholarGrowth.length === 0 ? (
                                     <EmptyState>No registration dates are available yet, so growth can't be charted.</EmptyState>
                                 ) : (
-                                    <ResponsiveContainer width="100%" height={230}>
+                                    <ResponsiveContainer width="100%" height={chartHeight}>
                                         <AreaChart data={scholarGrowth} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
                                             <defs>
                                                 <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
@@ -505,8 +553,8 @@ const AdminDashboard = () => {
                                         aria-label="Filter scoring by month"
                                         value={activeScoringMonth}
                                         onChange={(event) => setSelectedScoringMonth(event.target.value)}
-                                        className="dash-focus min-w-0 max-w-[150px] rounded-lg px-2 py-2"
-                                        style={{ ...sans, border: `1px solid ${BORDER}`, background: SURFACE, color: INK, fontSize: '0.72rem' }}
+                                        className="dash-focus min-w-0 rounded-lg px-3 py-2 w-full sm:w-auto"
+                                        style={{ ...sans, border: `1px solid ${BORDER}`, background: SURFACE, color: INK, fontSize: '0.8rem', minHeight: 40 }}
                                     >
                                         {scoringMonths.map((month) => (
                                             <option key={month} value={month}>
@@ -525,13 +573,12 @@ const AdminDashboard = () => {
                                         <p style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginBottom: 8 }}>
                                             {selectedMonthScoredTotal} scored submissions · average {selectedMonthAverageScore}%
                                         </p>
-                                        <ResponsiveContainer width="100%" height={Math.max(230, monthlyScoreByLevel.length * 52)}>
+                                        <ResponsiveContainer width="100%" height={Math.max(chartHeight - 20, monthlyScoreByLevel.length * 48)}>
                                             <BarChart data={monthlyScoreByLevel} layout="vertical" margin={{ top: 4, right: 12, left: 4, bottom: 0 }}>
                                                 <CartesianGrid {...gridProps} horizontal={false} />
                                                 <XAxis type="number" tick={axisStyle} stroke={BORDER} allowDecimals={false} />
-                                                <YAxis type="category" dataKey="yearLevel" tick={axisStyle} stroke={BORDER} width={110} />
+                                                <YAxis type="category" dataKey="yearLevel" tick={{ ...axisStyle, fontSize: isNarrow ? '0.64rem' : '0.7rem' }} stroke={BORDER} width={isNarrow ? 92 : 110} />
                                                 <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
-                                                <Legend wrapperStyle={{ ...sans, fontSize: '0.66rem' }} />
                                                 {QUALITY_SCORE_BANDS.map((band) => (
                                                     <Bar
                                                         key={band.key}
@@ -544,22 +591,31 @@ const AdminDashboard = () => {
                                                 ))}
                                             </BarChart>
                                         </ResponsiveContainer>
+                                        {/* Wrapping legend (replaces the chart's own legend, which overflowed on phones) */}
+                                        <ul className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3" style={{ listStyle: 'none', margin: 0, padding: 0, marginTop: 12 }}>
+                                            {QUALITY_SCORE_BANDS.map((band) => (
+                                                <li key={band.key} className="flex items-center gap-1.5" style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>
+                                                    <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 3, background: band.color, flexShrink: 0 }} />
+                                                    {band.name}
+                                                </li>
+                                            ))}
+                                        </ul>
                                     </div>
                                 )}
                             </ChartCard>
                         </div>
 
                         {/* Row 2: Risk Distribution + NLP Sentiment */}
-                        <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_1fr] gap-5">
+                        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-3 sm:gap-5">
                             <ChartCard icon={ShieldCheck} title="Risk Distribution" subtitle="Flagged scholars by risk level.">
-                                {riskDistribution.reduce((sum, item) => sum + item.value, 0) === 0 ? (
+                                {flaggedTotal === 0 ? (
                                     <EmptyState>No risk data yet.</EmptyState>
                                 ) : (
-                                    <ResponsiveContainer width="100%" height={230}>
+                                    <ResponsiveContainer width="100%" height={isNarrow ? 190 : 230}>
                                         <BarChart data={riskDistribution} layout="vertical" margin={{ top: 4, left: 4, right: 36, bottom: 0 }}>
                                             <CartesianGrid {...gridProps} horizontal={false} />
                                             <XAxis type="number" tick={axisStyle} stroke={BORDER} allowDecimals={false} />
-                                            <YAxis type="category" dataKey="level" tick={axisStyle} stroke={BORDER} width={72} />
+                                            <YAxis type="category" dataKey="level" tick={axisStyle} stroke={BORDER} width={isNarrow ? 60 : 72} />
                                             <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
                                             <Bar dataKey="value" name="Scholars" radius={[0, 6, 6, 0]} barSize={20}>
                                                 {riskDistribution.map((entry) => (
@@ -573,10 +629,10 @@ const AdminDashboard = () => {
                             </ChartCard>
 
                             <ChartCard icon={MessageSquare} title="NLP Sentiment" subtitle="Sentiment analysis of submitted letters.">
-                                {sentimentBreakdown.reduce((sum, item) => sum + item.value, 0) === 0 ? (
+                                {lettersTotal === 0 ? (
                                     <EmptyState>No sentiment data yet.</EmptyState>
                                 ) : (
-                                    <ResponsiveContainer width="100%" height={230}>
+                                    <ResponsiveContainer width="100%" height={isNarrow ? 210 : 230}>
                                         <BarChart data={sentimentBreakdown} margin={{ top: 16, right: 12, left: -16, bottom: 0 }}>
                                             <CartesianGrid {...gridProps} />
                                             <XAxis dataKey="label" tick={axisStyle} stroke={BORDER} />
@@ -596,65 +652,72 @@ const AdminDashboard = () => {
                     </>
                 )}
 
-                {/* ── Operations Overview ── */}
-                <section aria-labelledby="ops-heading" style={{ ...cardStyle, padding: 22 }}>
-                    <div className="flex items-center gap-3 mb-4">
-                        <IconBubble icon={Settings} color={PRIMARY} size={40} iconSize={18} />
+                {/* ── Recent Users + System Activity ── */}
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-3 sm:gap-5">
+                    {/* Recent Users */}
+                    <section className="min-w-0 overflow-hidden p-4 sm:p-6" style={cardStyle}>
+                        <PanelHeader icon={Users} title="Recent Users" subtitle="Latest registered users in the system."
+                            action={<OutlineButton onClick={() => navigate('/admin/users')}>Registry</OutlineButton>} />
+
+                        {loading ? (
+                            <div className="flex flex-col gap-3">
+                                {Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-12" />)}
+                            </div>
+                        ) : recentUsers.length === 0 ? (
+                            <p style={{ ...sans, fontSize: '0.82rem', color: MUTED, textAlign: 'center', padding: '32px 0' }}>No users yet.</p>
+                        ) : (
+                            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                                {recentUsers.map((user, idx) => {
+                                    const badge = getRoleBadge(user.role);
+                                    return (
+                                        <li key={user.id} className="flex items-center gap-3 py-3"
+                                            style={{ borderTop: idx === 0 ? 'none' : `1px solid ${BORDER}` }}>
+                                            <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_DEEP} 100%)` }}>
+                                                <span style={{ ...serif, color: '#fff', fontSize: '0.8rem', fontWeight: 600 }}>
+                                                    {(user.full_name || '?').split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()}
+                                                </span>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p style={{ ...sans, fontSize: '0.84rem', fontWeight: 600, color: INK }} className="truncate">{user.full_name}</p>
+                                                <p style={{ ...sans, fontSize: '0.72rem', color: MUTED }} className="truncate">{user.email}</p>
+                                            </div>
+                                            <span className="px-2.5 py-1 rounded-full flex-shrink-0" style={{ ...sans, fontSize: '0.6rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em', ...badge }}>
+                                                {user.role}
+                                            </span>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
+                        )}
+                    </section>
+
+                    {/* System Activity */}
+                    <section className="min-w-0 overflow-hidden p-4 sm:p-6" style={cardStyle}>
+                        <PanelHeader icon={Clock} title="System Activity" subtitle="Latest system events."
+                            action={<OutlineButton onClick={() => navigate('/admin/security')}>Audit Log</OutlineButton>} />
                         <div>
-                            <h2 id="ops-heading" style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY }}>Operations Overview</h2>
-                            <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1 }}>Quick access to key administrative operations.</p>
-                        </div>
-                    </div>
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        {operationsCards.map((card) => {
-                            const showCount = card.count !== null && card.count !== undefined && !loading;
-                            return (
-                                <div key={card.title} className="dash-hover flex flex-col justify-between gap-4 p-5" style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14 }}>
-                                    <div className="flex items-start gap-4">
-                                        <IconBubble icon={card.icon} color={PRIMARY} size={48} iconSize={20} />
-                                        <div className="min-w-0 flex-1">
-                                            <h3 style={{ ...serif, fontSize: '0.98rem', fontWeight: 700, color: PRIMARY }}>{card.title}</h3>
-                                            {showCount && (
-                                                <p style={{ ...serif, fontSize: '1.8rem', fontWeight: 700, color: INK, lineHeight: 1.1, marginTop: 2 }}>{card.count}</p>
-                                            )}
-                                            <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 4 }}>{card.desc}</p>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <OutlineButton onClick={() => navigate(card.path)}>{card.action}</OutlineButton>
+                            {recentActivity.length === 0 ? (
+                                <p style={{ ...sans, fontSize: '0.82rem', color: MUTED, textAlign: 'center', padding: '32px 0' }}>No recent activity.</p>
+                            ) : recentActivity.slice(0, 5).map((item, i, visibleActivity) => (
+                                <div key={item.id} className="relative pl-6" style={{ paddingBottom: i < visibleActivity.length - 1 ? 14 : 0 }}>
+                                    {i < visibleActivity.length - 1 && (
+                                        <span className="absolute" style={{ left: 4.5, top: 14, bottom: -2, width: 1, background: BORDER }} />
+                                    )}
+                                    <span className="absolute rounded-full" style={{ width: 10, height: 10, left: 0, top: 4, background: activityDotColor(item.status) }} />
+                                    <p title={item.message} style={{ ...sans, fontSize: '0.78rem', fontWeight: 600, color: INK, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{item.message}</p>
+                                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                                        <span style={{ ...sans, fontSize: '0.68rem', color: MUTED, display: 'flex', alignItems: 'center', gap: 3 }}>
+                                            <Clock size={10} /> {item.time}
+                                        </span>
+                                        <span className="max-w-[140px] truncate px-1.5 py-0.5 rounded-full" title={item.type} style={{ ...sans, fontSize: '0.58rem', fontWeight: 700, textTransform: 'uppercase', background: `${BRONZE}14`, color: BRONZE }}>
+                                            {item.type}
+                                        </span>
                                     </div>
                                 </div>
-                            );
-                        })}
-                    </div>
-                </section>
-
-                {/* ── Governance Shortcuts ── */}
-                <div>
-
-                    {/* Governance Shortcuts */}
-                    <section className="min-w-0" style={{ ...cardStyle, padding: 22 }}>
-                        <PanelHeader icon={Star} title="Governance Shortcuts" subtitle="Quick access to commonly used tools." />
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-                            {quickLinks.map(link => {
-                                const Icon = link.icon;
-                                return (
-                                    <button key={link.path} type="button" onClick={() => navigate(link.path)}
-                                        className="dash-focus dash-hover flex items-center gap-3 p-3 text-left"
-                                        style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, cursor: 'pointer' }}>
-                                        <IconBubble icon={Icon} color={PRIMARY} size={36} iconSize={16} />
-                                        <div className="flex-1 min-w-0">
-                                            <p style={{ ...sans, fontSize: '0.8rem', fontWeight: 700, color: INK }}>{link.label}</p>
-                                            <p style={{ ...sans, fontSize: '0.68rem', color: MUTED, marginTop: 1 }}>{link.desc}</p>
-                                        </div>
-                                        <ArrowRight size={13} style={{ color: PRIMARY, flexShrink: 0 }} />
-                                    </button>
-                                );
-                            })}
+                            ))}
                         </div>
                     </section>
                 </div>
-
             </div>
         </div>
     );

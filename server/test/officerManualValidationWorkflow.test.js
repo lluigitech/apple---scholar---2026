@@ -138,6 +138,86 @@ test('Admin cannot make a compliance review decision', async () => {
   assert.equal(queryCount, 0);
 });
 
+test('public Cloudinary-generated PDFs preview from their upload URL', async () => {
+  const originalCloudName = process.env.CLOUDINARY_CLOUD_NAME;
+  const originalPrivateDownloadUrl = cloudinary.utils.private_download_url;
+  const originalFetch = global.fetch;
+  const cloudinaryUrl = 'http://res.cloudinary.com/test-cloud/image/upload/v1795413287/apple-scholar/generated-letters/submission-11.pdf';
+  let fetchedUrl = '';
+  let privateDownloadCalled = false;
+  const responseHeaders = {};
+
+  process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
+  cloudinary.utils.private_download_url = () => {
+    privateDownloadCalled = true;
+    return 'https://res.cloudinary.com/test-cloud/image/authenticated/private_download/submission-11.pdf';
+  };
+  global.fetch = async url => {
+    fetchedUrl = String(url);
+    return {
+      ok: true,
+      headers: { get: name => name === 'content-type' ? 'application/pdf' : null },
+      arrayBuffer: async () => Buffer.from('%PDF-1.4'),
+    };
+  };
+
+  fakeDb.query = (sql, values, callback) => {
+    if (sql.includes('FROM submissions')) {
+      callback(null, [{ scholar_id: 'S12', resource_id: 11, resource_type: 'letter' }]);
+    } else if (sql.includes('FROM privacy_settings')) {
+      callback(null, [{ access_logging: false, privacy_monitoring: false }]);
+    } else if (sql.includes('FROM file_assets')) {
+      callback(null, [{
+        public_id: 'apple-scholar/generated-letters/submission-11',
+        resource_type: 'image',
+        file_format: 'pdf',
+        scholar_id: 'S12',
+      }]);
+    } else if (sql.includes('FROM admin_preferences')) {
+      callback(null, []);
+    } else if (sql.includes('INSERT INTO audit_logs')) {
+      callback(null, { affectedRows: 1 });
+    } else {
+      callback(new Error(`Unexpected query: ${sql}`));
+    }
+  };
+
+  try {
+    let statusCode = 200;
+    let body;
+    const response = await submissionController.previewCloudinaryFile({
+      query: { url: cloudinaryUrl },
+      user: { id: 8, role: 'admin' },
+    }, {
+      status(code) {
+        statusCode = code;
+        return this;
+      },
+      json(value) {
+        body = value;
+      },
+      setHeader(name, value) {
+        responseHeaders[name.toLowerCase()] = value;
+      },
+      send(value) {
+        body = value;
+      },
+    });
+
+    assert.equal(response, undefined);
+    assert.equal(statusCode, 200);
+    assert.ok(Buffer.isBuffer(body));
+    assert.equal(responseHeaders['content-type'], 'application/pdf');
+    assert.equal(fetchedUrl, cloudinaryUrl.replace(/^http:/, 'https:'));
+    assert.equal(privateDownloadCalled, false);
+  } finally {
+    if (originalCloudName === undefined) delete process.env.CLOUDINARY_CLOUD_NAME;
+    else process.env.CLOUDINARY_CLOUD_NAME = originalCloudName;
+    cloudinary.utils.private_download_url = originalPrivateDownloadUrl;
+    global.fetch = originalFetch;
+  }
+});
+
 test('authenticated Cloudinary uploads with stored http URLs preview securely over https', async () => {
   const originalCloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const originalPrivateDownloadUrl = cloudinary.utils.private_download_url;

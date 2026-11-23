@@ -26,7 +26,7 @@ const CONTENT = {
   privacy: {
     en: {
       title: 'Privacy Policy',
-      intro: 'This draft explains how the Apple Scholar portal handles information used to administer the scholarship program. The Kalinga Foundation should review and approve it before treating it as the official policy.',
+      intro: 'This policy explains how the Apple Scholar portal handles information used to administer the scholarship program.',
       sections: [
         {
           title: 'Information in the portal',
@@ -56,7 +56,7 @@ const CONTENT = {
     },
     tl: {
       title: 'Patakaran sa Privacy',
-      intro: 'Ipinapaliwanag ng draft na ito kung paano ginagamit ng Apple Scholar portal ang impormasyong kailangan sa pamamahala ng scholarship program. Dapat itong suriin at aprubahan ng Kalinga Foundation bago ituring na opisyal na patakaran.',
+      intro: 'Ipinapaliwanag ng patakarang ito kung paano ginagamit ng Apple Scholar portal ang impormasyong kailangan sa pamamahala ng scholarship program.',
       sections: [
         {
           title: 'Impormasyong nasa portal',
@@ -88,7 +88,7 @@ const CONTENT = {
   terms: {
     en: {
       title: 'Terms of Use',
-      intro: 'This draft sets basic expectations for using the Apple Scholar portal. The Kalinga Foundation should review and approve it before treating it as the official terms.',
+      intro: 'These terms outline expectations for using the Apple Scholar portal. Follow any scholarship-program guidelines and instructions provided by the Kalinga Foundation.',
       sections: [
         {
           title: 'Authorized use',
@@ -118,7 +118,7 @@ const CONTENT = {
     },
     tl: {
       title: 'Mga Tuntunin sa Paggamit',
-      intro: 'Itinatakda ng draft na ito ang mga batayang inaasahan sa paggamit ng Apple Scholar portal. Dapat itong suriin at aprubahan ng Kalinga Foundation bago ituring na opisyal na mga tuntunin.',
+      intro: 'Inilalarawan ng mga tuntuning ito ang mga inaasahan sa paggamit ng Apple Scholar portal. Sundin din ang mga alituntunin at tagubilin ng Kalinga Foundation para sa scholarship program.',
       sections: [
         {
           title: 'Awtorisadong paggamit',
@@ -185,9 +185,7 @@ const LegalInfoPage = () => {
               </button>
             </div>
 
-            <p className="auth-eyebrow">
-              {isTl ? 'Kalinga Foundation · Draft para sa pagsusuri' : 'Kalinga Foundation · Draft for review'}
-            </p>
+            <p className="auth-eyebrow">Kalinga Foundation</p>
             <h1 className="auth-title" style={display}>{content.title}</h1>
 
             <p className="intro-note">{content.intro}</p>

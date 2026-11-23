@@ -1,4 +1,6 @@
 const db = require('../config/db');
+const { logAuditEvent } = require('../utils/auditLogger');
+const { sendTaskAssignmentEmails } = require('../utils/notifyHelpers');
 const { getAssignedYearLevels, getAllAssignedYearLevels } = require('../utils/officerAssignments');
 const { buildTaskComplianceHTML } = require('../services/taskComplianceTemplate');
 const { generateReportPdf } = require('../services/reportPdfService');
@@ -307,6 +309,53 @@ exports.createTask = async (req, res) => {
   });
 };
 
+exports.notifyTask = (req, res) => {
+  const taskId = Number(req.params.id);
+  if (!Number.isSafeInteger(taskId) || taskId <= 0) {
+    return res.status(400).json({ error: 'Invalid task ID.' });
+  }
+
+  sendTaskAssignmentEmails(taskId, async (error, result) => {
+    if (error) {
+      console.error('Task assignment email notification failed:', error);
+      await logAuditEvent({
+        req,
+        action: 'notify',
+        module: 'Task Assignment',
+        details: `Failed to notify assignees for task ${taskId}: ${error.message || 'notification error'}`,
+        result: 'failed',
+      });
+      return res.status(error.statusCode || 500).json({ error: error.message || 'Unable to send task notifications.' });
+    }
+
+    if (result.error) {
+      const status = result.error === 'SMTP not configured' ? 503
+        : result.error === 'Task not found.' ? 404
+          : 422;
+      await logAuditEvent({
+        req,
+        action: 'notify',
+        module: 'Task Assignment',
+        details: `Task ${taskId} notification was not sent: ${result.error}`,
+        result: 'failed',
+      });
+      return res.status(status).json({ ...result, message: result.error });
+    }
+
+    const message = result.failed_count
+      ? `Sent to ${result.sent_count} recipients; ${result.failed_count} email(s) failed.`
+      : `Task notification sent to ${result.sent_count} recipients.`;
+    await logAuditEvent({
+      req,
+      action: 'notify',
+      module: 'Task Assignment',
+      details: `Notified assignees for task ${taskId}: ${result.sent_count} sent, ${result.failed_count} failed`,
+      result: result.failed_count ? 'failed' : 'success',
+    });
+    return res.json({ ...result, message });
+  });
+};
+
 exports.updateTask = (req, res) => {
   const { id } = req.params;
   const { title, type, dueDate, recurring, instructions, is_active, source, targetYearLevels } = req.body;
@@ -321,9 +370,16 @@ exports.updateTask = (req, res) => {
 exports.deleteTask = (req, res) => {
   const { id } = req.params;
   // Soft-delete
-  db.query('UPDATE tasks SET is_active = 0 WHERE id = ?', [id], (err, result) => {
+  db.query('UPDATE tasks SET is_active = 0 WHERE id = ?', [id], async (err, result) => {
     if (err) return res.status(500).json({ error: 'Error deleting task' });
     if (result.affectedRows === 0) return res.status(404).json({ error: 'Task not found' });
+    await logAuditEvent({
+      req,
+      action: 'delete',
+      module: 'Task Assignment',
+      details: `Removed task ${id}`,
+      result: 'success',
+    });
     res.json({ message: 'Task removed' });
   });
 };

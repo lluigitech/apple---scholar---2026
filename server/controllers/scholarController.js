@@ -594,7 +594,7 @@ exports.getComplianceStatus = (req, res) => {
 
                             res.json({
                                 overall_compliance: score.overallCompliance,
-                                risk_level: getComplianceRiskTier(score.overallCompliance, score.minComplianceNum),
+                                risk_level: getComplianceRiskTier(score.overallCompliance),
                                 total_bonus_points: Number(score.totalBonusPoints || 0),
                                 flags: scholarFlags,
                                 academic_status: academicStatus,

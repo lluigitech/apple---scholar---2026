@@ -997,16 +997,17 @@ exports.previewCloudinaryFile = async (req, res) => {
             db.query('SELECT public_id, resource_type, file_format, scholar_id FROM file_assets WHERE file_url = ? LIMIT 1', [url], (queryErr, rows) => queryErr ? reject(queryErr) : resolve(rows));
         });
         let fetchUrl = url;
-        if (assetRows.length) {
-            if (assetRows[0].scholar_id !== scholarId) {
-                await logPrivacyAccess(req, {
-                    action: 'DENIED_ACCESS',
-                    resourceType: 'scholar_document',
-                    resourceId: fileRows[0].resource_id,
-                    status: 'denied',
-                });
-                return res.status(403).json({ error: 'File ownership does not match its registration.' });
-            }
+        const isAuthenticatedDelivery = parsedUrl.pathname.split('/').includes('authenticated');
+        if (assetRows.length && assetRows[0].scholar_id !== scholarId) {
+            await logPrivacyAccess(req, {
+                action: 'DENIED_ACCESS',
+                resourceType: 'scholar_document',
+                resourceId: fileRows[0].resource_id,
+                status: 'denied',
+            });
+            return res.status(403).json({ error: 'File ownership does not match its registration.' });
+        }
+        if (assetRows.length && isAuthenticatedDelivery) {
             fetchUrl = cloudinary.utils.private_download_url(
                 assetRows[0].public_id,
                 assetRows[0].file_format || 'bin',

@@ -22,6 +22,7 @@ const connection = {
         callback(new Error(`Unexpected query: ${sql}`));
       }
     });
+
   },
   commit(callback) {
     callback(null);
@@ -38,7 +39,7 @@ const fakeDb = {
       callback(null, [{
         displayName: 'Admin',
         email: 'admin@example.org',
-        preferences: JSON.stringify({ sessionTimeout: '30' }),
+        preferences: JSON.stringify({ sessionTimeout: '30', paginationPageSize: 25 }),
         scheduledBackups: 1,
         backupIntervalHours: 24,
         backupRetentionCount: 14,
@@ -94,12 +95,13 @@ const adminController = require('../controllers/adminController');
 delete require.cache[dbPath];
 injectedModules.forEach(path => delete require.cache[path]);
 
-const settingsBody = sessionTimeout => ({
+const settingsBody = (sessionTimeout, paginationPageSize = 10) => ({
   displayName: 'Admin',
   email: 'admin@example.org',
   preferences: {
     timezone: '(GMT+8) Manila, Philippines',
     dateFormat: 'MMMM DD, YYYY',
+    paginationPageSize,
     tableDensity: 'comfortable',
     compactTables: false,
     emailNotifications: true,
@@ -137,6 +139,7 @@ test('administrator settings normalize a previously saved 30-minute timeout to 2
 
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.sessionTimeout, '20');
+  assert.equal(response.body.paginationPageSize, 10);
   assert.equal('language' in response.body, false);
 });
 
@@ -157,6 +160,26 @@ test('administrator settings reject session timeouts outside the configured choi
     const response = await invokeUpdate(settingsBody(timeout));
 
     assert.equal(response.statusCode, 400, `${timeout} minutes should be rejected`);
+    assert.equal(lookupCount, 0);
+  }
+});
+
+test('administrator settings accept page sizes of 10, 20, and 50', async () => {
+  for (const pageSize of [10, 20, 50]) {
+    const response = await invokeUpdate(settingsBody('20', pageSize));
+
+    assert.equal(response.statusCode, 200, `${pageSize} rows should be accepted`);
+    assert.equal(response.body.paginationPageSize, pageSize);
+    assert.equal(savedPreferences.paginationPageSize, pageSize);
+  }
+});
+
+test('administrator settings reject page sizes outside 10, 20, and 50', async () => {
+  for (const pageSize of [0, 5, 25, '20']) {
+    lookupCount = 0;
+    const response = await invokeUpdate(settingsBody('20', pageSize));
+
+    assert.equal(response.statusCode, 400, `${pageSize} rows should be rejected`);
     assert.equal(lookupCount, 0);
   }
 });

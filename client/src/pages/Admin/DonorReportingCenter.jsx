@@ -4,7 +4,7 @@ import {
   Users, Download, X, HeartHandshake, FileText,
   Search, ChevronLeft, ChevronRight, AlertTriangle,
 } from 'lucide-react';
-import { formatAdminMonth } from '../../utils/adminPreferences';
+import { formatAdminMonth, getAdminPageSize } from '../../utils/adminPreferences';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
 /**
@@ -58,8 +58,6 @@ const DOCUMENT_TASK_LABELS = {
 };
 const DOCUMENT_TASK_ORDER = ['Monthly Report', 'COR Upload', 'Report Card', 'Other Documents'];
 const SCHOLAR_REPORT_DOCUMENT_CATEGORIES = ['Monthly Letter', 'Grades', 'COR', 'Other Documents'];
-
-const SCHOLARS_PER_PAGE = 20;
 
 const formatYearLevel = (value) => {
   if (!value) return '—';
@@ -957,7 +955,169 @@ const MonthlyReportModal = ({
     : '';
   const narrative = `During ${monthLabel}, ${totals.totalScholars} active scholars were included in the report. ${completionSummary} ${categorySummary} ${dutySummary} We appreciate your support for Apple Scholar scholars' education and community service.`;
 
-  const handlePrint = () => window.print();
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const handleExportPdf = async () => {
+    setExportingPdf(true);
+    setExportError('');
+    try {
+      const { jsPDF } = await import('jspdf');
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const margin = 44;
+      const contentWidth = pageWidth - margin * 2;
+      let y = margin;
+
+      const ensureSpace = (height) => {
+        if (y + height > pageHeight - margin) {
+          pdf.addPage();
+          y = margin;
+        }
+      };
+      const addParagraph = (text, { size = 9, lineHeight = 13, color = [36, 21, 18], font = 'helvetica', style = 'normal', after = 6 } = {}) => {
+        pdf.setFont(font, style);
+        pdf.setFontSize(size);
+        pdf.setTextColor(...color);
+        const lines = pdf.splitTextToSize(String(text || ''), contentWidth);
+        lines.forEach((line) => {
+          ensureSpace(lineHeight);
+          pdf.text(line, margin, y);
+          y += lineHeight;
+        });
+        y += after;
+      };
+      const addSectionTitle = (title) => {
+        ensureSpace(24);
+        pdf.setFont('times', 'bold');
+        pdf.setFontSize(13);
+        pdf.setTextColor(36, 21, 18);
+        pdf.text(title, margin, y);
+        y += 20;
+      };
+
+      pdf.setFillColor(109, 33, 64);
+      pdf.roundedRect(margin, y, contentWidth, 82, 10, 10, 'F');
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(9);
+      pdf.setTextColor(231, 216, 199);
+      pdf.text('APPLE SCHOLAR FOUNDATION', margin + 18, y + 22);
+      pdf.setFont('times', 'bold');
+      pdf.setFontSize(20);
+      pdf.setTextColor(255, 255, 255);
+      pdf.text('Monthly Donor Summary Report', margin + 18, y + 48);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(10);
+      pdf.setTextColor(243, 233, 221);
+      pdf.text(monthLabel, margin + 18, y + 67);
+      y += 101;
+
+      addParagraph('Prepared for Donor Partners', { size: 9, color: [138, 122, 104], after: 12 });
+
+      const cardGap = 12;
+      const cardWidth = (contentWidth - cardGap) / 2;
+      const cardHeight = 70;
+      kpis.forEach((kpi, index) => {
+        const x = margin + index * (cardWidth + cardGap);
+        pdf.setDrawColor(231, 216, 199);
+        pdf.setFillColor(255, 255, 255);
+        pdf.roundedRect(x, y, cardWidth, cardHeight, 8, 8, 'FD');
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(138, 122, 104);
+        pdf.text(kpi.label.toUpperCase(), x + 12, y + 17);
+        pdf.setFont('times', 'bold');
+        pdf.setFontSize(20);
+        pdf.setTextColor(index === 0 ? 109 : 63, index === 0 ? 33 : 138, index === 0 ? 64 : 85);
+        pdf.text(String(kpi.value), x + 12, y + 42);
+        if (kpi.note) {
+          pdf.setFont('helvetica', 'normal');
+          pdf.setFontSize(7);
+          pdf.setTextColor(138, 122, 104);
+          pdf.text(pdf.splitTextToSize(kpi.note, cardWidth - 24)[0] || '', x + 12, y + 57);
+        }
+      });
+      y += cardHeight + 22;
+
+      addSectionTitle('Donor Summary');
+      addParagraph(narrative, { size: 9, lineHeight: 14 });
+
+      addSectionTitle('Impact Overview');
+      addParagraph(`Monthly document task completion and duty group attendance for ${monthLabel}.`, {
+        size: 9,
+        color: [138, 122, 104],
+        after: 14,
+      });
+
+      addSectionTitle('Document Task Status by Year Level');
+      if (documentTaskLevelData.length) {
+        documentTaskLevelData.forEach((level) => {
+          ensureSpace(34);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(9);
+          pdf.setTextColor(36, 21, 18);
+          pdf.text(level.label, margin, y);
+          y += 14;
+          addParagraph(
+            `Overall: ${level.overallProgress.percent}% (${level.overallProgress.submitted}/${level.overallProgress.eligible} eligible scholars)`,
+            { size: 8, lineHeight: 11, color: [91, 77, 65], after: 2 }
+          );
+          level.documentProgress.forEach((progress) => {
+            addParagraph(
+              `${progress.label}: ${progress.percent}% (${progress.submitted}/${progress.eligible} eligible scholars)`,
+              { size: 8, lineHeight: 11, color: [91, 77, 65], after: 2 }
+            );
+          });
+          y += 6;
+        });
+      } else {
+        addParagraph('No document task assigned for this period.', { size: 9, color: [138, 122, 104] });
+      }
+
+      addSectionTitle('Duty Groups');
+      if (dutyGroupSummaries.length) {
+        dutyGroupSummaries.forEach((group) => {
+          ensureSpace(30);
+          pdf.setFont('helvetica', 'bold');
+          pdf.setFontSize(9);
+          pdf.setTextColor(36, 21, 18);
+          pdf.text(String(group.group_name || 'Unnamed group'), margin, y);
+          y += 14;
+          const attendanceSummary = Object.entries(DUTY_STATUS_STYLES)
+            .map(([status, style]) => `${style.label} ${group.attendanceCounts[status]}`)
+            .join(' | ');
+          addParagraph(`${group.scholars.length} scholars - ${attendanceSummary}`, {
+            size: 8,
+            lineHeight: 11,
+            color: [91, 77, 65],
+            after: 7,
+          });
+        });
+      } else {
+        addParagraph('No group duties scheduled for this month.', { size: 9, color: [138, 122, 104] });
+      }
+
+      const pageCount = pdf.getNumberOfPages();
+      for (let page = 1; page <= pageCount; page += 1) {
+        pdf.setPage(page);
+        pdf.setDrawColor(231, 216, 199);
+        pdf.line(margin, pageHeight - 30, pageWidth - margin, pageHeight - 30);
+        pdf.setFont('helvetica', 'normal');
+        pdf.setFontSize(8);
+        pdf.setTextColor(138, 122, 104);
+        pdf.text(`Apple Scholar Foundation | ${monthLabel}`, margin, pageHeight - 16);
+        pdf.text(`Page ${page} of ${pageCount}`, pageWidth - margin, pageHeight - 16, { align: 'right' });
+      }
+
+      const safeMonth = String(month || 'report').replace(/[^0-9-]/g, '');
+      pdf.save(`monthly-donor-summary-${safeMonth}.pdf`);
+    } catch (error) {
+      console.error('Failed to export monthly donor report:', error);
+      setExportError('Unable to download the PDF. Please try again.');
+    } finally {
+      setExportingPdf(false);
+    }
+  };
 
   const kpis = [
     { label: 'Active Scholars', value: totals.totalScholars, accent: PRIMARY },
@@ -1001,14 +1161,16 @@ const MonthlyReportModal = ({
           </div>
           <div className="flex gap-2">
             <button
-              onClick={handlePrint}
+              onClick={handleExportPdf}
+              disabled={exportingPdf}
               style={{
                 ...body, fontSize: '0.8rem', fontWeight: 600, color: '#fff',
                 border: 'none', borderRadius: 10, padding: '9px 16px', background: PRIMARY,
-                display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 6, cursor: exportingPdf ? 'wait' : 'pointer',
+                opacity: exportingPdf ? 0.7 : 1,
               }}
             >
-              <Download size={14} /> Export PDF
+              <Download size={14} /> {exportingPdf ? 'Preparing PDF…' : 'Export PDF'}
             </button>
             <button
               onClick={onClose}
@@ -1023,6 +1185,12 @@ const MonthlyReportModal = ({
             </button>
           </div>
         </div>
+
+        {exportError && (
+          <p role="alert" style={{ ...body, padding: '10px 24px', color: DANGER, fontSize: '0.8rem' }}>
+            {exportError}
+          </p>
+        )}
 
         <div id="monthly-report-printable" style={{ background: '#EFE7DA', padding: '20px 0', maxHeight: '78vh', overflowY: 'auto' }}>
           {/* Page 1 — Executive cover */}
@@ -1097,7 +1265,8 @@ const MonthlyReportModal = ({
 // Main page
 // ---------------------------------------------------------------------------
 
-const AdminDonorPage = () => {
+const DonorReportingCenter = () => {
+  const pageSize = getAdminPageSize();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [yearLevel, setYearLevel] = useState('');
   const [rows, setRows] = useState([]);
@@ -1148,11 +1317,11 @@ const AdminDonorPage = () => {
     });
   }, [rows, scholarSearch, scholarGradeFilter]);
 
-  const scholarPageCount = Math.max(1, Math.ceil(filteredScholarRows.length / SCHOLARS_PER_PAGE));
-  const pageStart = (scholarPage - 1) * SCHOLARS_PER_PAGE;
+  const scholarPageCount = Math.max(1, Math.ceil(filteredScholarRows.length / pageSize));
+  const pageStart = (scholarPage - 1) * pageSize;
   const paginatedScholarRows = useMemo(
-    () => filteredScholarRows.slice(pageStart, pageStart + SCHOLARS_PER_PAGE),
-    [filteredScholarRows, pageStart]
+    () => filteredScholarRows.slice(pageStart, pageStart + pageSize),
+    [filteredScholarRows, pageStart, pageSize]
   );
 
   const totals = { totalScholars: rows.length };
@@ -1489,7 +1658,7 @@ const AdminDonorPage = () => {
 
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ marginTop: 14 }}>
                     <span style={{ ...body, fontSize: '0.8rem', color: MUTED }}>
-                      Showing {pageStart + 1}–{Math.min(pageStart + SCHOLARS_PER_PAGE, filteredScholarRows.length)} of {filteredScholarRows.length} scholar{filteredScholarRows.length === 1 ? '' : 's'}
+                      Showing {pageStart + 1}–{Math.min(pageStart + pageSize, filteredScholarRows.length)} of {filteredScholarRows.length} scholar{filteredScholarRows.length === 1 ? '' : 's'}
                     </span>
                     {scholarPageCount > 1 && (
                       <nav aria-label="Scholar pages" className="flex items-center gap-1.5 flex-wrap">
@@ -1570,4 +1739,4 @@ const AdminDonorPage = () => {
   );
 };
 
-export default AdminDonorPage;  
+export default DonorReportingCenter;

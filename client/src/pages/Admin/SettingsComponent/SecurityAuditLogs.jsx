@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
   Shield, Download, Search, Eye, FileText, Users, LogIn, LogOut, CheckCircle, XCircle, Upload, Activity,
-  Clock, ChevronLeft, ChevronRight, AlertTriangle, Pencil, Plus,
+  Clock, ChevronLeft, ChevronRight, AlertTriangle, Pencil, Plus, Send,
 } from 'lucide-react';
-import { formatAdminDateTime } from '../../../utils/adminPreferences';
+import { formatAdminDateTime, getAdminPageSize } from '../../../utils/adminPreferences';
 import AdminPageHeader from '../../../components/Admin/AdminPageHeader';
 
 const API_BASE = (import.meta.env?.VITE_API_URL || 'http://localhost:5000').replace(/\/+$/, '');
@@ -23,9 +23,6 @@ const SUCCESS      = '#6B8F71';
 const WARNING      = '#C08A3E';
 const DANGER       = '#A24A4A';
 const RADIUS       = 16;
-const PAGE_SIZE    = 10;
-const PRIVACY_PAGE_SIZE = 50;
-
 const serif = { fontFamily: "'Playfair Display', serif" };
 const sans  = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
 
@@ -40,6 +37,7 @@ const actionConfig = {
   reject:   { icon: XCircle,     label: 'Return'   },
   edit:     { icon: FileText,    label: 'Edit'     },
   update:   { icon: Pencil,      label: 'Update'   },
+  notify:   { icon: Send,        label: 'Notify'   },
   create:   { icon: Plus,        label: 'Create'   },
   delete:   { icon: XCircle,     label: 'Delete'   },
   export:   { icon: Download,    label: 'Export'   },
@@ -194,6 +192,7 @@ const LoadingSkeleton = () => (
 );
 
 const SecurityAuditLogs = ({ embedded = false }) => {
+  const pageSize = getAdminPageSize();
   const [auditData, setAuditData] = useState([]);
   const [privacyLogs, setPrivacyLogs] = useState([]);
   const [privacyLogsPage, setPrivacyLogsPage] = useState(1);
@@ -254,7 +253,7 @@ const SecurityAuditLogs = ({ embedded = false }) => {
     if (privacyLogsPage > 1) setPrivacyLoadingMore(true);
     axios.get(`${API}/admin/privacy/logs`, {
       ...getAuthHeaders(),
-      params: { page: privacyLogsPage, pageSize: PRIVACY_PAGE_SIZE, roles: 'admin,staff,officer' },
+      params: { page: privacyLogsPage, pageSize, roles: 'admin,staff,officer' },
     }).then(({ data }) => {
       if (!mounted) return;
       const rows = data.data || [];
@@ -273,7 +272,7 @@ const SecurityAuditLogs = ({ embedded = false }) => {
       if (mounted) setPrivacyLoadingMore(false);
     });
     return () => { mounted = false; };
-  }, [privacyLogsPage]);
+  }, [privacyLogsPage, pageSize]);
 
   // One display model for both sources (presentation only — the sources stay separate).
   const unified = useMemo(() => {
@@ -329,10 +328,10 @@ const SecurityAuditLogs = ({ embedded = false }) => {
 
   useEffect(() => { setPage(1); }, [search, activityType, roleFilter, actionFilter, resultFilter]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const pageRows = filtered.slice(start, start + PAGE_SIZE);
+  const start = (currentPage - 1) * pageSize;
+  const pageRows = filtered.slice(start, start + pageSize);
 
   const exportCSV = () => {
     const quote = (value) => `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -477,7 +476,9 @@ const SecurityAuditLogs = ({ embedded = false }) => {
           </FilterSelect>
           <FilterSelect label="Action" value={actionFilter} onChange={setActionFilter}>
             <option value="all">All Actions</option>
-            {Object.entries(actionConfig).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+            {Object.entries(actionConfig)
+              .filter(([key]) => !['submit', 'approve', 'reject', 'update'].includes(key))
+              .map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </FilterSelect>
           <FilterSelect label="Result" value={resultFilter} onChange={setResultFilter}>
             <option value="all">All Results</option>
@@ -542,7 +543,7 @@ const SecurityAuditLogs = ({ embedded = false }) => {
             {/* Pagination */}
             <div className="flex flex-wrap items-center justify-between gap-3" style={{ marginTop: 14 }}>
               <span style={{ ...sans, fontSize: '0.8rem', color: MUTED }}>
-                Showing {start + 1}–{Math.min(start + PAGE_SIZE, filtered.length)} of {filtered.length} event{filtered.length === 1 ? '' : 's'}
+                Showing {start + 1}–{Math.min(start + pageSize, filtered.length)} of {filtered.length} event{filtered.length === 1 ? '' : 's'}
               </span>
               <nav className="flex items-center gap-1.5" aria-label="Pagination">
                 <button type="button" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}

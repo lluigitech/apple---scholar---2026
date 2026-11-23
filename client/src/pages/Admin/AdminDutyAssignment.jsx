@@ -6,13 +6,11 @@ import {
   Clock, FilterX, Info, Loader2, MapPin, MoreHorizontal, Plus,
   Search, Send, Trash2, Users, X,
 } from 'lucide-react';
-import { formatAdminDate } from '../../utils/adminPreferences';
+import { formatAdminDate, getAdminPageSize } from '../../utils/adminPreferences';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
 const API = `${API_ORIGIN}/api`;
 const authHeaders = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } });
-const PAGE_SIZE = 10;
-
 // ── Apple Scholar Admin Portal design system (same tokens as Task Assignment) ──
 const BG = '#F7F4EE';
 const CARD = '#FFFDF9';
@@ -138,7 +136,7 @@ const KpiCard = ({ icon: Icon, label, value, caption, footer, accent = PRIMARY, 
 const STATUS_STYLES = {
   upcoming: { label: 'Upcoming', bg: '#E4F1E6', color: SUCCESS },
   today:    { label: 'Today',    bg: '#F6E3E9', color: '#8E2E4E' },
-  past:     { label: 'Past',     bg: '#EFE9DF', color: MUTED },
+  past:     { label: 'Closed',   bg: '#EFE9DF', color: MUTED },
   unknown:  { label: 'No date',  bg: '#EFE9DF', color: MUTED },
 };
 const StatusBadge = ({ status }) => {
@@ -330,6 +328,7 @@ const CloseButton = ({ onClick }) => (
 // ─── Main component ─────────────────────────────────────────────────────────
 
 const AdminDutyAssignment = () => {
+  const pageSize = getAdminPageSize();
   const [duties, setDuties] = useState([]);
   const [groups, setGroups] = useState([]);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -584,9 +583,9 @@ const AdminDutyAssignment = () => {
 
   useEffect(() => { setPage(1); }, [search, statusFilter, groupFilter, dateFrom, dateTo]);
 
-  const totalPages = Math.max(1, Math.ceil(filteredDuties.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(filteredDuties.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const paginatedDuties = filteredDuties.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const paginatedDuties = filteredDuties.slice((currentPage - 1) * pageSize, currentPage * pageSize);
   const filtersActive = search !== '' || statusFilter !== 'all' || groupFilter !== 'all' || dateFrom !== '' || dateTo !== '';
 
   const clearFilters = () => {
@@ -677,7 +676,7 @@ const AdminDutyAssignment = () => {
                   options={[
                     { value: 'all', label: 'All', count: duties.length },
                     { value: 'upcoming', label: 'Upcoming', count: upcomingCount },
-                    { value: 'past', label: 'Past', count: pastCount },
+                    { value: 'past', label: 'Closed', count: pastCount },
                   ]}
                 />
                 <ChipSelect
@@ -705,7 +704,7 @@ const AdminDutyAssignment = () => {
             <p style={{ ...body, fontSize: '0.74rem', color: MUTED }}>
               Showing{' '}
               <strong style={{ color: INK }}>
-                {filteredDuties.length === 0 ? 0 : `${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, filteredDuties.length)}`}
+                {filteredDuties.length === 0 ? 0 : `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filteredDuties.length)}`}
               </strong>{' '}
               of <strong style={{ color: INK }}>{duties.length}</strong> {duties.length === 1 ? 'duty' : 'duties'}
             </p>
@@ -755,7 +754,7 @@ const AdminDutyAssignment = () => {
                 </thead>
                 <tbody>
                   {loading ? <SkeletonRows /> : paginatedDuties.map((duty, idx) => {
-                    const rowNumber = (currentPage - 1) * PAGE_SIZE + idx + 1;
+                    const rowNumber = (currentPage - 1) * pageSize + idx + 1;
                     const cell = { padding: '16px', verticalAlign: 'middle', borderTop: idx === 0 ? 'none' : `1px solid ${BORDER}`, transition: 'background .15s ease' };
                     return (
                       <tr key={duty.id} className="ad-row">
@@ -797,10 +796,10 @@ const AdminDutyAssignment = () => {
           )}
 
           {/* ── Pagination ── */}
-          {!loading && filteredDuties.length > PAGE_SIZE && (
+          {!loading && filteredDuties.length > pageSize && (
             <div className="flex items-center justify-between flex-wrap gap-3" style={{ padding: '14px 20px', borderTop: `1px solid ${BORDER}` }}>
               <p style={{ ...body, fontSize: '0.78rem', color: MUTED }}>
-                Showing {(currentPage - 1) * PAGE_SIZE + 1}–{Math.min(currentPage * PAGE_SIZE, filteredDuties.length)} of {filteredDuties.length} duties
+                Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredDuties.length)} of {filteredDuties.length} duties
               </p>
               <div className="flex items-center gap-1.5">
                 <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}

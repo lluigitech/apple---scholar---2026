@@ -3,7 +3,7 @@ import { getPasswordRequirementError, hasRequiredPasswordSymbol, isValidPassword
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
-  User, Mail, Phone, Hash, GraduationCap, Lock, KeyRound, Bell, CalendarDays, Settings,
+  User, Mail, Phone, Hash, GraduationCap, Lock, KeyRound, Bell,
   Eye, EyeOff, CheckCircle2, AlertTriangle, Save, Check, Circle, X,
   ClipboardList, ClipboardCheck, Megaphone, CalendarClock, ShieldCheck,
 } from 'lucide-react';
@@ -39,7 +39,7 @@ const authHeader = () => {
 
 /* ── Same tokens as the Staff / Officer settings ── */
 const BG = '#F7F4EE', SURFACE = '#FFFDF9', BORDER = '#E7D8C7', PRIMARY = '#6D2140', DEEP = '#4A1730';
-const BRONZE = '#A9784E', SUCCESS = '#6B8F71', WARNING = '#C08A3E', DANGER = '#C0473F', INK = '#241512', MUTED = '#8A7A68';
+const BRONZE = '#A9784E', GOLD = '#B98B4E', SUCCESS = '#6B8F71', WARNING = '#C08A3E', DANGER = '#C0473F', INK = '#241512', MUTED = '#8A7A68';
 const BLUSH = '#F3EAE2';
 const serif = { fontFamily: "'Playfair Display', serif" };
 const sans = { fontFamily: "'Inter', sans-serif" };
@@ -370,7 +370,6 @@ const ScholarSettings = () => {
   };
 
   const yearLabel = YEAR_LEVEL_OPTIONS.find(o => o.value === profile.yearLevel)?.label || 'Not set';
-  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
 
   const pwInput = (k, id, label, autoComplete, error) => (
     <IconInput id={id} icon={Lock} label={label} error={error}>
@@ -396,29 +395,32 @@ const ScholarSettings = () => {
         @media (min-width: 1024px) { .ss-nrow:nth-child(2) { border-top: none; } }
       `}</style>
 
-      <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8" style={{ minWidth: 0 }}>
+      <div className="flex flex-col gap-4 px-3 py-3 sm:px-6 sm:py-6 lg:p-8" style={{ minWidth: 0 }}>
 
-        {/* ── Header ── */}
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-[1fr_auto]">
-          <div className="relative flex items-center gap-4 overflow-hidden" style={{ ...tile, padding: '22px 24px', background: `linear-gradient(135deg, ${SURFACE} 0%, ${BLUSH} 100%)` }}>
-            <span aria-hidden style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${PRIMARY}, ${BRONZE})` }} />
-            <IconChip icon={Settings} size={46} />
-            <div style={{ minWidth: 0 }}>
-              <p style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.1em', color: BRONZE }}>SCHOLAR PORTAL</p>
-              <h1 style={{ ...serif, fontSize: '1.75rem', fontWeight: 700, color: PRIMARY, marginTop: 4, lineHeight: 1.2 }}>Settings</h1>
-              <p style={{ ...sans, fontSize: '0.84rem', color: MUTED, marginTop: 6, maxWidth: 640 }}>Manage your account, security, and notification preferences.</p>
-            </div>
+        {/* ── Page header — same pattern as the Submission page ── */}
+        <header
+          className="flex items-start justify-between gap-3 flex-wrap p-4 sm:p-6"
+          style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 18 }}
+        >
+          <div className="min-w-0">
+            <p style={{ ...sans, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', color: GOLD }}>SCHOLAR PORTAL</p>
+            <h1 style={{ ...serif, fontWeight: 600, color: INK, marginTop: 2, lineHeight: 1.2 }} className="text-[1.4rem] sm:text-[1.7rem]">Settings</h1>
+            <p style={{ ...sans, color: MUTED, marginTop: 6, maxWidth: 480, lineHeight: 1.55 }} className="text-[0.82rem] sm:text-[0.86rem]">
+              Manage your account, security, and notification preferences.
+            </p>
           </div>
-          <div className="flex items-center gap-3" style={{ ...tile, padding: '16px 24px' }}>
-            <span className="inline-flex flex-shrink-0 items-center justify-center" style={{ width: 42, height: 42, borderRadius: 12, background: `${PRIMARY}10` }}>
-              <CalendarDays size={19} style={{ color: PRIMARY }} />
-            </span>
-            <div>
-              <p style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>Today</p>
-              <p style={{ ...sans, fontSize: '0.92rem', fontWeight: 600, color: INK, whiteSpace: 'nowrap' }}>{todayLabel}</p>
-            </div>
-          </div>
-        </div>
+          <span
+            className="inline-flex items-center justify-center gap-2 flex-shrink-0"
+            style={{
+              ...sans, fontSize: '0.78rem', fontWeight: 700, color: '#4F7A5A',
+              background: `${SUCCESS}1f`, border: `1px solid ${SUCCESS}55`,
+              borderRadius: 999, padding: '8px 16px', textTransform: 'capitalize', whiteSpace: 'nowrap',
+            }}
+          >
+            <span aria-hidden style={{ width: 8, height: 8, borderRadius: '50%', background: SUCCESS, boxShadow: `0 0 0 3px ${SUCCESS}33` }} />
+            {profile.status || 'Active'}
+          </span>
+        </header>
 
         {loadError && <Banner tone="error">{loadError}</Banner>}
         {pwDone && (

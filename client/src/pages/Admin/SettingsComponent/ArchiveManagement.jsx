@@ -5,7 +5,7 @@ import {
     Archive, Download, Eye, RotateCcw, Trash2, Search, ShieldCheck, FileText,
     Clock3, AlertTriangle, GraduationCap, Info, X, Database, Users,
 } from 'lucide-react';
-import { formatAdminDate } from '../../../utils/adminPreferences';
+import { formatAdminDate, getAdminPageSize } from '../../../utils/adminPreferences';
 import AdminPageHeader from '../../../components/Admin/AdminPageHeader';
 
 const API = `${API_ORIGIN}/api`;
@@ -97,7 +97,6 @@ const COMPLIANCE_META = {
     noncompliant: { label: 'Non-compliant', color: DANGER, tint: DANGER_TINT },
 };
 
-const PAGE_SIZE = 8;
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const EXPIRING_YEARS = 0.5; // "within 6 months"
 const RETENTION_YEARS = 3;
@@ -300,6 +299,7 @@ const FilterField = ({ label, children, style }) => (
 
 /* ════════════════════════════════════════════════════════════════ */
 export default function ArchiveManagement() {
+    const pageSize = getAdminPageSize();
     const role = (localStorage.getItem('role') || '').toLowerCase();
 
     const [tab, setTab] = useState('users'); // 'users' | 'documents'
@@ -552,9 +552,9 @@ export default function ArchiveManagement() {
     }, [userRows, sSearch, sRole, sYear, sStatus, sArchYear, sCompliance, complianceAvailable]);
 
     const paginate = (list, page) => {
-        const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
-        const start = (Math.min(page, pages) - 1) * PAGE_SIZE;
-        return { items: list.slice(start, start + PAGE_SIZE), pages, from: list.length ? start + 1 : 0, to: Math.min(start + PAGE_SIZE, list.length) };
+        const pages = Math.max(1, Math.ceil(list.length / pageSize));
+        const start = (Math.min(page, pages) - 1) * pageSize;
+        return { items: list.slice(start, start + pageSize), pages, from: list.length ? start + 1 : 0, to: Math.min(start + pageSize, list.length) };
     };
     const sPaged = paginate(filteredUsers, sPage);
     // Document type options come from the real archived documents (not typed free-form).

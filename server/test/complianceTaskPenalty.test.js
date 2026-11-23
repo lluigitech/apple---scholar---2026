@@ -327,18 +327,20 @@ test('overdue assigned tasks still incur penalties when the scholar has no prior
   assert.equal(score.deductions.missedSubmission.points, 5 * defaults.missed_submission_deduction);
 });
 
-test('risk bands classify scores below the configured minimum as high risk', () => {
-  assert.equal(getComplianceRiskTier(70, 70), 'low');
-  assert.equal(getComplianceRiskTier(69.99, 70), 'high');
-  assert.equal(getComplianceRiskTier(50, 70), 'high');
-  assert.equal(getComplianceRiskTier(49.99, 70), 'high');
+test('risk bands classify compliance scores as low, medium, or high', () => {
+  assert.equal(getComplianceRiskTier(91), 'low');
+  assert.equal(getComplianceRiskTier(81), 'low');
+  assert.equal(getComplianceRiskTier(75), 'low');
+  assert.equal(getComplianceRiskTier(74.99), 'medium');
+  assert.equal(getComplianceRiskTier(50), 'medium');
+  assert.equal(getComplianceRiskTier(49.99), 'high');
+  assert.equal(getComplianceRiskTier(0), 'high');
+  assert.equal(getComplianceRiskTier(null), null);
 
-  assert.deepEqual(getComplianceRiskThresholds(60), {
-    lowRiskMinCompliance: 60,
+  assert.deepEqual(getComplianceRiskThresholds(), {
+    lowRiskMinCompliance: 75,
+    mediumRiskMinCompliance: 50,
   });
-  assert.equal(getComplianceRiskTier(60, 60), 'low');
-  assert.equal(getComplianceRiskTier(59.99, 60), 'high');
-  assert.equal(getComplianceRiskTier(39.99, 60), 'high');
 });
 
 test('a lone overdue task deducts points but does not immediately trigger a compliance flag', () => {
@@ -352,7 +354,7 @@ test('a lone overdue task deducts points but does not immediately trigger a comp
       qualityDrop: { avgQuality: 100 },
     },
   };
-  assert.equal(getComplianceRiskTier(score.overallCompliance, 50), 'low');
+  assert.equal(getComplianceRiskTier(score.overallCompliance), 'low');
   assert.equal(hasNonOverdueComplianceViolation(score), false);
 
   assert.equal(hasNonOverdueComplianceViolation({

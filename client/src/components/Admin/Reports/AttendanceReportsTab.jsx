@@ -3,7 +3,7 @@ import {
   Download, FileText, Search, ChevronLeft, ChevronRight, CalendarCheck, List, Calendar as CalendarIcon, ChevronDown,
 } from 'lucide-react';
 import { formatYearLevelLabel } from '../../../utils/yearLevelLabels';
-import { formatAdminDate, formatAdminMonth, getAdminLocale, getAdminTimezone } from '../../../utils/adminPreferences';
+import { formatAdminDate, formatAdminMonth, getAdminLocale, getAdminPageSize, getAdminTimezone } from '../../../utils/adminPreferences';
 
 // ── Design tokens — "Apple Scholar Executive" system ──
 const PRIMARY = '#6D2140';
@@ -14,8 +14,6 @@ const INK = '#241512';
 const MUTED = '#8A7A68';
 const DANGER = '#A24A4A';
 const RADIUS = 16;
-const PAGE_SIZE = 10;
-
 const display = { fontFamily: "'Playfair Display', Georgia, 'Times New Roman', serif" };
 const body = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
 const mono = { fontFamily: "ui-monospace, 'SFMono-Regular', Menlo, monospace" };
@@ -115,6 +113,7 @@ export default function AttendanceReportsTab({
   onExport,
   onExportPdf,
 }) {
+  const pageSize = getAdminPageSize();
   const [search, setSearch] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -152,10 +151,10 @@ export default function AttendanceReportsTab({
 
   useEffect(() => { setPage(1); }, [search, groupFilter, yearLevel, statusFilter, filters.month, data.length]);
 
-  const totalPages = Math.max(1, Math.ceil(visibleRecords.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(visibleRecords.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const pageRows = visibleRecords.slice(start, start + PAGE_SIZE);
+  const start = (currentPage - 1) * pageSize;
+  const pageRows = visibleRecords.slice(start, start + pageSize);
 
   useEffect(() => {
     if (previousMonth.current === filters.month) return;
@@ -366,7 +365,7 @@ export default function AttendanceReportsTab({
               {/* ── Pagination ── */}
               <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 4px 4px' }}>
                 <span style={{ ...body, fontSize: '0.8rem', color: MUTED }}>
-                  Showing {start + 1}–{Math.min(start + PAGE_SIZE, visibleRecords.length)} of {visibleRecords.length} record{visibleRecords.length === 1 ? '' : 's'}
+                  Showing {start + 1}–{Math.min(start + pageSize, visibleRecords.length)} of {visibleRecords.length} record{visibleRecords.length === 1 ? '' : 's'}
                 </span>
                 <nav className="flex items-center gap-1.5" aria-label="Pagination">
                   <button

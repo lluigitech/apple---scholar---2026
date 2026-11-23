@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Search, ChevronLeft, ChevronRight, FolderOpen, Download, FileSpreadsheet, FileText, Eye, X, Printer, ExternalLink, Archive, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { formatYearLevelLabel } from '../../../utils/yearLevelLabels';
 import { downloadReportSummaryPdf, monthPeriodLabel } from '../../../utils/reportPdfExport';
-import { formatAdminDate, getAdminLocale, getAdminTimezone } from '../../../utils/adminPreferences';
+import { formatAdminDate, getAdminLocale, getAdminPageSize, getAdminTimezone } from '../../../utils/adminPreferences';
 import FilePreviewModal from '../../Officer/ManualValidation/FilePreviewModal';
 import { fileKind } from '../../../utils/submissionHelpers';
 
@@ -47,8 +47,6 @@ const MUTED = '#8A7A68';
 const BRONZE = '#A9784E';
 const DANGER = '#C0473F';
 const RADIUS = 16;
-const PAGE_SIZE = 10;
-
 const display = { fontFamily: "'Playfair Display', Georgia, 'Times New Roman', serif" };
 const body = { fontFamily: "'Inter', 'Segoe UI', sans-serif" };
 
@@ -312,6 +310,7 @@ export default function MonthlyReportsTab({
   onRefresh,
   onSelectReport,
 }) {
+  const pageSize = getAdminPageSize();
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const [docType, setDocType] = useState('all');
@@ -348,10 +347,10 @@ export default function MonthlyReportsTab({
 
   useEffect(() => { setPage(1); setSelected(new Set()); }, [searchTerm, month, yearLevel, statusFilter, docType, filteredReports.length]);
 
-  const totalPages = Math.max(1, Math.ceil(searchedReports.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(searchedReports.length / pageSize));
   const currentPage = Math.min(page, totalPages);
-  const start = (currentPage - 1) * PAGE_SIZE;
-  const pageRows = searchedReports.slice(start, start + PAGE_SIZE);
+  const start = (currentPage - 1) * pageSize;
+  const pageRows = searchedReports.slice(start, start + pageSize);
 
   useEffect(() => {
     if (!pdfPreview) return undefined;
@@ -885,7 +884,7 @@ export default function MonthlyReportsTab({
               {/* ── Pagination ── */}
               <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 4px 4px' }}>
                 <span style={{ ...body, fontSize: '0.8rem', color: MUTED }}>
-                  Showing {start + 1}–{Math.min(start + PAGE_SIZE, searchedReports.length)} of {searchedReports.length} submission{searchedReports.length === 1 ? '' : 's'}{selected.size > 0 ? ` · ${selected.size} selected` : ''}
+                  Showing {start + 1}–{Math.min(start + pageSize, searchedReports.length)} of {searchedReports.length} submission{searchedReports.length === 1 ? '' : 's'}{selected.size > 0 ? ` · ${selected.size} selected` : ''}
                 </span>
                 <nav className="flex items-center gap-1.5" aria-label="Pagination">
                   <button

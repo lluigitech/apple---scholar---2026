@@ -49,23 +49,19 @@ const calculateConsecutiveEarlyMonths = (earlyMonthSet, todayDate) => {
     return count;
 };
 
-const getComplianceRiskThresholds = (minimumCompliance = defaults.min_compliance) => {
-    const parsedMinimum = Number(minimumCompliance);
-    const lowRiskMinCompliance = Number.isFinite(parsedMinimum)
-        ? Math.max(0, Math.min(100, parsedMinimum))
-        : Number(defaults.min_compliance);
+const getComplianceRiskThresholds = () => ({
+    lowRiskMinCompliance: 75,
+    mediumRiskMinCompliance: 50,
+});
 
-    return {
-        lowRiskMinCompliance,
-    };
-};
-
-const getComplianceRiskTier = (overallCompliance, minimumCompliance = defaults.min_compliance) => {
+const getComplianceRiskTier = (overallCompliance) => {
+    if (overallCompliance === null || overallCompliance === undefined || overallCompliance === '') return null;
     const score = Number(overallCompliance);
     if (!Number.isFinite(score)) return null;
 
-    const { lowRiskMinCompliance } = getComplianceRiskThresholds(minimumCompliance);
-    return score >= lowRiskMinCompliance ? 'low' : 'high';
+    if (score >= 75) return 'low';
+    if (score >= 50) return 'medium';
+    return 'high';
 };
 
 const hasNonOverdueComplianceViolation = (score) => {

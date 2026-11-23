@@ -13,7 +13,7 @@ import {
 import FilePreviewModal from '../../components/Officer/ManualValidation/FilePreviewModal';
 import { formatDuration, getDutyHours } from '../../utils/dutyHelpers.js';
 import { fileKind } from '../../utils/submissionHelpers';
-import { formatAdminDate } from '../../utils/adminPreferences';
+import { formatAdminDate, getAdminPageSize } from '../../utils/adminPreferences';
 
 // ── Executive design tokens ──────────────────────────────────────
 const BG           = '#F7F4EE';
@@ -29,8 +29,6 @@ const WARNING      = '#C08A3E';
 const DANGER       = '#A24A4A';
 const RADIUS       = 16;
 const SHADOW       = '0 1px 2px rgba(74, 23, 48, 0.04), 0 6px 18px rgba(74, 23, 48, 0.04)';
-const GRADE_SUBJECTS_PER_PAGE = 5;
-
 const serif = { fontFamily: "'Playfair Display', serif" };
 const sans  = { fontFamily: "'Inter', sans-serif" };
 const numeric = { ...serif, fontVariantNumeric: 'lining-nums tabular-nums', fontFeatureSettings: '"lnum" 1, "tnum" 1' };
@@ -194,11 +192,12 @@ const getEntryIcon = (submission) => {
 };
 
 const SubjectList = ({ subjects, scale }) => {
+    const pageSize = getAdminPageSize();
     const [page, setPage] = useState(1);
-    const totalPages = Math.max(1, Math.ceil(subjects.length / GRADE_SUBJECTS_PER_PAGE));
+    const totalPages = Math.max(1, Math.ceil(subjects.length / pageSize));
     const currentPage = Math.min(page, totalPages);
-    const start = (currentPage - 1) * GRADE_SUBJECTS_PER_PAGE;
-    const pageSubjects = subjects.slice(start, start + GRADE_SUBJECTS_PER_PAGE);
+    const start = (currentPage - 1) * pageSize;
+    const pageSubjects = subjects.slice(start, start + pageSize);
     const pagerButtonStyle = (disabled) => ({
         ...sans, fontSize: '0.75rem', fontWeight: 600, color: PRIMARY, background: SURFACE,
         border: `1px solid ${BORDER}`, borderRadius: 8, padding: '8px 11px',
@@ -228,7 +227,7 @@ const SubjectList = ({ subjects, scale }) => {
             {totalPages > 1 && (
                 <div className="flex flex-col gap-2 mt-3 pt-3 sm:flex-row sm:items-center sm:justify-between" style={{ borderTop: `1px solid ${BORDER}` }}>
                     <span style={{ ...sans, fontSize: '0.75rem', color: MUTED }}>
-                        Showing {start + 1}–{Math.min(start + GRADE_SUBJECTS_PER_PAGE, subjects.length)} of {subjects.length} subjects
+                        Showing {start + 1}–{Math.min(start + pageSize, subjects.length)} of {subjects.length} subjects
                     </span>
                     <div className="flex flex-wrap items-center gap-2">
                         <button type="button" onClick={() => setPage(currentPage - 1)} disabled={currentPage === 1} style={pagerButtonStyle(currentPage === 1)}>Previous</button>
@@ -715,10 +714,11 @@ const ScholarProfileView = () => {
     const riskScore = flaggedRecord?.risk_score ?? compliance?.risk_score ?? null;
     const risk = {
         level: riskLevel === 'high' ? 'High Risk'
-            : riskLevel === 'low' ? 'Medium Risk' : 'Unavailable',
+            : riskLevel === 'medium' ? 'Medium Risk'
+                : riskLevel === 'low' ? 'Low Risk' : 'Unavailable',
         color: riskLevel === 'high' ? DANGER
             : riskLevel === 'medium' ? WARNING
-                : riskLevel === 'low' ? WARNING : MUTED,
+                : riskLevel === 'low' ? SUCCESS : MUTED,
     };
     const liveFlags = flaggedRecord?.flags || [];
     const riskDeductions = flaggedRecord?.deductions

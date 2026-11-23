@@ -21,7 +21,7 @@ import TeamAssignments from './pages/Admin/TeamAssignments';
 import AdminTaskAssignmentBoard from './pages/Admin/AdminTaskAssignmentBoard';
 import ScholarProfileView from './pages/Admin/ScholarProfileView';
 import MonthlyReportYearLevelPage from './pages/Admin/MonthlyReportYearLevelPage';
-import AdminDonorPage from './pages/Admin/AdminDonorPage';
+import DonorReportingCenter from './pages/Admin/DonorReportingCenter';
 import AdminLayout from './components/Admin/AdminLayout';
 import FlaggedScholars from './pages/Admin/FlaggedScholars';
 
@@ -165,7 +165,7 @@ function App() {
           } />
           <Route path="/admin/donor" element={
             <ProtectedRoute allowedRoles="admin">
-              <AdminLayout><AdminDonorPage /></AdminLayout>
+              <AdminLayout><DonorReportingCenter /></AdminLayout>
             </ProtectedRoute>
           } />
           <Route path="/admin/security" element={

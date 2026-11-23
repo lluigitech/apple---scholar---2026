@@ -247,11 +247,10 @@ const GlobalStyle = () => (
         @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap');
 
         @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes card-slide-up {
-            from { opacity: 0; transform: translateY(18px); }
-            to   { opacity: 1; transform: translateY(0); }
+        html, body, #root {
+            width: 100%; height: 100%; min-height: 100%; margin: 0; overflow: hidden;
+            background: linear-gradient(170deg, #FFFDF9 0%, #F6E9E1 28%, #B25A78 62%, ${PRIMARY} 85%, ${PRIMARY_DEEP} 100%);
         }
-
         .login-root {
             --logo-w: clamp(78px, 15vh, 124px);
             --pad-y: clamp(14px, 3vh, 28px);
@@ -259,18 +258,16 @@ const GlobalStyle = () => (
             --gap: clamp(8px, 1.6vh, 14px);
             --input-h: clamp(38px, 5.8vh, 48px);
             --title-fs: clamp(22px, 4.4vh, 32px);
-            position: relative; width: 100%;
-            min-height: 100vh; min-height: 100dvh;
-            overflow-x: clip;
+            position: fixed; inset: 0; width: 100%; height: 100vh; height: 100svh;
+            min-height: 0; box-sizing: border-box; overflow: hidden;
             background: linear-gradient(115deg, #FFFDF9 0%, #F6E9E1 30%, #B25A78 66%, #6D2140 84%, ${PRIMARY_DEEP} 100%);
-            background-attachment: fixed;
         }
-        .login-bg { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+        .login-bg { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
         .bg-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
 
         .login-inner {
             position: relative; z-index: 1;
-            min-height: 100vh; min-height: 100dvh;
+            width: 100%; height: 100%; min-height: 0;
             display: flex; flex-direction: column; align-items: center;
             padding: clamp(10px, 2.4vh, 28px) 16px; box-sizing: border-box;
         }
@@ -280,7 +277,7 @@ const GlobalStyle = () => (
             background: none; border: none; padding: 0; margin: 0; cursor: pointer;
             display: block; line-height: 0; border-radius: 10px; transition: transform 0.2s ease;
         }
-        .logo-link:hover { transform: translateY(-2px); }
+        .logo-link:hover { transform: none; }
         .logo-link:focus-visible { outline: 2px solid ${ACCENT}; outline-offset: 5px; }
         .logo-img { width: var(--logo-w); height: auto; display: block; object-fit: contain; }
 
@@ -294,7 +291,7 @@ const GlobalStyle = () => (
             background: ${CARD}; border: 1px solid ${BORDER}; border-top: 3px solid ${ACCENT};
             border-radius: 22px; padding: var(--pad-y) var(--pad-x);
             box-shadow: 0 34px 70px -26px rgba(30,8,18,0.6);
-            animation: card-slide-up 0.6s cubic-bezier(.16,1,.3,1) forwards;
+            animation: none;
         }
         .auth-eyebrow {
             font-size: 11px; font-weight: 600; letter-spacing: 0.24em; text-transform: uppercase;
@@ -350,7 +347,7 @@ const GlobalStyle = () => (
             box-shadow: 0 12px 24px -14px rgba(109,33,64,0.6);
             transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
         }
-        .submit-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 16px 28px -14px rgba(74,23,48,0.65); }
+        .submit-btn:hover:not(:disabled) { transform: none; box-shadow: 0 16px 28px -14px rgba(74,23,48,0.65); }
         .submit-btn:disabled { opacity: 0.65; cursor: default; }
         .submit-btn:focus-visible, .forgot-link:focus-visible, .visibility-toggle:focus-visible { outline: 2px solid ${ACCENT}; outline-offset: 3px; }
 
@@ -376,7 +373,6 @@ const GlobalStyle = () => (
 
         /* Tablet / desktop: everything fits one screen, no page scroll */
         @media (min-width: 640px) {
-            .login-root { height: 100vh; height: 100dvh; min-height: 0; overflow: hidden; }
             .login-inner { height: 100%; min-height: 0; }
             .login-main { min-height: 0; }
             .auth-card { max-height: 100%; overflow-y: auto; scrollbar-width: none; }
@@ -389,9 +385,7 @@ const GlobalStyle = () => (
         /* Keep the mobile auth page fixed to the viewport; only the card scrolls if content cannot fit. */
         @media (max-width: 639px) {
             .login-root {
-                height: 100vh; height: 100dvh; min-height: 0; overflow: hidden;
                 background: linear-gradient(170deg, #FFFDF9 0%, #F6E9E1 28%, #B25A78 62%, ${PRIMARY} 85%, ${PRIMARY_DEEP} 100%);
-                background-attachment: fixed;
             }
             .login-inner {
                 height: 100%; min-height: 0;
@@ -405,7 +399,6 @@ const GlobalStyle = () => (
         }
 
         @media (prefers-reduced-motion: reduce) {
-            .auth-card { animation: none; }
             .submit-btn, .logo-link { transition: none; }
         }
     `}</style>

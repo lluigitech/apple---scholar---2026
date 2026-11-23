@@ -678,7 +678,7 @@ const OfficerManualValidation = () => {
           <div className="min-w-0">
             <p style={{ ...sans, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.1em', color: GOLD }}>OFFICER PORTAL</p>
             <h1 style={{ ...serif, fontSize: 'clamp(1.6rem, 4vw, 2rem)', fontWeight: 700, color: MAROON, lineHeight: 1.15, marginTop: 3 }}>
-              Scholar Submissions
+              Manual Validation
             </h1>
             <p style={{ ...sans, fontSize: '0.9rem', color: MUTED, marginTop: 6, lineHeight: 1.55 }}>
               Review and validate scholar submissions for compliance.

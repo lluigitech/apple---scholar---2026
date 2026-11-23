@@ -7,6 +7,7 @@ import {
   User, History,
   Mail, GraduationCap, IdCard, Folder,
   CheckSquare, Square, Inbox, Search,
+  ChevronUp, ChevronDown,
 } from 'lucide-react';
 
 import InfoField from '../../components/Scholar/SubmissionPage/InfoField';
@@ -19,7 +20,7 @@ import { CHECKLIST, LETTER_BODY_MAX, buildEval, calcInfoScore, calcMediaScore, c
 import { uploadResumableFile } from '../../utils/resumableUpload';
 import { getEducationStage, hasEducationProgram } from '../../utils/educationStage';
 
-// ── Apple Scholar Portal design system (per redesign brief) ──
+// ── Apple Scholar Portal design system ──
 const BG = '#F7F4EE';
 const SURFACE = '#FFFDF9';
 const BORDER = '#E7D8C7';
@@ -84,47 +85,65 @@ const SUBMISSION_TYPE_TO_TAB = {
   other: 'other',
 };
 
-const underlineField = {
-  width: '100%', padding: '9px 2px', border: 'none', borderBottom: `1.5px solid ${BORDER}`,
-  background: 'none', ...body, fontSize: '0.875rem', color: INK, outline: 'none',
-};
-const fieldLabel = { ...body, fontSize: '0.7rem', color: MUTED, display: 'block', marginBottom: 6, fontWeight: 600, letterSpacing: '0.03em' };
+const HISTORY_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'approved', label: 'Approved' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'returned', label: 'Returned' },
+  { value: 'rejected', label: 'Rejected' },
+];
 
-const outlineBtn = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 16px', border: `1px solid ${BORDER}`, borderRadius: 12, background: SURFACE, color: INK, ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' };
-const filledBtn = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 16px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_DARK} 100%)`, color: '#fff', ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' };
+// 16px inputs prevent iOS Safari from zooming the page on focus.
+const underlineField = {
+  width: '100%', padding: '10px 2px', minHeight: 44, border: 'none', borderBottom: `1.5px solid ${BORDER}`,
+  background: 'none', ...body, fontSize: '1rem', color: INK, outline: 'none',
+};
+const fieldLabel = { ...body, fontSize: '0.72rem', color: MUTED, display: 'block', marginBottom: 6, fontWeight: 600, letterSpacing: '0.03em' };
+
+const btnBase = { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '12px 18px', minHeight: 44, borderRadius: 12, ...body, fontSize: '0.84rem', fontWeight: 600, cursor: 'pointer' };
+const outlineBtn = { ...btnBase, border: `1px solid ${BORDER}`, background: SURFACE, color: INK };
+const filledBtn = { ...btnBase, border: 'none', background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_DARK} 100%)`, color: '#fff' };
+
+const noScrollbar = { scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' };
 
 // A left-border alert strip, used consistently across the portal.
 const AlertStrip = ({ color, children }) => (
-  <div style={{ borderLeft: `3px solid ${color}`, background: `${color}0d`, borderRadius: '0 12px 12px 0', padding: '10px 14px', ...body, fontSize: '0.8rem', fontWeight: 600, color }}>
+  <div style={{ borderLeft: `3px solid ${color}`, background: `${color}0d`, borderRadius: '0 12px 12px 0', padding: '10px 14px', ...body, fontSize: '0.82rem', fontWeight: 600, lineHeight: 1.5, color, wordBreak: 'break-word' }}>
     {children}
   </div>
 );
 
-// Card-header pattern used throughout the redesigned portal: a gold
-// eyebrow above a serif heading.
+// Standard white card
+const Card = ({ children, className = '', innerRef, style }) => (
+  <section ref={innerRef} className={`min-w-0 p-4 sm:p-6 ${className}`} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, scrollMarginTop: 12, ...style }}>
+    {children}
+  </section>
+);
+
+// Card header: icon chip + gold eyebrow + serif title (+ optional right slot)
 const CardHeader = ({ icon: Icon, eyebrow, title, right }) => (
-  <div className="flex items-start justify-between gap-3 mb-1 flex-wrap">
-    <div className="flex items-center gap-2.5">
+  <div className="flex items-center justify-between gap-3">
+    <div className="flex items-center gap-3 min-w-0">
       {Icon && (
-        <span className="flex items-center justify-center flex-shrink-0" style={{ width: 30, height: 30, borderRadius: 9, background: `${PRIMARY}14` }}>
-          <Icon size={14} style={{ color: PRIMARY }} />
+        <span className="flex items-center justify-center flex-shrink-0" style={{ width: 36, height: 36, borderRadius: 11, background: `${PRIMARY}14` }}>
+          <Icon size={16} style={{ color: PRIMARY }} />
         </span>
       )}
-      <div>
-        <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', color: GOLD }}>{eyebrow}</p>
-        <h2 style={{ ...display, fontWeight: 600, color: INK, marginTop: 2 }} className="text-base sm:text-[1.05rem]">{title}</h2>
+      <div className="min-w-0">
+        {eyebrow && <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.06em', color: GOLD }}>{eyebrow}</p>}
+        <h2 style={{ ...display, fontWeight: 600, color: INK, lineHeight: 1.25 }} className="text-[1.05rem] sm:text-[1.15rem]">{title}</h2>
       </div>
     </div>
     {right}
   </div>
 );
 
-// Compact progress-overview card (replaces the old flat StatCard trio)
+// Compact stat card for the history tab
 const ProgressCard = ({ eyebrow, title, children }) => (
-  <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: '16px 18px' }}>
-    <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.05em', color: GOLD, marginBottom: 4 }}>{eyebrow}</p>
-    <p style={{ ...display, fontSize: '1rem', fontWeight: 600, color: INK, marginBottom: 10 }}>{title}</p>
-    {children}
+  <div className="min-w-0 p-3 sm:p-4" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
+    <p className="hidden sm:block" style={{ ...body, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.05em', color: GOLD, marginBottom: 4 }}>{eyebrow}</p>
+    <div>{children}</div>
+    <p style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: MUTED, marginTop: 2, lineHeight: 1.3 }} className="sm:text-[0.8rem]">{title}</p>
   </div>
 );
 
@@ -134,68 +153,95 @@ const MiniBar = ({ pct, color }) => (
   </div>
 );
 
-// Large circular completion ring used in the sticky panel
-const CompletionRing = ({ pct, color }) => {
-  const size = 84;
-  const stroke = 7;
+// Circular completion ring (scales from the compact mobile bar to the desktop panel)
+const CompletionRing = ({ pct, color, size = 84, stroke = 7 }) => {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
+  const safePct = Math.min(100, Math.max(0, Number.isFinite(pct) ? pct : 0));
   return (
     <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)' }}>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={BORDER} strokeWidth={stroke} />
         <circle
           cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
-          strokeDasharray={c} strokeDashoffset={c - (pct / 100) * c} strokeLinecap="round"
+          strokeDasharray={c} strokeDashoffset={c - (safePct / 100) * c} strokeLinecap="round"
           style={{ transition: 'stroke-dashoffset 0.5s ease' }}
         />
       </svg>
-      <span className="absolute inset-0 flex items-center justify-center" style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color: INK }}>
-        {Math.round(pct)}%
+      <span className="absolute inset-0 flex items-center justify-center" style={{ ...display, fontSize: size < 60 ? '0.72rem' : '1.15rem', fontWeight: 700, color: INK }}>
+        {Math.round(safePct)}%
       </span>
     </div>
   );
 };
 
-// 4-step workflow navigation for the Monthly Letter flow. Steps 1–3 are
-// sections of the single existing editor view (there is no separate
-// state per section today) so clicking them scrolls to that section.
-// Step 4 reuses the existing handleEvaluate() function exactly as the
-// old "Evaluate Report" button did — no new business logic.
-const WorkflowSteps = ({ steps, onStepClick }) => (
-  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-    {steps.map((step, i) => (
-      <button
-        key={step.key}
-        onClick={() => onStepClick(step)}
-        disabled={step.disabled}
-        className="text-left"
-        style={{
-          padding: '12px 14px', borderRadius: 14, cursor: step.disabled ? 'not-allowed' : 'pointer',
-          border: `1px solid ${step.active ? PRIMARY : BORDER}`,
-          background: step.active ? PRIMARY : SURFACE,
-          opacity: step.disabled ? 0.55 : 1,
-        }}
-      >
-        <div className="flex items-center gap-2 mb-1.5">
-          <span
-            className="flex items-center justify-center flex-shrink-0"
-            style={{
-              width: 20, height: 20, borderRadius: '50%', ...body, fontSize: '0.62rem', fontWeight: 700,
-              background: step.completed ? SUCCESS : step.active ? 'rgba(255,255,255,0.2)' : BG,
-              color: step.completed || step.active ? '#fff' : MUTED,
-            }}
-          >
-            {step.completed ? <CheckCircle size={12} /> : i + 1}
-          </span>
-          <span style={{ ...body, fontSize: '0.68rem', fontWeight: 700, color: step.active ? '#EBD9E0' : MUTED, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-            Step {i + 1}
-          </span>
-        </div>
-        <p style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: step.active ? '#fff' : INK }}>{step.title}</p>
-      </button>
+// Live checklist rows (editor side panel + mobile drawer)
+const LiveChecklist = ({ items }) => (
+  <div className="space-y-2.5">
+    {items.map(({ id, label, passed }) => (
+      <div key={id} className="flex items-start gap-2.5">
+        {passed
+          ? <CheckSquare size={16} style={{ color: SUCCESS, flexShrink: 0, marginTop: 1 }} />
+          : <Square size={16} style={{ color: BORDER, flexShrink: 0, marginTop: 1 }} />}
+        <span style={{ ...body, fontSize: '0.82rem', color: passed ? INK : MUTED, lineHeight: 1.4 }}>{label}</span>
+      </div>
     ))}
   </div>
+);
+
+// Small boxed panel with a label, used in the review sidebar
+const Panel = ({ title, children }) => (
+  <div className="rounded-xl p-3 sm:p-4" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
+    <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em', marginBottom: 8 }}>{title}</p>
+    {children}
+  </div>
+);
+
+// Workflow stepper. Compact on phones (numbered dots + short labels),
+// card-style on larger screens. Steps 1–3 scroll to a section; step 4 runs the review.
+const WorkflowSteps = ({ steps, onStepClick }) => (
+  <nav aria-label="Submission steps" className="p-3 sm:p-4" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
+    <ol className="flex items-start">
+      {steps.map((step, i) => {
+        const last = i === steps.length - 1;
+        return (
+          <li
+            key={step.key}
+            className="flex items-start"
+            style={last ? { flex: '0 0 auto' } : { flex: '1 1 0%', minWidth: 0 }}
+          >
+            <button
+              onClick={() => onStepClick(step)}
+              disabled={step.disabled}
+              aria-current={step.active ? 'step' : undefined}
+              className="flex flex-col lg:flex-row items-center lg:gap-2.5 text-center lg:text-left flex-shrink-0"
+              style={{ background: 'none', border: 'none', padding: '2px 4px', cursor: step.disabled ? 'not-allowed' : 'pointer', opacity: step.disabled ? 0.5 : 1, minWidth: 56, whiteSpace: 'nowrap' }}
+            >
+              <span
+                className="flex items-center justify-center flex-shrink-0"
+                style={{
+                  width: 30, height: 30, borderRadius: '50%', ...body, fontSize: '0.78rem', fontWeight: 700,
+                  background: step.completed ? SUCCESS : step.active ? PRIMARY : BG,
+                  color: step.completed || step.active ? '#fff' : MUTED,
+                  border: `1.5px solid ${step.completed ? SUCCESS : step.active ? PRIMARY : BORDER}`,
+                  boxShadow: step.active ? `0 0 0 4px ${PRIMARY}1f` : 'none',
+                }}
+              >
+                {step.completed ? <CheckCircle size={15} /> : i + 1}
+              </span>
+              <span className="mt-1.5 lg:mt-0" style={{ ...body, fontSize: '0.7rem', fontWeight: step.active ? 700 : 600, color: step.active ? PRIMARY : INK, lineHeight: 1.25 }}>
+                <span className="lg:hidden">{step.short}</span>
+                <span className="hidden lg:inline" style={{ fontSize: '0.82rem' }}>{step.title}</span>
+              </span>
+            </button>
+            {!last && (
+              <span className="flex-1" aria-hidden="true" style={{ height: 2, marginTop: 15, marginInline: 2, minWidth: 8, borderRadius: 2, background: step.completed ? SUCCESS : BORDER }} />
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  </nav>
 );
 
 // Key used to cache the scholar's own info fields locally, so they don't
@@ -267,11 +313,13 @@ function Submission() {
   const [taskDeadlinesLoading, setTaskDeadlinesLoading] = useState(Boolean(localStorage.getItem('scholar_id')));
   const [taskDeadlinesError, setTaskDeadlinesError] = useState('');
 
-  // UI-only: search/status filter over the already-fetched history list,
-  // applied only to what's passed into <SubmissionHistory/> — no new
-  // fetches, no change to fetchHistory or its data shape.
+  // UI-only: search/status filter over the already-fetched history list.
   const [historySearch, setHistorySearch] = useState('');
   const [historyStatusFilter, setHistoryStatusFilter] = useState('all');
+
+  // UI-only: mobile checklist drawer + drag-over highlight for the upload zone.
+  const [checklistOpen, setChecklistOpen] = useState(false);
+  const [dragging, setDragging] = useState(false);
 
   const scholarId = localStorage.getItem('scholar_id');
   const updateInfo = (key) => (val) => setInfo(prev => ({ ...prev, [key]: val }));
@@ -452,6 +500,7 @@ function Submission() {
 
   const handleEvaluate = async () => {
     setEvaluating(true);
+    setChecklistOpen(false);
     try {
       const fallbackEval = buildEval(info, body_, media);
       const fallbackChecklist = CHECKLIST.map(item => ({ item, passed: item.check(info, body_, media) }));
@@ -553,6 +602,7 @@ function Submission() {
     } finally {
       setEvaluating(false);
       setView('evaluation');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -693,6 +743,7 @@ function Submission() {
   const acceptedCount = history.filter((h) => String(h.status || '').toLowerCase() === 'approved').length;
   const pendingReviewCount = history.filter((h) => ['pending', 'under_review'].includes(String(h.status || '').toLowerCase())).length;
   const checklistPassedCount = CHECKLIST.filter((item) => item.check(info, body_, media)).length;
+  const liveChecklist = CHECKLIST.map((item) => ({ id: item.id, label: item.label, passed: item.check(info, body_, media) }));
 
   // ── History filter — UI-only, over the already-fetched `history` array ──
   const filteredHistory = history.filter((item) => {
@@ -704,7 +755,7 @@ function Submission() {
     return haystack.includes(historySearch.trim().toLowerCase());
   });
 
-  // ---- Presentation-only derived values for the new hierarchy ----
+  // ---- Presentation-only derived values ----
   const overallCompletionPct = CHECKLIST.length ? (checklistPassedCount / CHECKLIST.length) * 100 : 0;
 
   const programComplete = !hasEducationProgram(info.year) || Boolean(getEducationProgramValue(info));
@@ -715,109 +766,127 @@ function Submission() {
 
   const workflowSteps = [
     {
-      key: 'info', title: 'Scholar Information', completed: infoComplete,
+      key: 'info', title: 'Scholar Information', short: 'Info', completed: infoComplete,
       active: !infoComplete && view === 'editor',
       onClick: () => scrollToSection(infoSectionRef),
     },
     {
-      key: 'letter', title: 'Monthly Letter', completed: letterComplete,
+      key: 'letter', title: 'Monthly Letter', short: 'Letter', completed: letterComplete,
       active: infoComplete && !letterComplete && view === 'editor',
       onClick: () => scrollToSection(letterSectionRef),
     },
     {
-      key: 'media', title: 'Documentation', completed: mediaComplete,
+      key: 'media', title: 'Documentation', short: 'Photos', completed: mediaComplete,
       active: infoComplete && letterComplete && !mediaComplete && view === 'editor',
       onClick: () => scrollToSection(mediaSectionRef),
     },
     {
-      key: 'automated-review', title: 'Automated Review', completed: automatedReviewComplete,
+      key: 'automated-review', title: 'Automated Review', short: 'Review', completed: automatedReviewComplete,
       active: view === 'evaluation',
       disabled: !hasContent || evaluating,
       onClick: () => { if (hasContent) handleEvaluate(); },
     },
   ];
 
-  return (
-    <div style={{ ...body, background: BG, minHeight: '100vh' }}>
-      <div className="w-full px-4 sm:px-6 lg:p-8">
+  const onEditorScreen = tab === 'submit' && selectedType === 'monthly-report' && view === 'editor';
+  const onReviewScreen = tab === 'submit' && selectedType === 'monthly-report' && view === 'evaluation' && Boolean(evalResult);
+  const hasStickyBar = (onEditorScreen || onReviewScreen) && !showConfirm;
+  const reviewColor = evalResult?.flagged ? DANGER : (evalResult?.riskColor || PRIMARY);
+  const submitBlocked = deadlineBlocked || Boolean(evalResult?.flagged);
 
-        {/* ── 1. Scholar header ── */}
-        <div className="flex items-start justify-between gap-4 flex-wrap" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: '20px 24px', marginBottom: 18 }}>
-          <div>
-            <p style={{ ...body, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.08em', color: GOLD }}>SCHOLAR PORTAL</p>
-            <h1 style={{ ...display, fontSize: '1.7rem', fontWeight: 600, color: INK, marginTop: 4 }}>Submissions</h1>
-            <p style={{ ...body, fontSize: '0.84rem', color: MUTED, marginTop: 6, maxWidth: 480 }}>
+  const stickyBarStyle = {
+    background: SURFACE, borderTop: `1px solid ${BORDER}`,
+    boxShadow: '0 -6px 20px rgba(74,23,48,0.08)',
+    paddingBottom: 'env(safe-area-inset-bottom, 0px)',
+  };
+
+  return (
+    <div className="w-full max-w-full min-w-0" style={{ ...body, background: BG, minHeight: '100vh', overflowX: 'hidden' }}>
+      <div
+        className={`w-full max-w-full min-w-0 px-3 sm:px-6 lg:p-8 pt-3 sm:pt-6 ${hasStickyBar ? 'pb-36 lg:pb-8' : 'pb-8'}`}
+      >
+
+        {/* ── Page header ── */}
+        <header className="flex items-start justify-between gap-3 flex-wrap p-4 sm:p-6 mb-3 sm:mb-5" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
+          <div className="min-w-0">
+            <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', color: GOLD }}>SCHOLAR PORTAL</p>
+            <h1 style={{ ...display, fontWeight: 600, color: INK, marginTop: 2, lineHeight: 1.2 }} className="text-[1.4rem] sm:text-[1.7rem]">Submissions</h1>
+            <p style={{ ...body, color: MUTED, marginTop: 6, maxWidth: 480, lineHeight: 1.55 }} className="text-[0.82rem] sm:text-[0.86rem]">
               Submit your monthly requirements with AI quality analysis and officer feedback.
             </p>
           </div>
-          <div className="flex items-center gap-2.5 flex-shrink-0">
-            <span style={{ ...body, fontSize: '0.76rem', fontWeight: 600, color: PRIMARY, background: `${PRIMARY}12`, border: `1px solid ${BORDER}`, borderRadius: 999, padding: '7px 16px' }}>
-              1st Semester, AY 2026–2027
-            </span>
+          <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
             <button
               onClick={() => setTab(tab === 'history' ? 'submit' : 'history')}
-              className="flex items-center gap-1.5"
+              aria-pressed={tab === 'history'}
+              className="flex items-center justify-center gap-1.5 flex-1 sm:flex-none"
               style={{
-                ...body, fontSize: '0.76rem', fontWeight: 600, borderRadius: 999, padding: '8px 14px', cursor: 'pointer',
-                border: `1px solid ${tab === 'history' ? PRIMARY : BORDER}`,
-                background: tab === 'history' ? PRIMARY : SURFACE,
-                color: tab === 'history' ? '#fff' : INK,
+                ...body, fontSize: '0.84rem', fontWeight: 700, borderRadius: 999, padding: '10px 20px', minHeight: 44, cursor: 'pointer',
+                border: `1.5px solid ${PRIMARY}`,
+                background: tab === 'history' ? PRIMARY : `${PRIMARY}12`,
+                color: tab === 'history' ? '#fff' : PRIMARY,
+                boxShadow: tab === 'history' ? 'none' : `0 2px 8px ${PRIMARY}22`,
               }}
             >
-              <History size={13} /> My History
+              <History size={16} /> {tab === 'history' ? 'Back to Submit' : 'My History'}
             </button>
           </div>
-        </div>
+        </header>
 
         {tab === 'submit' && <>
-          {/* ── 2. Workspace hero ── */}
+          {/* ── Featured reminder ── */}
           <div
-            className="relative overflow-hidden"
-            style={{ background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_DARK} 100%)`, borderRadius: RADIUS, padding: '24px 26px', marginBottom: 18 }}
+            className="relative overflow-hidden p-4 sm:p-6 mb-3 sm:mb-5"
+            style={{ background: `linear-gradient(135deg, ${PRIMARY} 0%, ${PRIMARY_DARK} 100%)`, borderRadius: RADIUS }}
           >
-            <div className="flex items-start justify-between gap-6 flex-wrap">
-              <div className="min-w-0" style={{ maxWidth: 480 }}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="min-w-0" style={{ maxWidth: 520 }}>
                 <p style={{ ...body, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.08em', color: '#E7D8C7' }}>FEATURED REMINDER</p>
-                <h3 style={{ ...display, fontSize: '1.3rem', fontWeight: 600, color: '#fff', marginTop: 6 }}>
+                <h3 style={{ ...display, fontWeight: 600, color: '#fff', marginTop: 4, lineHeight: 1.3 }} className="text-[1.1rem] sm:text-[1.3rem]">
                   {resubmitNotice ? 'A submission needs your attention' : 'Keep your requirements up to date'}
                 </h3>
-                <p style={{ ...body, fontSize: '0.82rem', color: '#F3E9DD', marginTop: 8, lineHeight: 1.6 }}>
+                <p style={{ ...body, fontSize: '0.82rem', color: '#F3E9DD', marginTop: 6, lineHeight: 1.6, wordBreak: 'break-word' }}>
                   {resubmitNotice || 'Submit your Monthly Letter every month, and your Grades and COR every semester.'}
                 </p>
-
               </div>
               <button
                 onClick={() => { setSelectedType('monthly-report'); setView('editor'); }}
-                className="flex-shrink-0 transition-opacity hover:opacity-90"
-                style={{ ...body, fontSize: '0.8rem', fontWeight: 600, color: PRIMARY, background: '#fff', border: 'none', borderRadius: 12, padding: '10px 20px', cursor: 'pointer' }}
+                className="w-full sm:w-auto flex-shrink-0 transition-opacity hover:opacity-90"
+                style={{ ...body, fontSize: '0.84rem', fontWeight: 600, color: PRIMARY, background: '#fff', border: 'none', borderRadius: 12, padding: '12px 22px', minHeight: 44, cursor: 'pointer' }}
               >
                 Start Submission
               </button>
             </div>
           </div>
 
-            {/* Compliance type selector for the submission workflows outside Monthly Letter. */}
-          <div className="mb-5">
+          {/* ── Compliance type selector (swipeable on phones) ── */}
+          <div className="mb-3 sm:mb-5 min-w-0">
             <p style={fieldLabel}>COMPLIANCE TYPE</p>
-            <div className="flex flex-wrap items-center gap-2">
+            <div
+              role="tablist"
+              className="flex items-center gap-2 overflow-x-auto sm:flex-wrap -mx-3 px-3 sm:mx-0 sm:px-0 pb-1"
+              style={noScrollbar}
+            >
               {submissionTypes.map(type => {
                 const Icon = TYPE_ICONS[type.id] || FileText;
                 const active = selectedType === type.id;
                 return (
                   <button
                     key={type.id}
+                    role="tab"
+                    aria-selected={active}
                     onClick={() => { setSelectedType(type.id); setView('editor'); setEvalResult(null); setDocFile(null); setDocError(''); setDocSuccess(''); setResubmitNotice(''); }}
-                    className="flex items-center gap-2"
+                    className="flex items-center gap-2 flex-shrink-0"
                     style={{
-                      padding: '8px 14px', borderRadius: 999,
+                      padding: '10px 16px', minHeight: 44, borderRadius: 999,
                       border: `1px solid ${active ? PRIMARY : BORDER}`,
                       background: active ? PRIMARY : SURFACE,
                       color: active ? '#fff' : INK,
-                      ...body, fontSize: '0.76rem', fontWeight: 600,
+                      ...body, fontSize: '0.8rem', fontWeight: 600,
                       cursor: 'pointer', whiteSpace: 'nowrap',
                     }}
                   >
-                    <Icon size={13} />
+                    <Icon size={14} />
                     {type.label}
                   </button>
                 );
@@ -826,181 +895,205 @@ function Submission() {
           </div>
 
           {deadlineMessage && selectedType !== 'grades' && (
-            <div className="mb-5">
+            <div className="mb-3 sm:mb-5">
               <AlertStrip color={selectedDeadline?.closed || !selectedDeadline?.assigned ? DANGER : WARNING}>
                 {deadlineMessage}
               </AlertStrip>
             </div>
           )}
 
-          {selectedType === 'monthly-report' && view === 'editor' && <>
-            {/* ── 3. Workflow navigation (Monthly Letter only) ── */}
-            <div className="mb-5">
-              <WorkflowSteps steps={workflowSteps} onStepClick={(s) => !s.disabled && s.onClick()} />
-            </div>
-
-          </>}
-
           {resubmitNotice && selectedType === 'monthly-report' && view === 'editor' && (
-            <div className="mb-5"><AlertStrip color={DANGER}>{resubmitNotice}</AlertStrip></div>
+            <div className="mb-3 sm:mb-5"><AlertStrip color={DANGER}>{resubmitNotice}</AlertStrip></div>
           )}
           {resubmitNotice && selectedType !== 'monthly-report' && (
-            <div className="mb-5"><AlertStrip color={DANGER}>{resubmitNotice}</AlertStrip></div>
+            <div className="mb-3 sm:mb-5"><AlertStrip color={DANGER}>{resubmitNotice}</AlertStrip></div>
           )}
 
           {selectedType === 'monthly-report' && <>
             {view === 'editor' && (
-              // ── 5. Main workspace: 70/30 layout ──
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <div className="lg:col-span-2 space-y-4">
-                  <div ref={infoSectionRef} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }} className="p-4 sm:p-[22px]">
-                    <CardHeader icon={User} eyebrow="STEP 1" title="Scholar Information" />
-                    <p style={{ ...body, fontSize: '0.77rem', color: MUTED, marginBottom: 20, marginTop: 8 }}>This will appear in the official letter header.</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-5">
-                      <div className="sm:col-span-2"><InfoField label="Full Name" value={info.name} onChange={updateInfo('name')} placeholder="e.g. Juan Dela Cruz" /></div>
-                      <InfoField label="Age" value={info.age} onChange={updateInfo('age')} placeholder="e.g. 20" type="number" />
-                      <InfoField label="Year Level" value={info.year} onChange={updateInfo('year')} placeholder="e.g. 2nd Year" />
-                      {educationStage === 'senior_high' && (
-                        <InfoField label="Track / Strand" value={info.track_strand || ''} onChange={updateInfo('track_strand')} placeholder="e.g. STEM, ABM, HUMSS, GAS, or TVL" />
-                      )}
-                      {(educationStage === 'college' || educationStage === 'other') && (
-                        <InfoField label="Course" value={info.course} onChange={updateInfo('course')} placeholder="e.g. BS Computer Science" />
-                      )}
-                      <InfoField label="School" value={info.school} onChange={updateInfo('school')} placeholder="e.g. University of the Philippines" />
-                      <div className="sm:col-span-2">
-                        <label style={fieldLabel}>DATE <span style={{ color: PRIMARY }}>*</span></label>
-                        <input type="date" value={(() => { try { return new Date(info.date).toISOString().split('T')[0]; } catch { return ''; } })()}
-                          onChange={e => { const d = new Date(e.target.value); updateInfo('date')(d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })); }}
-                          className="w-full outline-none transition-colors bg-transparent"
-                          style={underlineField}
-                          onFocus={e => (e.target.style.borderBottom = `1.5px solid ${PRIMARY}`)} onBlur={e => (e.target.style.borderBottom = `1.5px solid ${BORDER}`)} />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div ref={letterSectionRef} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }} className="p-4 sm:p-[22px]">
-                    <div className="flex items-start justify-between gap-3 flex-wrap">
-                      <CardHeader icon={FileText} eyebrow="STEP 2" title="Monthly Letter" />
-                      <span style={{ ...body, fontSize: '0.7rem', color: wordCount >= 150 ? SUCCESS : MUTED, fontWeight: 700, flexShrink: 0, marginTop: 2 }}>{wordCount} / 150+ words</span>
-                    </div>
-                    <p style={{ ...body, fontSize: '0.77rem', color: MUTED, marginBottom: 14, marginTop: 8 }}>Write your letter addressed to "Dear Kalinga," - share your activities, challenges, and plans this month.</p>
-                    <div className="rounded-xl px-3 sm:px-4 py-2.5 mb-3" style={{ background: BG, border: `1px solid ${BORDER}` }}>
-                      <span style={{ ...body, fontSize: '0.87rem', color: MUTED, fontStyle: 'italic' }}>Dear Kalinga,</span>
-                    </div>
-                    <textarea value={body_} onChange={e => setBody(e.target.value)} rows={12}
-                      placeholder={`Write your monthly report here. Share what you accomplished this month, any challenges you faced, and your plans for next month.\n\nExample:\nI am writing to update you on my progress for this month...`}
-                      className="w-full p-3 sm:p-4 rounded-xl border outline-none resize-none transition-all"
-                      style={{ ...body, fontSize: '0.88rem', lineHeight: 1.75, color: INK, borderColor: BORDER }}
-                      onFocus={e => (e.target.style.borderColor = PRIMARY)} onBlur={e => (e.target.style.borderColor = BORDER)} />
-                    <div className="rounded-xl px-3 sm:px-4 py-2.5 mt-3" style={{ background: BG, border: `1px solid ${BORDER}` }}>
-                      <p style={{ ...body, fontSize: '0.87rem', color: MUTED, fontStyle: 'italic' }}>Your scholar,</p>
-                      <p style={{ ...body, fontSize: '0.87rem', fontWeight: 600, color: info.name ? INK : '#d1d5db', marginTop: 2 }}>{info.name || 'Your Name'}</p>
-                    </div>
-                  </div>
-
-                  <div ref={mediaSectionRef} style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }} className="p-4 sm:p-[22px]">
-                    <CardHeader icon={Upload} eyebrow="STEP 3" title="Documentation" />
-                    <p style={{ ...body, fontSize: '0.77rem', color: MUTED, marginTop: 8, marginBottom: 14 }}>Attach photos that document your activities this month.</p>
-                    <MediaUploader media={media} onChange={setMedia} />
-                  </div>
+              <>
+                <div className="mb-3 sm:mb-5">
+                  <WorkflowSteps steps={workflowSteps} onStepClick={(s) => !s.disabled && s.onClick()} />
                 </div>
 
-                {/* ── Right — sticky live progress panel ── */}
-                <div>
-                  <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }} className="lg:sticky lg:top-6 p-4 sm:p-5">
+                {!scholarId && (
+                  <div className="mb-3"><AlertStrip color={DANGER}>No scholar account detected. Please log out and log back in.</AlertStrip></div>
+                )}
 
-                    <div className="flex items-center gap-4 mb-5">
-                      <CompletionRing pct={overallCompletionPct} color={PRIMARY} />
-                      <div>
-                        <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.04em', color: GOLD }}>COMPLETION</p>
-                        <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 2 }}>{checklistPassedCount} of {CHECKLIST.length} items ready</p>
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] gap-3 sm:gap-5 items-start">
+                  <div className="min-w-0 space-y-3 sm:space-y-5">
+
+                    {/* Step 1 */}
+                    <Card innerRef={infoSectionRef}>
+                      <CardHeader icon={User} eyebrow="STEP 1" title="Scholar Information" />
+                      <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginBottom: 18, marginTop: 10, lineHeight: 1.5 }}>This will appear in the official letter header.</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-4 sm:gap-y-5">
+                        <div className="sm:col-span-2"><InfoField label="Full Name" value={info.name} onChange={updateInfo('name')} placeholder="e.g. Juan Dela Cruz" /></div>
+                        <InfoField label="Age" value={info.age} onChange={updateInfo('age')} placeholder="e.g. 20" type="number" />
+                        <InfoField label="Year Level" value={info.year} onChange={updateInfo('year')} placeholder="e.g. 2nd Year" />
+                        {educationStage === 'senior_high' && (
+                          <InfoField label="Track / Strand" value={info.track_strand || ''} onChange={updateInfo('track_strand')} placeholder="e.g. STEM, ABM, HUMSS, GAS, or TVL" />
+                        )}
+                        {(educationStage === 'college' || educationStage === 'other') && (
+                          <InfoField label="Course" value={info.course} onChange={updateInfo('course')} placeholder="e.g. BS Computer Science" />
+                        )}
+                        <InfoField label="School" value={info.school} onChange={updateInfo('school')} placeholder="e.g. University of the Philippines" />
+                        <div className="sm:col-span-2">
+                          <label style={fieldLabel}>DATE <span style={{ color: PRIMARY }}>*</span></label>
+                          <input type="date" value={(() => { try { return new Date(info.date).toISOString().split('T')[0]; } catch { return ''; } })()}
+                            onChange={e => { const d = new Date(e.target.value); updateInfo('date')(d.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })); }}
+                            className="w-full outline-none transition-colors bg-transparent"
+                            style={underlineField}
+                            onFocus={e => (e.target.style.borderBottom = `1.5px solid ${PRIMARY}`)} onBlur={e => (e.target.style.borderBottom = `1.5px solid ${BORDER}`)} />
+                        </div>
                       </div>
+                    </Card>
+
+                    {/* Step 2 */}
+                    <Card innerRef={letterSectionRef}>
+                      <CardHeader
+                        icon={FileText} eyebrow="STEP 2" title="Monthly Letter"
+                        right={<span style={{ ...body, fontSize: '0.72rem', color: wordCount >= 150 ? SUCCESS : MUTED, fontWeight: 700, flexShrink: 0, whiteSpace: 'nowrap' }}>{wordCount} / 150+</span>}
+                      />
+                      <div className="mt-3"><MiniBar pct={(wordCount / 150) * 100} color={wordCount >= 150 ? SUCCESS : GOLD} /></div>
+                      <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginBottom: 14, marginTop: 10, lineHeight: 1.5 }}>Write your letter addressed to "Dear Kalinga," — share your activities, challenges, and plans this month.</p>
+                      <div className="rounded-xl px-3 sm:px-4 py-2.5 mb-3" style={{ background: BG, border: `1px solid ${BORDER}` }}>
+                        <span style={{ ...body, fontSize: '0.9rem', color: MUTED, fontStyle: 'italic' }}>Dear Kalinga,</span>
+                      </div>
+                      <textarea value={body_} onChange={e => setBody(e.target.value)} rows={10}
+                        placeholder={`Write your monthly report here. Share what you accomplished this month, any challenges you faced, and your plans for next month.\n\nExample:\nI am writing to update you on my progress for this month...`}
+                        className="w-full p-3 sm:p-4 rounded-xl border outline-none resize-y transition-all"
+                        style={{ ...body, fontSize: '1rem', lineHeight: 1.7, color: INK, borderColor: BORDER, minHeight: 220, background: '#fff' }}
+                        onFocus={e => (e.target.style.borderColor = PRIMARY)} onBlur={e => (e.target.style.borderColor = BORDER)} />
+                      <div className="rounded-xl px-3 sm:px-4 py-2.5 mt-3" style={{ background: BG, border: `1px solid ${BORDER}` }}>
+                        <p style={{ ...body, fontSize: '0.9rem', color: MUTED, fontStyle: 'italic' }}>Your scholar,</p>
+                        <p style={{ ...body, fontSize: '0.9rem', fontWeight: 600, color: info.name ? INK : '#c9bfb4', marginTop: 2, wordBreak: 'break-word' }}>{info.name || 'Your Name'}</p>
+                      </div>
+                    </Card>
+
+                    {/* Step 3 */}
+                    <Card innerRef={mediaSectionRef}>
+                      <CardHeader icon={Upload} eyebrow="STEP 3" title="Documentation" />
+                      <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 10, marginBottom: 14, lineHeight: 1.5 }}>Attach photos that document your activities this month.</p>
+                      <MediaUploader media={media} onChange={setMedia} />
+                    </Card>
+                  </div>
+
+                  {/* Desktop: sticky live progress panel */}
+                  <aside className="hidden lg:block min-w-0">
+                    <div className="lg:sticky lg:top-6 p-5" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
+                      <div className="flex items-center gap-4 mb-5">
+                        <CompletionRing pct={overallCompletionPct} color={PRIMARY} />
+                        <div>
+                          <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.04em', color: GOLD }}>COMPLETION</p>
+                          <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 2 }}>{checklistPassedCount} of {CHECKLIST.length} items ready</p>
+                        </div>
+                      </div>
+                      <p style={{ ...body, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em', color: PRIMARY, marginBottom: 12 }}>CHECKLIST</p>
+                      <div className="mb-5"><LiveChecklist items={liveChecklist} /></div>
+                      <button disabled={!hasContent || evaluating} onClick={handleEvaluate}
+                        className="w-full transition-opacity disabled:opacity-40"
+                        style={{ ...filledBtn, width: '100%', cursor: (hasContent && !evaluating) ? 'pointer' : 'not-allowed' }}>
+                        <Sparkles size={15} />
+                        {evaluating ? 'Running review…' : 'Run Automated Review'}
+                      </button>
                     </div>
+                  </aside>
+                </div>
 
-                    <p style={{ ...body, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em', color: PRIMARY, marginBottom: 12 }}>CHECKLIST</p>
-                    <div className="space-y-2.5 mb-5">
-                      {CHECKLIST.map(item => {
-                        const passed = item.check(info, body_, media);
-                        return (
-                          <div key={item.id} className="flex items-center gap-2.5">
-                            {passed ? <CheckSquare size={14} style={{ color: SUCCESS, flexShrink: 0 }} /> : <Square size={14} style={{ color: BORDER, flexShrink: 0 }} />}
-                            <span style={{ ...body, fontSize: '0.79rem', color: passed ? INK : MUTED, lineHeight: 1.4 }}>{item.label}</span>
-                          </div>
-                        );
-                      })}
+                {/* Mobile / tablet: sticky bottom bar with expandable checklist */}
+                <div className="lg:hidden fixed left-0 right-0 bottom-0 z-30" style={stickyBarStyle}>
+                  {checklistOpen && (
+                    <div className="px-4 pt-4 pb-3 overflow-y-auto" style={{ maxHeight: '45vh', borderBottom: `1px solid ${BORDER}` }}>
+                      <p style={{ ...body, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.05em', color: PRIMARY, marginBottom: 10 }}>CHECKLIST</p>
+                      <LiveChecklist items={liveChecklist} />
                     </div>
-
-                    {!scholarId && (
-                      <div className="mb-4"><AlertStrip color={DANGER}>No scholar account detected. Please log out and log back in.</AlertStrip></div>
-                    )}
-
+                  )}
+                  <div className="flex items-center gap-3 px-4 py-2.5">
+                    <button
+                      onClick={() => setChecklistOpen(o => !o)}
+                      aria-expanded={checklistOpen}
+                      className="flex items-center gap-2.5 flex-1 min-w-0 text-left"
+                      style={{ background: 'none', border: 'none', padding: 0, minHeight: 44, cursor: 'pointer' }}
+                    >
+                      <CompletionRing pct={overallCompletionPct} color={PRIMARY} size={44} stroke={5} />
+                      <span className="min-w-0">
+                        <span className="block" style={{ ...body, fontSize: '0.8rem', fontWeight: 700, color: INK }}>{checklistPassedCount} of {CHECKLIST.length} ready</span>
+                        <span className="flex items-center gap-1" style={{ ...body, fontSize: '0.7rem', color: MUTED }}>
+                          Checklist {checklistOpen ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+                        </span>
+                      </span>
+                    </button>
                     <button disabled={!hasContent || evaluating} onClick={handleEvaluate}
-                      className="w-full flex items-center justify-center gap-2 transition-opacity disabled:opacity-40"
-                      style={{ ...filledBtn, width: '100%', padding: '11px 0', fontSize: '0.85rem', cursor: (hasContent && !evaluating) ? 'pointer' : 'not-allowed' }}>
+                      className="flex-shrink-0 transition-opacity disabled:opacity-40"
+                      style={{ ...filledBtn, padding: '12px 16px', cursor: (hasContent && !evaluating) ? 'pointer' : 'not-allowed' }}>
                       <Sparkles size={14} />
-                      {evaluating ? 'Running review…' : 'Run Automated Review'}
+                      {evaluating ? 'Reviewing…' : 'Run Review'}
                     </button>
                   </div>
                 </div>
-              </div>
+              </>
             )}
 
             {view === 'evaluation' && evalResult && (
-              // ── 6. Automated Review — dedicated step ──
-              <div>
-                <button onClick={() => setView('editor')} className="flex items-center gap-1 mb-4 transition-opacity hover:opacity-70"
-                  style={{ ...body, fontSize: '0.85rem', fontWeight: 600, color: PRIMARY, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
-                  <ArrowLeft size={14} /> Back to Editor
+              <div className="min-w-0">
+                <button onClick={() => setView('editor')} className="flex items-center gap-1.5 mb-3 transition-opacity hover:opacity-70"
+                  style={{ ...body, fontSize: '0.85rem', fontWeight: 600, color: PRIMARY, background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0', minHeight: 44 }}>
+                  <ArrowLeft size={15} /> Back to Editor
                 </button>
 
-                <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: '18px 18px 0 0', borderBottom: 'none' }} className="p-4 sm:p-[18px_22px]">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div>
+                {/* Score hero */}
+                <Card className="mb-3 sm:mb-5">
+                  <div className="flex items-center gap-4">
+                    <CompletionRing pct={evalResult.overallScore} color={reviewColor} size={76} stroke={7} />
+                    <div className="min-w-0 flex-1">
                       <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.05em', color: GOLD }}>STEP 4 · REPORT REVIEW</p>
-                      <h3 style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: INK, marginTop: 2 }}>Review Your Report</h3>
-                      <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 3 }}>{info.name || 'Scholar'} · {info.date}</p>
+                      <h3 style={{ ...display, fontWeight: 600, color: INK, marginTop: 2, lineHeight: 1.25 }} className="text-[1.05rem] sm:text-[1.2rem]">Review Your Report</h3>
+                      <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 3, wordBreak: 'break-word' }}>{[info.name || 'Scholar', info.date].filter(Boolean).join(' · ')}</p>
+                      {(evalResult.riskLabel || evalResult.flagged) && (
+                        <span className="inline-block" style={{ ...body, fontSize: '0.7rem', fontWeight: 700, color: reviewColor, background: `${reviewColor}14`, padding: '4px 12px', borderRadius: 999, marginTop: 8 }}>
+                          {evalResult.flagged ? 'Invalid Letter' : evalResult.riskLabel}
+                        </span>
+                      )}
                     </div>
-                    {evalResult.flagged && (
-                      <span style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: DANGER, background: `${DANGER}14`, padding: '4px 12px', borderRadius: 999, whiteSpace: 'nowrap' }}>
-                        Invalid Letter
-                      </span>
-                    )}
                   </div>
-                </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-2 px-4 sm:px-5 py-3" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderTop: `1px solid ${BG}` }}>
-                  <button onClick={() => setView('editor')} className="flex-1 sm:flex-initial" style={outlineBtn}><Bookmark size={13} /> Edit </button>
-                  <button onClick={() => { setSubmitError(''); setShowConfirm(true); }} disabled={deadlineBlocked || evalResult.flagged} className="flex-1 sm:flex-initial disabled:opacity-50" style={{ ...filledBtn, cursor: deadlineBlocked || evalResult.flagged ? 'not-allowed' : 'pointer' }}><Send size={13} /> Submit Report</button>
-                </div>
+                  {/* Desktop actions (phones use the bottom bar) */}
+                  <div className="hidden lg:flex items-center justify-end gap-2 mt-4 pt-4" style={{ borderTop: `1px solid ${BORDER}` }}>
+                    <button onClick={() => setView('editor')} style={outlineBtn}><Bookmark size={14} /> Edit</button>
+                    <button onClick={() => { setSubmitError(''); setShowConfirm(true); }} disabled={submitBlocked} className="disabled:opacity-50" style={{ ...filledBtn, cursor: submitBlocked ? 'not-allowed' : 'pointer' }}><Send size={14} /> Submit Report</button>
+                  </div>
+                </Card>
 
                 {evalResult.flagged && (
-                  <div className="px-4 sm:px-5 py-3" style={{ background: `${DANGER}12`, border: `1px solid ${DANGER}44`, borderTop: 'none', color: DANGER }}>
-                    <p style={{ ...body, fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Letter rejected for evaluation</p>
-                    <p style={{ ...body, fontSize: '0.8rem', marginTop: 3 }}>{evalResult.flagReason}</p>
+                  <div className="mb-3 sm:mb-5">
+                    <AlertStrip color={DANGER}>
+                      Letter rejected for evaluation — {evalResult.flagReason}
+                    </AlertStrip>
                   </div>
                 )}
 
-                <div className="grid grid-cols-1 lg:grid-cols-[1fr_340px] rounded-b-2xl" style={{ border: `1px solid ${BORDER}`, borderTop: 'none', overflow: 'hidden' }}>
-                  {/* Left — Letter Preview */}
-                  <div className="p-4 sm:p-6 overflow-y-auto lg:max-h-[620px] border-b lg:border-b-0 lg:border-r" style={{ background: SURFACE, borderColor: BORDER }}>
+                <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-3 sm:gap-5 items-start">
+                  {/* Letter preview — second on phones, left on desktop */}
+                  <Card className="order-2 lg:order-1 overflow-y-auto lg:max-h-[640px]">
                     <div className="text-center mb-5 pb-4" style={{ borderBottom: `1px solid ${GOLD}55` }}>
-                      <p style={{ ...display, fontSize: '0.9rem', fontWeight: 700, color: PRIMARY }}>Kalinga at Pag-ibig Foundation Inc.</p>
-                      <p style={{ ...body, fontSize: '0.72rem', color: MUTED }}>Apple Scholars · Rodriguez, Rizal</p>
+                      <p style={{ ...display, fontSize: '0.95rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.35 }}>Kalinga at Pag-ibig Foundation Inc.</p>
+                      <p style={{ ...body, fontSize: '0.74rem', color: MUTED, marginTop: 2 }}>Apple Scholars · Rodriguez, Rizal</p>
                     </div>
                     <div className="mb-5 space-y-1">
                       {[['Name', info.name], ['Age', info.age ? `${info.age} years old` : ''], ['Year', info.year], ['Course', info.course], ['School', info.school], ['Date', info.date]].map(([l, v]) => v ? (
                         <div key={l} className="flex gap-2">
-                          <span style={{ ...body, fontSize: '0.8rem', fontWeight: 700, color: '#3f2f28', minWidth: 52, flexShrink: 0 }}>{l}:</span>
-                          <span style={{ ...body, fontSize: '0.8rem', color: MUTED }}>{v}</span>
+                          <span style={{ ...body, fontSize: '0.82rem', fontWeight: 700, color: '#3f2f28', minWidth: 52, flexShrink: 0 }}>{l}:</span>
+                          <span style={{ ...body, fontSize: '0.82rem', color: MUTED, wordBreak: 'break-word' }}>{v}</span>
                         </div>
                       ) : null)}
                     </div>
-                    <p style={{ ...body, fontSize: '0.87rem', lineHeight: 1.8, color: '#3f2f28', marginBottom: 14 }}>Dear Kalinga,</p>
+                    <p style={{ ...body, fontSize: '0.9rem', lineHeight: 1.8, color: '#3f2f28', marginBottom: 14 }}>Dear Kalinga,</p>
                     {body_.split(/\n\n+/).filter(p => p.trim()).map((para, i) => (
-                      <p key={i} style={{ ...body, fontSize: '0.87rem', lineHeight: 1.78, color: '#3f2f28', marginBottom: 12, textIndent: '1.5rem' }}>{para.trim()}</p>
+                      <p key={i} style={{ ...body, fontSize: '0.9rem', lineHeight: 1.78, color: '#3f2f28', marginBottom: 12, textIndent: '1.5rem', wordBreak: 'break-word' }}>{para.trim()}</p>
                     ))}
-                    <p style={{ ...body, fontSize: '0.87rem', color: '#3f2f28', marginTop: 20, marginBottom: 2 }}>Your scholar,</p>
-                    <p style={{ ...body, fontSize: '0.87rem', fontWeight: 700, color: INK }}>{info.name}</p>
+                    <p style={{ ...body, fontSize: '0.9rem', color: '#3f2f28', marginTop: 20, marginBottom: 2 }}>Your scholar,</p>
+                    <p style={{ ...body, fontSize: '0.9rem', fontWeight: 700, color: INK }}>{info.name}</p>
                     {media.length > 0 && (
                       <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${BORDER}` }}>
                         <p style={{ ...body, fontSize: '0.7rem', fontWeight: 700, color: PRIMARY, marginBottom: 8, letterSpacing: '0.03em' }}>
@@ -1008,11 +1101,11 @@ function Submission() {
                         </p>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                           {media.map((item) => (
-                            <div key={item.id}>
-                              <div className="rounded-lg overflow-hidden" style={{ height: 70 }}>
+                            <div key={item.id} className="min-w-0">
+                              <div className="rounded-lg overflow-hidden" style={{ height: 84 }}>
                                 <img src={item.previewUrl} alt="" className="w-full h-full object-cover" />
                               </div>
-                              <p style={{ ...body, fontSize: '0.67rem', color: MUTED, marginTop: 3, textAlign: 'center', fontStyle: 'italic' }}>
+                              <p style={{ ...body, fontSize: '0.68rem', color: MUTED, marginTop: 3, textAlign: 'center', fontStyle: 'italic', wordBreak: 'break-word' }}>
                                 {item.description ? `(${item.description.substring(0, 35)}${item.description.length > 35 ? '…' : ''})` : '(no description)'}
                               </p>
                             </div>
@@ -1020,97 +1113,94 @@ function Submission() {
                         </div>
                       </div>
                     )}
-                    <p style={{ ...body, fontSize: '0.7rem', color: '#c6b8ae', marginTop: 16 }}>Words: {wordCount} · Page 1 / Apple Scholar</p>
-                  </div>
+                    <p style={{ ...body, fontSize: '0.7rem', color: '#b9aba0', marginTop: 16 }}>Words: {wordCount} · Page 1 / Apple Scholar</p>
+                  </Card>
 
-                  {/* Right — Review checklist */}
-                  <div className="p-3 sm:p-4 overflow-y-auto lg:max-h-[620px]" style={{ background: BG }}>
+                  {/* Review details — first on phones, right on desktop */}
+                  <div className="order-1 lg:order-2 min-w-0 space-y-3">
                     {evalResult.sentimentLabel && (
-                      <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-                        <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em', marginBottom: 6 }}>LETTER CLASSIFICATION</p>
-                        <p style={{ ...body, fontSize: '0.75rem', color: MUTED }}>Sentiment: {evalResult.sentimentLabel}</p>
-                      </div>
+                      <Panel title="LETTER CLASSIFICATION">
+                        <p style={{ ...body, fontSize: '0.8rem', color: MUTED }}>Sentiment: {evalResult.sentimentLabel}</p>
+                      </Panel>
                     )}
 
-                    <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-                      <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.05em', marginBottom: 6 }}>
-                        RULE-BASED SCORING
-                      </p>
-                      <p style={{ ...body, fontSize: '0.78rem', fontWeight: 700, color: INK }}>
+                    <Panel title="RULE-BASED SCORING">
+                      <p style={{ ...body, fontSize: '0.85rem', fontWeight: 700, color: INK }}>
                         Overall: {Number.isFinite(evalResult.overallScore) ? `${evalResult.overallScore}%` : 'N/A'}
                       </p>
-                      <p style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 3 }}>
+                      <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 3 }}>
                         Letter body: {Number.isFinite(evalResult.reportScore) ? `${evalResult.reportScore}/75` : 'N/A'}
                         {' · '}Method: {evalResult.source === 'rule_based_v3' ? 'V3 rule-based' : 'Rule-based'}
                       </p>
-                      <div className="mt-2 space-y-1">
+                      <div className="mt-2.5 space-y-1.5">
                         {[
                           ['Documentation', evalResult.mediaScore, 20],
                           ['Scholar information', evalResult.infoScore, 5],
                         ].map(([label, score, max]) => (
-                          <div key={label} className="flex items-center justify-between" style={{ ...body, fontSize: '0.68rem', color: MUTED }}>
+                          <div key={label} className="flex items-center justify-between" style={{ ...body, fontSize: '0.74rem', color: MUTED }}>
                             <span>{label}</span>
                             <span style={{ fontWeight: 700, color: INK }}>{Number.isFinite(score) ? score : 0}/{max}</span>
                           </div>
                         ))}
                       </div>
-                    </div>
+                    </Panel>
 
                     {evalResult.bodyCriteria?.length > 0 && (
-                      <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-                        <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.04em', marginBottom: 8 }}>
-                          LETTER BODY BREAKDOWN
-                        </p>
-                        <div className="space-y-2">
+                      <Panel title="LETTER BODY BREAKDOWN">
+                        <div className="space-y-2.5">
                           {evalResult.bodyCriteria.map((criterion) => {
                             const score = Number(criterion.score || 0);
                             const max = Number(criterion.max || 15);
                             return (
                               <div key={criterion.key || criterion.label}>
-                                <div className="flex items-center justify-between mb-1" style={{ ...body, fontSize: '0.68rem', color: MUTED }}>
-                                  <span>{criterion.label || criterion.key}</span>
-                                  <span style={{ fontWeight: 700, color: INK }}>{score}/{max}</span>
+                                <div className="flex items-center justify-between gap-2 mb-1" style={{ ...body, fontSize: '0.74rem', color: MUTED }}>
+                                  <span className="min-w-0">{criterion.label || criterion.key}</span>
+                                  <span className="flex-shrink-0" style={{ fontWeight: 700, color: INK }}>{score}/{max}</span>
                                 </div>
-                                <div className="w-full overflow-hidden" style={{ height: 4, borderRadius: 999, background: BORDER }}>
-                                  <div style={{ height: '100%', width: `${Math.max(0, Math.min(100, (score / max) * 100))}%`, background: PRIMARY, borderRadius: 999 }} />
-                                </div>
+                                <MiniBar pct={(score / max) * 100} color={PRIMARY} />
                               </div>
                             );
                           })}
                         </div>
-                      </div>
+                      </Panel>
                     )}
 
                     {media.length > 0 && (
-                      <div className="mb-3 rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-                        <p style={{ ...body, fontSize: '0.64rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.04em', marginBottom: 8 }}>
-                          DOCUMENTATION &amp; CAPTIONS
-                        </p>
+                      <Panel title="DOCUMENTATION & CAPTIONS">
                         <div className="space-y-1.5">
                           {media.map((item, index) => (
-                            <div key={item.id} style={{ ...body, fontSize: '0.68rem', color: MUTED, lineHeight: 1.4 }}>
+                            <div key={item.id} style={{ ...body, fontSize: '0.74rem', color: MUTED, lineHeight: 1.45, wordBreak: 'break-word' }}>
                               <span style={{ fontWeight: 700, color: INK }}>Photo {index + 1}: </span>
                               {item.description?.trim() || 'No caption'}
                             </div>
                           ))}
                         </div>
-                      </div>
+                      </Panel>
                     )}
 
-                    <div className="rounded-xl p-3" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-                      <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: PRIMARY, letterSpacing: '0.04em', marginBottom: 8 }}>SUBMISSION CHECKLIST</p>
+                    <Panel title="SUBMISSION CHECKLIST">
                       <div className="space-y-1.5">
                         {evalResult.checklist.map(({ item, passed }) => (
-                          <div key={item.id} className="flex items-center gap-2 rounded-lg px-2.5 sm:px-3 py-1.5"
+                          <div key={item.id} className="flex items-start gap-2 rounded-lg px-3 py-2"
                             style={{ background: passed ? `${SUCCESS}14` : `${DANGER}14`, border: `1px solid ${passed ? SUCCESS : DANGER}33` }}>
-                            {passed ? <CheckCircle size={13} style={{ color: SUCCESS, flexShrink: 0 }} /> : <XCircle size={13} style={{ color: DANGER, flexShrink: 0 }} />}
-                            <span style={{ ...body, fontSize: '0.74rem', fontWeight: 500, color: passed ? SUCCESS : DANGER }}>{item.label}</span>
+                            {passed ? <CheckCircle size={14} style={{ color: SUCCESS, flexShrink: 0, marginTop: 1 }} /> : <XCircle size={14} style={{ color: DANGER, flexShrink: 0, marginTop: 1 }} />}
+                            <span style={{ ...body, fontSize: '0.78rem', fontWeight: 500, color: passed ? SUCCESS : DANGER, lineHeight: 1.4 }}>{item.label}</span>
                           </div>
                         ))}
                       </div>
-                    </div>
+                    </Panel>
                   </div>
                 </div>
+
+                {/* Mobile / tablet: sticky action bar */}
+                {!showConfirm && (
+                  <div className="lg:hidden fixed left-0 right-0 bottom-0 z-30" style={stickyBarStyle}>
+                    <div className="flex items-center gap-2.5 px-4 py-2.5">
+                      <button onClick={() => setView('editor')} className="flex-1" style={outlineBtn}><Bookmark size={14} /> Edit</button>
+                      <button onClick={() => { setSubmitError(''); setShowConfirm(true); }} disabled={submitBlocked} className="flex-[1.6] disabled:opacity-50" style={{ ...filledBtn, cursor: submitBlocked ? 'not-allowed' : 'pointer' }}><Send size={14} /> Submit Report</button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1137,88 +1227,105 @@ function Submission() {
           {selectedType === 'grades' && <ScholarGrades />}
 
           {selectedType !== 'monthly-report' && selectedType !== 'grades' && (
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }} className="p-4 sm:p-7">
+            <Card className="sm:p-7">
               <div className="max-w-2xl mx-auto">
                 {docSuccess ? (
-                  <div className="rounded-xl p-4 sm:p-5 flex items-start sm:items-center gap-3" style={{ background: `${SUCCESS}0f`, border: `1px solid ${SUCCESS}33` }}>
+                  <div className="rounded-xl p-4 sm:p-5 flex items-start gap-3" style={{ background: `${SUCCESS}0f`, border: `1px solid ${SUCCESS}33` }}>
                     <CheckCircle size={22} style={{ color: SUCCESS, flexShrink: 0 }} />
-                    <div>
-                      <p style={{ ...body, fontSize: '0.9rem', fontWeight: 700, color: SUCCESS }}>{docSuccess}</p>
-                      <button onClick={() => setDocSuccess('')} className="text-xs mt-2 underline"
-                        style={{ color: PRIMARY, ...body, background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>Upload another document</button>
+                    <div className="min-w-0">
+                      <p style={{ ...body, fontSize: '0.92rem', fontWeight: 700, color: SUCCESS, lineHeight: 1.45 }}>{docSuccess}</p>
+                      <button onClick={() => setDocSuccess('')} className="mt-2 underline"
+                        style={{ color: PRIMARY, ...body, fontSize: '0.82rem', background: 'none', border: 'none', cursor: 'pointer', padding: '8px 0', minHeight: 44 }}>Upload another document</button>
                     </div>
                   </div>
                 ) : (
-                  <div className="rounded-2xl p-6 sm:p-12 text-center" style={{ border: `1.5px dashed ${GOLD}88`, background: BG }}>
-                    <Inbox size={38} style={{ margin: '0 auto 14px', color: PRIMARY }} />
-                    <h3 className="mb-2" style={{ ...display, fontSize: '1.05rem', fontWeight: 600, color: INK }}>Upload Your {docTypeLabel}</h3>
-                    <p className="mb-4" style={{ ...body, fontSize: '0.85rem', color: MUTED }}>{docFile ? docFile.name : 'Drag and drop or click to browse'}</p>
+                  <div>
                     <input id="doc-upload-input" type="file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style={{ display: 'none' }} onChange={e => setDocFile(e.target.files?.[0] || null)} />
-                    <button onClick={() => document.getElementById('doc-upload-input').click()} style={{ ...outlineBtn, display: 'inline-flex', border: `1.5px solid ${PRIMARY}`, color: PRIMARY }}>
-                      Browse Files
-                    </button>
+                    <label
+                      htmlFor="doc-upload-input"
+                      onDragOver={e => { e.preventDefault(); setDragging(true); }}
+                      onDragLeave={() => setDragging(false)}
+                      onDrop={e => { e.preventDefault(); setDragging(false); const f = e.dataTransfer.files?.[0]; if (f) setDocFile(f); }}
+                      className="block rounded-2xl p-6 sm:p-12 text-center cursor-pointer"
+                      style={{ border: `1.5px dashed ${dragging ? PRIMARY : `${GOLD}99`}`, background: dragging ? `${PRIMARY}0a` : BG }}
+                    >
+                      <Inbox size={38} style={{ margin: '0 auto 12px', color: PRIMARY }} />
+                      <h3 className="mb-1.5" style={{ ...display, fontSize: '1.1rem', fontWeight: 600, color: INK, lineHeight: 1.3 }}>Upload Your {docTypeLabel}</h3>
+                      <p className="mb-4" style={{ ...body, fontSize: '0.85rem', color: MUTED, wordBreak: 'break-all' }}>{docFile ? docFile.name : 'Tap to browse, or drag and drop a file here'}</p>
+                      <span style={{ ...outlineBtn, display: 'inline-flex', border: `1.5px solid ${PRIMARY}`, color: PRIMARY }}>
+                        {docFile ? 'Choose a different file' : 'Browse Files'}
+                      </span>
+                      <p className="mt-4" style={{ ...body, fontSize: '0.72rem', color: MUTED }}>Supported formats: PDF, JPG, PNG (Max 10MB)</p>
+                    </label>
+
                     {docFile && (
-                      <button onClick={handleDocUpload} disabled={docUploading || !scholarId || deadlineBlocked} className="block mx-auto mt-4 disabled:opacity-50"
-                        style={{ ...filledBtn, display: 'inline-flex', cursor: docUploading || deadlineBlocked ? 'not-allowed' : 'pointer' }}>
+                      <button onClick={handleDocUpload} disabled={docUploading || !scholarId || deadlineBlocked} className="w-full mt-4 disabled:opacity-50"
+                        style={{ ...filledBtn, width: '100%', cursor: docUploading || deadlineBlocked ? 'not-allowed' : 'pointer' }}>
+                        <Send size={14} />
                         {docUploading ? 'Uploading…' : `Submit ${docTypeLabel}`}
                       </button>
                     )}
-                    {docError && <p className="mt-4" style={{ ...body, fontSize: '0.78rem', color: DANGER }}>{docError}</p>}
-                    <p className="mt-4" style={{ ...body, fontSize: '0.7rem', color: MUTED }}>Supported formats: PDF, JPG, PNG (Max 10MB)</p>
+                    {docError && <div className="mt-4"><AlertStrip color={DANGER}>{docError}</AlertStrip></div>}
                   </div>
                 )}
               </div>
-            </div>
+            </Card>
           )}
         </>}
 
         {tab === 'history' && (
-          // ── 7. Submission history ──
           <>
-            {/* Restyled quick stats for the history tab (existing values only) */}
-            <div className="grid grid-cols-3 gap-4" style={{ marginBottom: 18 }}>
-              <ProgressCard eyebrow="RECORDS" title="Total Submissions">
-                <span style={{ ...display, fontSize: '1.4rem', fontWeight: 700, color: PRIMARY }}>{totalSubmissions}</span>
+            {/* Quick stats */}
+            <div className="grid grid-cols-3 gap-2 sm:gap-4 mb-3 sm:mb-5">
+              <ProgressCard eyebrow="RECORDS" title="Total">
+                <span style={{ ...display, fontWeight: 700, color: PRIMARY }} className="text-[1.4rem] sm:text-[1.6rem]">{totalSubmissions}</span>
               </ProgressCard>
               <ProgressCard eyebrow="STATUS" title="Accepted">
-                <span style={{ ...display, fontSize: '1.4rem', fontWeight: 700, color: SUCCESS }}>{acceptedCount}</span>
+                <span style={{ ...display, fontWeight: 700, color: SUCCESS }} className="text-[1.4rem] sm:text-[1.6rem]">{acceptedCount}</span>
               </ProgressCard>
-              <ProgressCard eyebrow="STATUS" title="Pending / Review">
-                <span style={{ ...display, fontSize: '1.4rem', fontWeight: 700, color: WARNING }}>{pendingReviewCount}</span>
+              <ProgressCard eyebrow="STATUS" title="Pending">
+                <span style={{ ...display, fontWeight: 700, color: WARNING }} className="text-[1.4rem] sm:text-[1.6rem]">{pendingReviewCount}</span>
               </ProgressCard>
             </div>
 
-            {/* Floating filter toolbar */}
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: '12px 16px', marginBottom: 18 }}>
-              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                <div className="flex items-center gap-2 flex-1 min-w-[180px]">
-                  <Search size={15} style={{ color: MUTED }} />
-                  <input
-                    type="text"
-                    placeholder="Search your submissions"
-                    value={historySearch}
-                    onChange={(e) => setHistorySearch(e.target.value)}
-                    style={{ width: '100%', border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.82rem', color: INK }}
-                  />
-                </div>
-                <div className="flex items-center gap-2" style={{ borderLeft: `1px solid ${BORDER}`, paddingLeft: 14 }}>
-                  <select
-                    value={historyStatusFilter}
-                    onChange={(e) => setHistoryStatusFilter(e.target.value)}
-                    style={{ border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.8rem', fontWeight: 500, color: INK, cursor: 'pointer' }}
-                  >
-                    <option value="all">All statuses</option>
-                    <option value="approved">Approved</option>
-                    <option value="pending">Pending</option>
-                    <option value="returned">Returned for revision</option>
-                    <option value="rejected">Rejected</option>
-                  </select>
-                </div>
+            {/* Search + status chips */}
+            <div className="p-3 sm:p-4 mb-3 sm:mb-5 min-w-0" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
+              <div className="flex items-center gap-2.5 px-3 rounded-xl" style={{ background: BG, border: `1px solid ${BORDER}`, minHeight: 44 }}>
+                <Search size={16} style={{ color: MUTED, flexShrink: 0 }} />
+                <input
+                  type="search"
+                  aria-label="Search your submissions"
+                  placeholder="Search your submissions"
+                  value={historySearch}
+                  onChange={(e) => setHistorySearch(e.target.value)}
+                  style={{ width: '100%', minWidth: 0, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '1rem', color: INK, padding: '10px 0' }}
+                />
+              </div>
+              <div className="flex items-center gap-2 overflow-x-auto mt-3 -mx-1 px-1" style={noScrollbar}>
+                {HISTORY_FILTERS.map(f => {
+                  const active = historyStatusFilter === f.value;
+                  return (
+                    <button
+                      key={f.value}
+                      onClick={() => setHistoryStatusFilter(f.value)}
+                      aria-pressed={active}
+                      className="flex-shrink-0"
+                      style={{
+                        ...body, fontSize: '0.78rem', fontWeight: 600, padding: '8px 14px', minHeight: 40, borderRadius: 999, whiteSpace: 'nowrap', cursor: 'pointer',
+                        border: `1px solid ${active ? PRIMARY : BORDER}`,
+                        background: active ? PRIMARY : SURFACE,
+                        color: active ? '#fff' : INK,
+                      }}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            {/* Registry: existing SubmissionHistory component, container restyled only */}
-            <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, padding: 22, marginBottom: 24 }}>
+            {/* Registry */}
+            <div className="min-w-0 max-w-full p-3 sm:p-5" style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS }}>
               <SubmissionHistory history={filteredHistory} loading={historyLoading} error={historyError} onResubmit={handleResubmit} />
             </div>
           </>

@@ -1,6 +1,11 @@
 const db = require('../config/db');
 const crypto = require('crypto');
-const { sendDutyNotifyEmails, sendMakeupDutyAssignmentEmails } = require('../utils/notifyHelpers');
+const { logAuditEvent } = require('../utils/auditLogger');
+const {
+    sendDutyNotifyEmails,
+    sendDutyAttendanceStatusEmails,
+    sendMakeupDutyAssignmentEmails,
+} = require('../utils/notifyHelpers');
 const { logComplianceIncident, clampCompliance, getComplianceSettings, calculateCurrentCompliance } = require('../utils/complianceLogger');
 const { markEndedDutyAbsences } = require('../services/dutyAbsenceService');
 const { checkOutDutyAttendance } = require('../services/dutyAttendanceService');
@@ -106,8 +111,17 @@ exports.getDutyGroups = (req, res) => {
 exports.unassignDutyFromGroup = (req, res) => {
     const { duty_id, group_id } = req.params;
     const sql = `DELETE FROM duty_group_assignments WHERE duty_id = ? AND group_id = ?`;
-    db.query(sql, [duty_id, group_id], (err) => {
+    db.query(sql, [duty_id, group_id], async (err, result) => {
         if (err) return res.status(500).json({ error: 'Error unassigning duty' });
+        if (result.affectedRows > 0) {
+            await logAuditEvent({
+                req,
+                action: 'delete',
+                module: 'Duty Assignment',
+                details: `Unassigned group ${group_id} from duty ${duty_id}`,
+                result: 'success',
+            });
+        }
         res.json({ message: 'Duty unassigned from group' });
     });
 };
@@ -258,11 +272,25 @@ exports.bulkMarkAttendance = (req, res) => {
                             const usedMakeupIds = newRecords
                                 .filter(record => makeupScholarIds.has(record.scholar_id) && ['present', 'late'].includes(record.status))
                                 .map(record => record.scholar_id);
-                            const completeSave = () => res.status(201).json({
-                                message: 'Attendance saved and locked',
-                                count: newRecords.length,
-                                records: newRecords.map(({ scholar_id, status }) => ({ scholar_id, status })),
-                            });
+                            const completeSave = () => {
+                                sendDutyAttendanceStatusEmails(duty_id, newRecords, (notificationErr, notification) => {
+                                    if (notificationErr) {
+                                        console.error('Duty attendance was saved, but its email notifications failed:', notificationErr);
+                                        notification = {
+                                            ok: false,
+                                            sent_count: 0,
+                                            failed_count: newRecords.filter(record => ['present', 'absent'].includes(record.status)).length,
+                                            error: 'Attendance email notifications failed.',
+                                        };
+                                    }
+                                    res.status(201).json({
+                                        message: 'Attendance saved and locked',
+                                        count: newRecords.length,
+                                        records: newRecords.map(({ scholar_id, status }) => ({ scholar_id, status })),
+                                        notification,
+                                    });
+                                });
+                            };
                             if (!usedMakeupIds.length) return completeSave();
 
                             db.query(
@@ -431,8 +459,17 @@ exports.updateDuty = (req, res) => {
 
 // ─── DELETE DUTY ──────────────────────────────────────────────
 exports.deleteDuty = (req, res) => {
-    db.query("DELETE FROM duties WHERE id = ?", [req.params.id], (err) => {
+    db.query("DELETE FROM duties WHERE id = ?", [req.params.id], async (err, result) => {
         if (err) return res.status(500).json({ error: 'Error deleting duty' });
+        if (result.affectedRows > 0) {
+            await logAuditEvent({
+                req,
+                action: 'delete',
+                module: 'Duty Assignment',
+                details: `Deleted duty ${req.params.id}`,
+                result: 'success',
+            });
+        }
         res.json({ message: 'Duty deleted' });
     });
 };
@@ -442,6 +479,22 @@ exports.markAttendance = (req, res) => {
     const { id } = req.params;
     const { scholar_id, status, method } = req.body;
     const markedById = req.user?.id || null;
+    const completeAttendanceResponse = (previousStatus, message) => {
+        const normalizedStatus = String(status || '').toLowerCase();
+        if (String(previousStatus || '').toLowerCase() === normalizedStatus || !['present', 'absent'].includes(normalizedStatus)) {
+            return res.json({ message });
+        }
+        sendDutyAttendanceStatusEmails(id, [{ scholar_id, status: normalizedStatus }], (notificationErr, notification) => {
+            if (notificationErr) {
+                console.error('Duty attendance was saved, but its email notification failed:', notificationErr);
+                return res.json({
+                    message,
+                    notification: { ok: false, sent_count: 0, failed_count: 1, error: 'Attendance email notification failed.' },
+                });
+            }
+            return res.json({ message, notification });
+        });
+    };
 
     db.query("SELECT status FROM duties WHERE id = ? LIMIT 1", [id], (dutyErr, dutyRows) => {
         if (dutyErr) return res.status(500).json({ error: 'Error checking duty status' });
@@ -451,7 +504,7 @@ exports.markAttendance = (req, res) => {
         }
 
         db.query(
-        "SELECT id FROM duty_attendance WHERE duty_id = ? AND scholar_id = ?",
+        "SELECT id, status FROM duty_attendance WHERE duty_id = ? AND scholar_id = ?",
         [id, scholar_id],
         (err, existing) => {
             if (err) return res.status(500).json({ error: 'Error checking attendance' });
@@ -490,7 +543,7 @@ exports.markAttendance = (req, res) => {
                             return;
                         }
 
-                        res.json({ message: 'Attendance updated' });
+                        completeAttendanceResponse(existing[0].status, 'Attendance updated');
                     }
                 );
             } else {
@@ -527,7 +580,7 @@ exports.markAttendance = (req, res) => {
                             return;
                         }
 
-                        res.json({ message: 'Attendance marked' });
+                        completeAttendanceResponse(null, 'Attendance marked');
                     }
                 );
             }
@@ -556,16 +609,46 @@ exports.bulkSaveAttendance = (req, res) => {
 
     let completed = 0;
     let errors = 0;
+    let notificationSent = 0;
+    let notificationFailed = 0;
+
+    const finishSavedRecord = (index, record, previousStatus) => {
+        completed++;
+        const status = String(record.status || '').toLowerCase();
+        if (previousStatus !== status && ['present', 'absent'].includes(status)) {
+            return sendDutyAttendanceStatusEmails(id, [record], (notificationErr, notification) => {
+                if (notificationErr) {
+                    console.error('Duty attendance was saved, but its email notification failed:', notificationErr);
+                    notificationFailed++;
+                } else {
+                    notificationSent += notification.sent_count || 0;
+                    notificationFailed += notification.failed_count || 0;
+                }
+                processNext(index + 1);
+            });
+        }
+        processNext(index + 1);
+    };
 
     const processNext = (index) => {
         if (index >= records.length) {
-            return res.json({ message: `Saved ${completed} records`, completed, errors });
+            return res.json({
+                message: `Saved ${completed} records`,
+                completed,
+                errors,
+                notification: {
+                    ok: notificationFailed === 0,
+                    sent_count: notificationSent,
+                    failed_count: notificationFailed,
+                },
+            });
         }
 
-        const { scholar_id, status, method } = records[index];
+        const record = records[index];
+        const { scholar_id, status, method } = record;
 
         db.query(
-            "SELECT id FROM duty_attendance WHERE duty_id = ? AND scholar_id = ?",
+            "SELECT id, status FROM duty_attendance WHERE duty_id = ? AND scholar_id = ?",
             [id, scholar_id],
             (err, existing) => {
                 if (err) { errors++; return processNext(index + 1); }
@@ -582,9 +665,9 @@ exports.bulkSaveAttendance = (req, res) => {
                                 if (status === 'absent') {
                                     logAttendanceNotification(scholar_id, 'attendance_absent', `Duty attendance marked absent for duty_id=${id}.`);
                                 }
-                                completed++;
                             }
-                            processNext(index + 1);
+                            if (err) return processNext(index + 1);
+                            finishSavedRecord(index, record, String(existing[0].status || '').toLowerCase());
                         }
                     );
                 } else {
@@ -599,9 +682,9 @@ exports.bulkSaveAttendance = (req, res) => {
                                 if (status === 'absent') {
                                     logAttendanceNotification(scholar_id, 'attendance_absent', `Duty attendance marked absent for duty_id=${id}.`);
                                 }
-                                completed++;
-                                processNext(index + 1);
                             }
+                            if (err) return processNext(index + 1);
+                            finishSavedRecord(index, record, null);
                         }
                     );
                 }

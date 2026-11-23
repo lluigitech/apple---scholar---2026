@@ -1,4 +1,5 @@
 import { API_ORIGIN } from '../../utils/apiConfig.js';
+import { getAdminPageSize } from '../../utils/adminPreferences';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
@@ -6,7 +7,7 @@ import {
     Users, ShieldCheck, UserCog, Trash2, Edit3, Archive,
     Search, UserPlus, X, Eye, EyeOff,
     ChevronDown, ChevronLeft, ChevronRight, AlertTriangle, Briefcase, CheckCircle2,
-    Layers, RotateCcw,
+    Layers,
 } from 'lucide-react';
 import AdminPageHeader from '../../components/Admin/AdminPageHeader';
 
@@ -17,7 +18,7 @@ const YEAR_LEVELS = [
     '3rd Year College', '4th Year College', '5th Year College',
 ];
 
-// ── Token system — Executive Identity & Access Center ─────────────
+// ── Token system — Executive User & Access Management ─────────────
 const BG           = '#F7F4EE';
 const SURFACE      = '#FFFDF9';
 const BORDER       = '#E7D8C7';
@@ -612,6 +613,7 @@ const RowAction = ({ onClick, title, hoverColor, children }) => (
 
 // ── MAIN ───────────────────────────────────────────────────────
 const UserManagement = () => {
+    const pageSize = getAdminPageSize();
     const navigate = useNavigate();
     const [usersList, setUsersList]   = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -700,14 +702,11 @@ const UserManagement = () => {
         return matchesRole && matchesSearch;
     });
 
-    // Pagination — 10 accounts per page so the registry never turns into one long scroll.
-    const PAGE_SIZE = 10;
     const [currentPage, setCurrentPage] = useState(1);
-    const resetFilters = () => { setRoleFilter('all'); setSearchTerm(''); setCurrentPage(1); };
     const selectRoleFilter = (role) => { setRoleFilter(role); setCurrentPage(1); };
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
     const safePage = Math.min(currentPage, totalPages);
-    const paginatedUsers = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+    const paginatedUsers = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
 
     // Role-filter counts come from the already-loaded registry.
     const totalCount     = usersList.length;
@@ -811,11 +810,6 @@ const UserManagement = () => {
                                 style={{ ...sans, fontSize: '0.74rem', fontWeight: 600, color: INK, border: `1px solid ${BORDER}`, background: SURFACE, cursor: 'pointer' }}>
                                 <Layers size={14} style={{ color: PRIMARY }} /> View Scholars
                             </button>
-                            <button type="button" onClick={resetFilters}
-                                className="gs-action-card inline-flex items-center gap-2 rounded-lg px-3 py-2 transition-colors"
-                                style={{ ...sans, fontSize: '0.74rem', fontWeight: 600, color: INK, border: `1px solid ${BORDER}`, background: SURFACE, cursor: 'pointer' }}>
-                                <RotateCcw size={14} style={{ color: PRIMARY }} /> Clear Filters
-                            </button>
                         </div>
                     </div>
 
@@ -824,14 +818,14 @@ const UserManagement = () => {
                             <div className="px-5 sm:px-6" style={{ paddingTop: 18, paddingBottom: 16, borderBottom: `1px solid ${BORDER}` }}>
                                 <div className="flex items-center justify-between gap-3">
                                     <div>
-                                        <p style={{ ...sans, fontSize: '0.66rem', fontWeight: 700, color: BRONZE, letterSpacing: '0.07em', textTransform: 'uppercase' }}>Identity &amp; access</p>
+                                        <p style={{ ...sans, fontSize: '0.66rem', fontWeight: 700, color: BRONZE, letterSpacing: '0.07em', textTransform: 'uppercase' }}>User &amp; access management</p>
                                         <h2 style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: INK, marginTop: 3 }}>Account Registry</h2>
                                     </div>
                                     <span style={{ ...sans, ...tabularNums, fontSize: '0.72rem', fontWeight: 600, color: PRIMARY, background: PRIMARY_TINT, borderRadius: 8, padding: '5px 9px', whiteSpace: 'nowrap' }}>
                                         {filtered.length} {filtered.length === 1 ? 'account' : 'accounts'}
                                     </span>
                                 </div>
-                                <p style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginTop: 4 }}>Manage accounts and access across the organization.</p>
+                                <p style={{ ...sans, fontSize: '0.76rem', color: MUTED, marginTop: 4 }}>Manage user accounts, roles, and access.</p>
                             </div>
 
                             {/* Desktop / tablet table */}
@@ -990,7 +984,7 @@ const UserManagement = () => {
 
                             <div className="px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 w-full" style={{ borderTop: `1px solid ${BORDER}` }}>
                                 <span style={{ ...sans, fontSize: '0.74rem', color: MUTED }}>
-                                    Showing <span style={{ fontWeight: 700, color: INK, ...tabularNums }}>{filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)}</span> of{' '}
+                                    Showing <span style={{ fontWeight: 700, color: INK, ...tabularNums }}>{filtered.length === 0 ? 0 : (safePage - 1) * pageSize + 1}–{Math.min(safePage * pageSize, filtered.length)}</span> of{' '}
                                     <span style={{ fontWeight: 700, color: INK, ...tabularNums }}>{filtered.length}</span> users
                                 </span>
                                 {totalPages > 1 && (

@@ -54,7 +54,7 @@ const AdminSidebar = ({ isOpen, onClose, collapsed = false }) => {
             items: [
                 { name: 'User Management', path: '/admin/users', icon: Users },
                 { name: 'Flagged Scholars', path: '/admin/flagged', icon: AlertTriangle },
-                { name: 'Team Assignments', path: '/admin/team-assignments', icon: Network },
+                { name: 'Access Control', path: '/admin/team-assignments', icon: Network },
                 { name: 'Task Assignment', path: '/admin/task-assignment', icon: ClipboardList },
                 { name: 'Duty Assignment', path: '/admin/duty-assignment', icon: CalendarDays },
                 { name: 'Archive Management', path: '/admin/archive', icon: Archive },
@@ -70,7 +70,7 @@ const AdminSidebar = ({ isOpen, onClose, collapsed = false }) => {
             group: 'Analytics',
             items: [
                 { name: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
-                { name: 'System Reports', path: '/admin/reports', icon: FilePieChart },
+                { name: 'Reports', path: '/admin/reports', icon: FilePieChart },
                 { name: 'Donor Reporting Center', path: '/admin/donor', icon: BarChart3 },
             ],
         },

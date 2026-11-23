@@ -7,6 +7,7 @@ const { verifyToken, requireRole } = require('../middleware/authMiddleware');
 router.get('/progress', verifyToken, requireRole(['admin']), taskCtrl.getTaskProgressSummary);
 router.get('/', verifyToken, taskCtrl.getAllTasks);
 router.post('/:id/export-pdf', verifyToken, taskCtrl.exportTaskPdf);
+router.post('/:id/notify', verifyToken, requireRole(['admin']), taskCtrl.notifyTask);
 router.get('/:id', verifyToken, taskCtrl.getTask);
 
 // Task creation and lifecycle are centrally managed by the admin.

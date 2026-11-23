@@ -416,7 +416,7 @@ const ComplianceManager = ({ embedded = false }) => {
     const activeRuleCount = SETTING_FIELDS.length + (settings.recovery_enabled ? RECOVERY_BONUS_FIELDS.length + 1 : 0);
     const minScoreNumber = parseFloat(minCompliance);
     const minScoreLabel = Number.isNaN(minScoreNumber) ? `${minCompliance} points` : `${minScoreNumber.toFixed(2)} points`;
-    const riskBandExplanation = `Medium risk is at or above ${minScoreLabel}; high risk is below ${minScoreLabel}.`;
+    const riskBandExplanation = 'Low risk is 75+ points, medium risk is 50–74 points, and high risk is below 50 points.';
     const parsedLateDeduction = parseFloat(settings.late_submission_deduction);
     const lateDeductionPoints = Number.isFinite(parsedLateDeduction) ? Math.max(0, parsedLateDeduction) : 10;
     const latePenaltyMaximum = lateDeductionPoints * 2;
@@ -522,7 +522,7 @@ const ComplianceManager = ({ embedded = false }) => {
 
                         {/* ── 3. Flagging rules ── */}
                         <div style={{ ...cardStyle, padding: 20 }}>
-                            <CardHeader icon={AlertTriangle} title="Flagging Rules" subtitle={`A score below ${minScoreLabel} sets high risk; active issues may also trigger a separate review flag.`} />
+                            <CardHeader icon={AlertTriangle} title="Flagging Rules" subtitle={`A score below ${minScoreLabel} is flagged; active issues may also trigger a separate review flag.`} />
                             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" style={{ marginTop: 16 }}>
                                 {[
                                     { n: '01', title: 'Score starts at 100', text: 'Penalties lower it. Eligible maintenance credit may offset deductions.' },
@@ -538,7 +538,7 @@ const ComplianceManager = ({ embedded = false }) => {
                                 ))}
                             </div>
                             <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 12, lineHeight: 1.55 }}>
-                                {riskBandExplanation} The score determines risk level; an active flag can still appear in the Medium Risk group.
+                                {riskBandExplanation} Risk level is separate from flag status; an active flag can appear at any risk level.
                                 Overdue tasks, late or absent duty attendance, prolonged gaps between submissions, and low submission quality affect the score. Their settings are in Penalty Rules below. Negative sentiment can trigger a separate review flag, but it does not affect the score.
                             </p>
                         </div>

@@ -29,6 +29,7 @@ router.put   ('/staff-assignments/:id', admin.updateStaffAssignments);
 router.delete('/staff-assignments/:id', admin.deleteStaffAssignments);
 router.get   ('/scholar-groups', staff.getGroups);
 router.post  ('/scholar-groups', staff.createGroup);
+router.post  ('/scholar-groups/balance', staff.balanceScholarGroups);
 router.put   ('/scholar-groups/:group_id', staff.updateGroup);
 router.delete('/scholar-groups/:group_id', staff.deleteGroup);
 router.get   ('/scholar-groups/scholars', requireRole(['admin'], { action: 'VIEW_SCHOLAR', resourceType: 'scholar_directory' }), staff.getAllScholarsWithGroups);

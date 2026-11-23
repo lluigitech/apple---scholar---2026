@@ -101,8 +101,19 @@ test('emails duty creator and assigned staff once when system absences are recor
         staff_name: 'Assigned Staff',
         staff_email: 'staff@example.com',
         staff_duty_attendance: 1,
+        scholar_email: 'absent-one@example.com',
+        is_makeup: 1,
     };
-    absenceRows = [row, { ...row, scholar_id: 'AS-102', scholar_name: 'Another Absent Scholar' }];
+    absenceRows = [
+        row,
+        {
+            ...row,
+            scholar_id: 'AS-102',
+            scholar_name: 'Another Absent Scholar',
+            scholar_email: 'absent-two@example.com',
+            is_makeup: 0,
+        },
+    ];
     notificationLogs.length = 0;
     sentEmails.length = 0;
     queryCalls.length = 0;
@@ -112,14 +123,13 @@ test('emails duty creator and assigned staff once when system absences are recor
         if (sql.includes('INSERT INTO duty_attendance')) return [{ affectedRows: 0 }, []];
         if (sql.includes('SELECT d.id AS duty_id')) return [absenceRows, []];
         if (sql.includes('SELECT id FROM notification_logs')) {
-            const [recipient, detail] = queryCalls.at(-1).values;
-            return [notificationLogs.some(log => log.recipient === recipient && log.detail === detail && log.status === 'sent') ? [{ id: 1 }] : [], []];
+            const [recipient, type, detail] = queryCalls.at(-1).values;
+            return [notificationLogs.some(log => log.recipient === recipient && log.type === type && log.detail === detail && log.status === 'sent') ? [{ id: 1 }] : [], []];
         }
         if (sql.includes('INSERT INTO notification_logs')) {
-            const [recipient, detail] = queryCalls.at(-1).values;
-            const type = sql.includes("'duty_absence_notice'") ? 'duty_absence_notice' : '';
+            const [scholar_id, recipient, type, detail] = queryCalls.at(-1).values;
             const status = sql.includes("'sent'") ? 'sent' : 'failed';
-            notificationLogs.push({ recipient, type, status, detail });
+            notificationLogs.push({ scholar_id, recipient, type, status, detail });
             return [{ affectedRows: 1 }, []];
         }
         if (sql.includes('RELEASE_LOCK')) return [[{ released: 1 }], []];
@@ -127,14 +137,23 @@ test('emails duty creator and assigned staff once when system absences are recor
     };
 
     const firstRun = await markEndedDutyAbsences();
-    assert.equal(firstRun.sentCount, 2);
-    assert.deepEqual(sentEmails.map(email => email.to).sort(), ['creator@example.com', 'staff@example.com']);
-    assert.ok(sentEmails.every(email => email.html.includes('Duty Absence Notice')));
-    assert.ok(sentEmails.every(email => email.html.includes('Absent Scholar') && email.html.includes('Another Absent Scholar')));
+    assert.equal(firstRun.sentCount, 4);
+    assert.deepEqual(sentEmails.map(email => email.to).sort(), [
+        'absent-one@example.com',
+        'absent-two@example.com',
+        'creator@example.com',
+        'staff@example.com',
+    ]);
+    const scholarAbsenceEmail = sentEmails.find(email => email.to === 'absent-one@example.com');
+    const creatorAbsenceEmail = sentEmails.find(email => email.to === 'creator@example.com');
+    assert.ok(scholarAbsenceEmail.html.includes('Duty Attendance Update'));
+    assert.ok(scholarAbsenceEmail.html.includes('Makeup duty'));
+    assert.ok(creatorAbsenceEmail.html.includes('Duty Absence Notice'));
+    assert.ok(creatorAbsenceEmail.html.includes('Absent Scholar') && creatorAbsenceEmail.html.includes('Another Absent Scholar'));
 
     const duplicateRun = await markEndedDutyAbsences();
     assert.equal(duplicateRun.sentCount, 0);
-    assert.equal(sentEmails.length, 2);
+    assert.equal(sentEmails.length, 4);
 });
 
 test('skips duplicate sweeps while another scheduler holds the lock', async () => {

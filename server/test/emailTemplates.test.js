@@ -9,6 +9,13 @@ const htmlBuilders = [
     duty: { title: '<Cleanup>', duty_date: '2026-10-25' },
     scholars: [{ full_name: '<Absent>', scholar_id: 'AS-001' }],
   }),
+  () => templates.buildDutyAttendanceStatusEmail({
+    recipientName: '<Scholar>',
+    duty: { title: '<Cleanup>', duty_date: '2026-10-25' },
+    status: 'absent',
+    isMakeup: true,
+    actionUrl: 'https://example.com/scholar/duties',
+  }),
   () => templates.buildMakeupDutyAssignmentEmail({
     recipientName: '<Scholar>',
     scholarName: '<Scholar>',
@@ -25,7 +32,17 @@ const htmlBuilders = [
   () => templates.buildWelcomeEmail({ fullName: '<Scholar>', loginId: 'AS-001', email: 'scholar@example.com', temporaryPassword: '<temporary>', setupUrl: 'https://example.com/account/setup' }),
   () => templates.buildPasswordResetEmail({ fullName: '<Scholar>', resetUrl: 'https://example.com/forgot-password?token=abc' }),
   () => templates.buildAnnouncementEmail({ title: '<Announcement>', content: '<script>alert(1)</script>', actionUrl: 'https://example.com/announcements' }),
+  () => templates.buildTaskAssignmentEmail({
+    recipientName: '<Scholar>',
+    taskTitle: '<Task>',
+    taskType: 'Monthly Report',
+    dueDate: '2026-10-30',
+    instructions: '<Submit safely>',
+    recipientRole: 'scholar',
+    actionUrl: 'https://example.com/scholar/submission',
+  }),
   () => templates.buildDeadlineReminderEmail({ recipientName: '<Scholar>', taskTitle: '<Task>', dueDate: '2026-10-30', daysLeft: 3, actionUrl: 'https://example.com/scholar/submission' }),
+  () => templates.buildDeadlineReminderEmail({ recipientName: '<Scholar>', taskTitle: '<Task>', dueDate: '2026-10-30', daysLeft: 1, actionUrl: 'https://example.com/scholar/submission' }),
   () => templates.buildOverdueEmail({ recipientName: '<Scholar>', scholarName: '<Scholar>', taskTitle: '<Task>', dueDate: '2026-10-20' }),
   () => templates.buildRepeatedRiskEmail({ recipientName: '<Officer>', scholarName: '<Scholar>', negativeCount: 2 }),
   () => templates.buildUnsubmittedTaskSummaryEmail({
@@ -115,6 +132,17 @@ test('template content is escaped and unsafe action URLs do not create links', (
   assert.match(complianceHtml, /Current compliance points/);
   assert.match(complianceHtml, /68\.00%/);
   assert.doesNotMatch(complianceHtml, /<Scholar>/);
+
+  const taskAssignmentHtml = templates.buildTaskAssignmentEmail({
+    recipientName: '<Scholar>',
+    taskTitle: '<Task>',
+    instructions: '<script>alert("x")</script>',
+    recipientRole: 'scholar',
+    actionUrl: 'javascript:alert(1)',
+  });
+  assert.match(taskAssignmentHtml, /&lt;Task&gt;/);
+  assert.match(taskAssignmentHtml, /&lt;script&gt;alert\(&quot;x&quot;\)&lt;\/script&gt;/);
+  assert.doesNotMatch(taskAssignmentHtml, /href="javascript:/i);
 });
 
 test('welcome email uses Apple Scholar system-specific account guidance', () => {
