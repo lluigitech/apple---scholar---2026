@@ -688,24 +688,6 @@ exports.sendPasswordResetEmail = (user, resetUrl, cb) => {
 exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
     (async () => {
         const { announcement, recipients } = await getAnnouncementRecipients(announcementId);
-        const recentSent = await queryDb(`
-            SELECT COUNT(*) AS sent_count
-            FROM notification_logs
-            WHERE type = 'announcement_notification'
-              AND status = 'sent'
-              AND detail LIKE ?
-              AND created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-        `, [`announcement:${announcementId}:sent:%`]);
-        if (Number(recentSent[0]?.sent_count || 0) > 0) {
-            return cb(null, {
-                ok: true,
-                already_sent: true,
-                sent_count: 0,
-                recipient_count: 0,
-                message: 'This announcement was already emailed within the last 24 hours.',
-            });
-        }
-
         if (!recipients.length) {
             return cb(null, {
                 ok: false,

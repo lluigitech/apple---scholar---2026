@@ -13,7 +13,6 @@ let announcement = {
   created_by_role: 'admin',
 };
 let recipients = [];
-let recentSentCount = 0;
 let sendError = null;
 let recipientQuery;
 const sentMessages = [];
@@ -23,8 +22,6 @@ const fakeDb = {
   query(sql, values, callback) {
     if (sql.includes('FROM announcements WHERE id = ?')) {
       callback(null, [announcement]);
-    } else if (sql.includes('SELECT COUNT(*) AS sent_count')) {
-      callback(null, [{ sent_count: recentSentCount }]);
     } else if (sql.includes('FROM users u LEFT JOIN admin_preferences')) {
       recipientQuery = { sql, values };
       callback(null, recipients);
@@ -83,7 +80,6 @@ test('announcement notify includes every selected role and canonical year-level 
     { full_name: 'Staff Recipient', email: 'staff@example.com', role: 'staff' },
     { full_name: 'Officer Recipient', email: 'officer@example.com', role: 'officer' },
   ];
-  recentSentCount = 0;
   sendError = null;
   recipientQuery = null;
   sentMessages.length = 0;
@@ -108,7 +104,6 @@ test('announcement notify includes every selected role and canonical year-level 
 
 test('announcement notify reports no eligible email recipients as an error', async () => {
   recipients = [];
-  recentSentCount = 0;
   sentMessages.length = 0;
 
   const result = await sendAnnouncement();
@@ -120,21 +115,23 @@ test('announcement notify reports no eligible email recipients as an error', asy
   assert.equal(sentMessages.length, 0);
 });
 
-test('announcement notify reports when it was already sent recently', async () => {
+test('each explicit announcement notify click sends to the target audience', async () => {
   recipients = [{ email: 'scholar@example.com', role: 'scholar' }];
-  recentSentCount = 1;
+  sendError = null;
   sentMessages.length = 0;
+  notificationLogs.length = 0;
 
-  const result = await sendAnnouncement();
+  const firstResult = await sendAnnouncement();
+  const secondResult = await sendAnnouncement();
 
-  assert.equal(result.already_sent, true);
-  assert.match(result.message, /already emailed within the last 24 hours/i);
-  assert.equal(sentMessages.length, 0);
+  assert.equal(firstResult.sent_count, 1);
+  assert.equal(secondResult.sent_count, 1);
+  assert.equal(sentMessages.length, 2);
+  assert.equal(notificationLogs.length, 2);
 });
 
 test('announcement notify returns SMTP failures instead of counting them as sent', async () => {
   recipients = [{ scholar_id: 'S-7', email: 'scholar@example.com', role: 'scholar' }];
-  recentSentCount = 0;
   sendError = new Error('SMTP rejected the message');
   notificationLogs.length = 0;
 
