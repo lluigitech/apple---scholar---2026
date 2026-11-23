@@ -187,8 +187,6 @@ function CreateModal({ authorName, onClose, onCreated }) {
     const [levels,      setLevels]      = useState([]);
     const [error,       setError]       = useState('');
     const [submitting,  setSubmitting]  = useState(false);
-    const authorId = localStorage.getItem('id') || localStorage.getItem('user_id') || null;
-
     useEffect(() => {
         const onKey = (e) => { if (e.key === 'Escape') onClose(); };
         window.addEventListener('keydown', onKey);
@@ -221,7 +219,6 @@ function CreateModal({ authorName, onClose, onCreated }) {
                 priority,
                 target_roles:  targetRoles,
                 target_levels: targetRoles.includes('scholar') ? levels : [],
-                created_by:    authorId,
             }, authHeaders());
             onCreated();
             onClose();
@@ -584,20 +581,23 @@ const AdminAnnouncement = () => {
             const recipientCount = Number.isFinite(result.recipient_count)
                 ? result.recipient_count
                 : sentCount + failedCount;
+            const adminCopyStatus = result.admin_author_included
+                ? (result.admin_author_sent ? ' The announcing admin received a copy.' : ' The announcing admin copy failed.')
+                : '';
             if (result.ok === false || failedCount > 0 || sentCount === 0) {
                 setFeedback({
                     id,
                     type: 'error',
                     text: result.error
                         || (failedCount > 0
-                            ? `Sent to ${sentCount} of ${recipientCount} recipients; ${failedCount} failed.`
+                            ? `Sent to ${sentCount} of ${recipientCount} recipients; ${failedCount} failed.${adminCopyStatus}`
                             : result.message || 'No notification emails were sent.'),
                 });
             } else {
                 setFeedback({
                     id,
                     type: 'success',
-                    text: `Sent to ${sentCount} of ${recipientCount} recipients.`,
+                    text: `Sent to ${sentCount} of ${recipientCount} recipients.${adminCopyStatus}`,
                 });
             }
         } catch (err) {

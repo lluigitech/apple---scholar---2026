@@ -157,7 +157,7 @@ const getDutyRecipients = async (dutyId) => {
 
 const getAnnouncementRecipients = async (announcementId) => {
     const announcementRows = await queryDb(
-        'SELECT id, title, content, target_roles, target_levels, created_by_role FROM announcements WHERE id = ? AND is_active = 1',
+        'SELECT id, title, content, target_roles, target_levels, created_by, created_by_role FROM announcements WHERE id = ? AND is_active = 1',
         [announcementId]
     );
     if (!announcementRows.length) throw new Error('Announcement not found');
@@ -196,8 +196,33 @@ const getAnnouncementRecipients = async (announcementId) => {
     sql += ' ORDER BY u.full_name';
 
     const rows = await queryDb(sql, values);
+    let announcementAuthor = null;
+    if (String(announcement.created_by_role || '').trim().toLowerCase() === 'admin' && announcement.created_by) {
+        const existingAuthor = rows.find(recipient => String(recipient.id) === String(announcement.created_by));
+        if (existingAuthor) {
+            announcementAuthor = existingAuthor;
+        } else {
+            const authorRows = await queryDb(`
+                SELECT u.id, u.scholar_id, u.full_name, u.email, u.role, u.year_level, p.settings_json AS preferences
+                FROM users u LEFT JOIN admin_preferences p ON p.user_id = u.id
+                WHERE u.id = ?
+                  AND LOWER(TRIM(COALESCE(u.role, ''))) = 'admin'
+                  AND LOWER(TRIM(COALESCE(u.status, ''))) = 'active'
+                  AND u.email IS NOT NULL AND TRIM(u.email) <> ''
+                LIMIT 1
+            `, [announcement.created_by]);
+            announcementAuthor = authorRows[0] || null;
+            if (announcementAuthor) {
+                const authorEmail = String(announcementAuthor.email).trim().toLowerCase();
+                if (!rows.some(recipient => String(recipient.email || '').trim().toLowerCase() === authorEmail)) {
+                    rows.push(announcementAuthor);
+                }
+            }
+        }
+    }
+
     const eligibleRecipients = rows.filter((recipient) => {
-        if (recipient.role !== 'admin') return true;
+        if (String(recipient.role || '').trim().toLowerCase() !== 'admin') return true;
         try {
             const preferences = recipient.preferences ? JSON.parse(recipient.preferences) : {};
             return preferences.emailNotifications !== false;
@@ -207,7 +232,12 @@ const getAnnouncementRecipients = async (announcementId) => {
         }
     });
 
-    return { announcement, recipients: eligibleRecipients };
+    const authorEmail = String(announcementAuthor?.email || '').trim().toLowerCase();
+    const adminAuthorIncluded = Boolean(authorEmail && eligibleRecipients.some(
+        recipient => String(recipient.email || '').trim().toLowerCase() === authorEmail
+    ));
+
+    return { announcement, recipients: eligibleRecipients, adminAuthorIncluded, adminAuthorEmail: authorEmail };
 };
 
 exports.sendTaskAssignmentEmails = (taskId, cb) => {
@@ -687,7 +717,7 @@ exports.sendPasswordResetEmail = (user, resetUrl, cb) => {
 
 exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
     (async () => {
-        const { announcement, recipients } = await getAnnouncementRecipients(announcementId);
+        const { announcement, recipients, adminAuthorIncluded, adminAuthorEmail } = await getAnnouncementRecipients(announcementId);
         if (!recipients.length) {
             return cb(null, {
                 ok: false,
@@ -695,6 +725,8 @@ exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
                 recipient_count: 0,
                 sent_count: 0,
                 failed_count: 0,
+                admin_author_included: false,
+                admin_author_sent: false,
             });
         }
 
@@ -706,11 +738,14 @@ exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
                 recipient_count: recipients.length,
                 sent_count: 0,
                 failed_count: recipients.length,
+                admin_author_included: adminAuthorIncluded,
+                admin_author_sent: false,
             });
         }
 
         const sent = [];
         const failures = [];
+        let adminAuthorSent = false;
         const subject = `Kalinga Scholar — Announcement: ${announcement.title}`;
         const text = buildRecipientEmailText(announcement.title, announcement.content, 'announcement');
 
@@ -745,6 +780,9 @@ exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
                 }
 
                 sent.push({ recipient: recipientEmail, messageId: info.messageId || null });
+                if (adminAuthorIncluded && recipientEmail.toLowerCase() === adminAuthorEmail) {
+                    adminAuthorSent = true;
+                }
                 await logNotification({
                     scholar_id: recipient.scholar_id,
                     recipient: recipientEmail,
@@ -774,6 +812,8 @@ exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
             recipient_count: recipients.length,
             sent_count: sent.length,
             failed_count: failures.length,
+            admin_author_included: adminAuthorIncluded,
+            admin_author_sent: adminAuthorSent,
             sent,
             failures,
         });

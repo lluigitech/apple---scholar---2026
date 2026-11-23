@@ -10,9 +10,17 @@ let announcement = {
   content: 'Please review the latest update.',
   target_roles: JSON.stringify(['scholar', 'staff', 'officer']),
   target_levels: JSON.stringify(['grade_7']),
+  created_by: 99,
   created_by_role: 'admin',
 };
 let recipients = [];
+let adminAuthor = {
+  id: 99,
+  full_name: 'Announcing Admin',
+  email: 'admin@example.com',
+  role: 'admin',
+  preferences: JSON.stringify({ emailNotifications: true }),
+};
 let sendError = null;
 let recipientQuery;
 const sentMessages = [];
@@ -22,6 +30,8 @@ const fakeDb = {
   query(sql, values, callback) {
     if (sql.includes('FROM announcements WHERE id = ?')) {
       callback(null, [announcement]);
+    } else if (sql.includes('FROM users u LEFT JOIN admin_preferences') && sql.includes('WHERE u.id = ?')) {
+      callback(null, adminAuthor ? [adminAuthor] : []);
     } else if (sql.includes('FROM users u LEFT JOIN admin_preferences')) {
       recipientQuery = { sql, values };
       callback(null, recipients);
@@ -88,22 +98,26 @@ test('announcement notify includes every selected role and canonical year-level 
   const result = await sendAnnouncement();
 
   assert.equal(result.ok, true);
-  assert.equal(result.recipient_count, 3);
-  assert.equal(result.sent_count, 3);
+  assert.equal(result.recipient_count, 4);
+  assert.equal(result.sent_count, 4);
   assert.equal(result.failed_count, 0);
+  assert.equal(result.admin_author_included, true);
+  assert.equal(result.admin_author_sent, true);
   assert.deepEqual(
     sentMessages.map(message => message.to).sort(),
-    ['officer@example.com', 'scholar@example.com', 'staff@example.com']
+    ['admin@example.com', 'officer@example.com', 'scholar@example.com', 'staff@example.com']
   );
   assert.match(recipientQuery.sql, /LOWER\(TRIM\(COALESCE\(u\.role, ''\)\)\) IN \(\?, \?, \?\)/);
   assert.match(recipientQuery.sql, /u\.email IS NOT NULL AND TRIM\(u\.email\) <> ''/);
   assert.match(recipientQuery.sql, /LOWER\(REPLACE\(REPLACE\(TRIM\(COALESCE\(u\.year_level, ''\)\)/);
   assert.deepEqual(recipientQuery.values, ['scholar', 'staff', 'officer', 'grade 7']);
-  assert.equal(notificationLogs.length, 3);
+  assert.equal(notificationLogs.length, 4);
 });
 
 test('announcement notify reports no eligible email recipients as an error', async () => {
   recipients = [];
+  adminAuthor = null;
+  announcement = { ...announcement, created_by: null };
   sentMessages.length = 0;
 
   const result = await sendAnnouncement();
@@ -117,6 +131,14 @@ test('announcement notify reports no eligible email recipients as an error', asy
 
 test('each explicit announcement notify click sends to the target audience', async () => {
   recipients = [{ email: 'scholar@example.com', role: 'scholar' }];
+  adminAuthor = {
+    id: 99,
+    full_name: 'Announcing Admin',
+    email: 'admin@example.com',
+    role: 'admin',
+    preferences: JSON.stringify({ emailNotifications: true }),
+  };
+  announcement = { ...announcement, created_by: 99 };
   sendError = null;
   sentMessages.length = 0;
   notificationLogs.length = 0;
@@ -124,27 +146,72 @@ test('each explicit announcement notify click sends to the target audience', asy
   const firstResult = await sendAnnouncement();
   const secondResult = await sendAnnouncement();
 
-  assert.equal(firstResult.sent_count, 1);
-  assert.equal(secondResult.sent_count, 1);
-  assert.equal(sentMessages.length, 2);
-  assert.equal(notificationLogs.length, 2);
+  assert.equal(firstResult.sent_count, 2);
+  assert.equal(secondResult.sent_count, 2);
+  assert.equal(sentMessages.length, 4);
+  assert.equal(notificationLogs.length, 4);
+});
+
+test('announcement author is not duplicated when already in the selected audience', async () => {
+  announcement = {
+    ...announcement,
+    target_roles: JSON.stringify(['admin', 'scholar']),
+    created_by: 99,
+  };
+  adminAuthor = {
+    id: 99,
+    full_name: 'Announcing Admin',
+    email: 'admin@example.com',
+    role: 'admin',
+    preferences: JSON.stringify({ emailNotifications: true }),
+  };
+  recipients = [
+    adminAuthor,
+    { scholar_id: 'S-7', full_name: 'Scholar', email: 'scholar@example.com', role: 'scholar' },
+  ];
+  sendError = null;
+  sentMessages.length = 0;
+  notificationLogs.length = 0;
+
+  const result = await sendAnnouncement();
+
+  assert.equal(result.recipient_count, 2);
+  assert.equal(result.sent_count, 2);
+  assert.equal(result.admin_author_sent, true);
+  assert.equal(sentMessages.filter(message => message.to === 'admin@example.com').length, 1);
 });
 
 test('announcement notify returns SMTP failures instead of counting them as sent', async () => {
   recipients = [{ scholar_id: 'S-7', email: 'scholar@example.com', role: 'scholar' }];
+  adminAuthor = {
+    id: 99,
+    full_name: 'Announcing Admin',
+    email: 'admin@example.com',
+    role: 'admin',
+    preferences: JSON.stringify({ emailNotifications: true }),
+  };
+  announcement = { ...announcement, created_by: 99 };
   sendError = new Error('SMTP rejected the message');
   notificationLogs.length = 0;
 
   const result = await sendAnnouncement();
 
   assert.equal(result.ok, false);
-  assert.equal(result.recipient_count, 1);
+  assert.equal(result.recipient_count, 2);
   assert.equal(result.sent_count, 0);
-  assert.equal(result.failed_count, 1);
+  assert.equal(result.failed_count, 2);
+  assert.equal(result.admin_author_included, true);
+  assert.equal(result.admin_author_sent, false);
   assert.match(result.failures[0].error, /SMTP rejected/);
   assert.ok(notificationLogs.some(([scholarId, recipient, channel, type, status]) =>
     scholarId === 'S-7'
     && recipient === 'scholar@example.com'
+    && channel === 'email'
+    && type === 'announcement_notification'
+    && status === 'failed'
+  ));
+  assert.ok(notificationLogs.some(([, recipient, channel, type, status]) =>
+    recipient === 'admin@example.com'
     && channel === 'email'
     && type === 'announcement_notification'
     && status === 'failed'

@@ -1390,7 +1390,7 @@ exports.getAnnouncements = (req, res) => {
 };
 
 exports.createAnnouncement = (req, res) => {
-    const { title, content, target_roles, target_levels, priority, created_by } = req.body;
+    const { title, content, target_roles, target_levels, priority } = req.body;
     if (!title || !content) return res.status(400).json({ error: 'Title and content are required' });
 
     const roles = Array.isArray(target_roles) && target_roles.length
@@ -1398,7 +1398,7 @@ exports.createAnnouncement = (req, res) => {
         : ['scholar', 'staff', 'officer'];
 
     const levels = Array.isArray(target_levels) ? target_levels : [];
-    const creatorId = created_by === undefined || created_by === null || created_by === '' ? null : Number(created_by);
+    const creatorId = req.user?.id || null;
 
     db.query(
         `INSERT INTO announcements (title, content, target_roles, target_levels, priority, created_by, created_by_role, is_active)
