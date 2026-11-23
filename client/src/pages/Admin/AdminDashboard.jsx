@@ -34,6 +34,16 @@ const QUALITY_SCORE_BANDS = [
     { key: 'needsImprovement', name: 'Needs Improvement (50–74)', color: WARNING },
     { key: 'nonCompliant', name: 'Non-Compliant (0–49)', color: DANGER },
 ];
+const SUBMISSION_STATUS_SERIES = [
+    { key: 'approved', name: 'Approved', color: SUCCESS },
+    { key: 'pending', name: 'Pending', color: WARNING },
+    { key: 'rejected', name: 'Rejected', color: DANGER },
+];
+const DUTY_ATTENDANCE_SERIES = [
+    { key: 'present', name: 'Present', color: SUCCESS },
+    { key: 'late', name: 'Late', color: WARNING },
+    { key: 'absent', name: 'Absent', color: DANGER },
+];
 
 // ── Operations routes ────────────────────────────────────────────
 // NOTE: verify these two against your router config (the sidebar's
@@ -67,6 +77,31 @@ const ChartTooltip = ({ active, payload, label }) => {
         </div>
     );
 };
+
+const buildRecentMonthSeries = (rows, fields) => {
+    const recordsByMonth = new Map((Array.isArray(rows) ? rows : []).map((row) => [row.month, row]));
+    const now = new Date();
+    return Array.from({ length: 6 }, (_, index) => {
+        const monthDate = new Date(now.getFullYear(), now.getMonth() - 5 + index, 1);
+        const monthKey = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
+        const record = recordsByMonth.get(monthKey) || {};
+        return {
+            month: formatAdminMonth(monthDate, { month: 'short', year: '2-digit' }),
+            ...Object.fromEntries(fields.map((field) => [field, Number(record[field]) || 0])),
+        };
+    });
+};
+
+const ChartSeriesLegend = ({ series }) => (
+    <ul className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5" style={{ listStyle: 'none', marginBottom: 0, padding: 0 }}>
+        {series.map((item) => (
+            <li key={item.key} className="flex items-center gap-1.5" style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>
+                <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 3, background: item.color, flexShrink: 0 }} />
+                {item.name}
+            </li>
+        ))}
+    </ul>
+);
 
 const Skeleton = ({ className }) => (
     <div className={`animate-pulse rounded-2xl ${className}`} style={{ background: '#EFE6D8' }} />
@@ -156,6 +191,8 @@ const AdminDashboard = () => {
     const [dashboardError, setDashboardError] = useState('');
 
     const [scholarGrowth, setScholarGrowth] = useState([]);
+    const [submissionStatusByMonth, setSubmissionStatusByMonth] = useState([]);
+    const [dutyAttendanceByMonth, setDutyAttendanceByMonth] = useState([]);
     const [qualityScoreByMonthLevel, setQualityScoreByMonthLevel] = useState([]);
     const [selectedScoringMonth, setSelectedScoringMonth] = useState('');
     const [qualityScoreAvailable, setQualityScoreAvailable] = useState(false);
@@ -190,18 +227,15 @@ const AdminDashboard = () => {
                 });
                 setRecentUsers(summary.recentUsers);
 
-                const monthlyCounts = new Map(summary.scholarGrowth.map(({ month, total }) => [month, total]));
-                const growth = [];
-                const now = new Date();
-                for (let offset = 5; offset >= 0; offset -= 1) {
-                    const monthDate = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-                    const key = `${monthDate.getFullYear()}-${String(monthDate.getMonth() + 1).padStart(2, '0')}`;
-                    growth.push({
-                        month: formatAdminMonth(monthDate, { month: 'short' }),
-                        total: monthlyCounts.get(key) || 0,
-                    });
-                }
-                setScholarGrowth(growth);
+                setScholarGrowth(buildRecentMonthSeries(summary.scholarGrowth, ['total']));
+                setSubmissionStatusByMonth(buildRecentMonthSeries(
+                    summary.submissions.statusByMonth,
+                    SUBMISSION_STATUS_SERIES.map(({ key }) => key)
+                ));
+                setDutyAttendanceByMonth(buildRecentMonthSeries(
+                    summary.duties.attendanceByMonth,
+                    [...DUTY_ATTENDANCE_SERIES.map(({ key }) => key), 'makeup']
+                ));
 
                 const qualityScore = summary.submissions.qualityScore;
                 const qualityScoreFields = ['scoredRecords', 'excellent', 'good', 'needsImprovement', 'nonCompliant', 'average'];
@@ -235,7 +269,6 @@ const AdminDashboard = () => {
                     { label: 'Positive', value: summary.submissions.sentiment.positive },
                     { label: 'Neutral', value: summary.submissions.sentiment.neutral },
                     { label: 'Negative', value: summary.submissions.sentiment.negative },
-                    { label: 'Unscored', value: summary.submissions.sentiment.unscored },
                 ]);
                 setRecentActivity(summary.recentActivity.map((item) => ({
                     id: item.id,
@@ -324,7 +357,7 @@ const AdminDashboard = () => {
         return { background: `${SUCCESS}18`, color: SUCCESS };
     };
 
-    const sentimentColor = { Positive: SUCCESS, Neutral: WARNING, Negative: DANGER, Unscored: MUTED };
+    const sentimentColor = { Positive: SUCCESS, Neutral: WARNING, Negative: DANGER };
 
     const operationsCards = [
         { title: 'Announcements', icon: Megaphone, path: '/admin/announcements', action: 'View Announcements',
@@ -385,6 +418,13 @@ const AdminDashboard = () => {
     const lettersTotal = sentimentBreakdown.reduce((sum, item) => sum + item.value, 0);
     const negativeLetters = sentimentBreakdown.find((item) => item.label === 'Negative')?.value || 0;
     const hasAverage = qualityScoreAvailable && selectedMonthScoredTotal > 0;
+    const hasSubmissionStatusData = submissionStatusByMonth.some((month) =>
+        SUBMISSION_STATUS_SERIES.some(({ key }) => month[key] > 0)
+    );
+    const hasDutyAttendanceData = dutyAttendanceByMonth.some((month) =>
+        DUTY_ATTENDANCE_SERIES.some(({ key }) => month[key] > 0)
+    );
+    const makeUpAttendanceTotal = dutyAttendanceByMonth.reduce((sum, month) => sum + month.makeup, 0);
 
     const chartHeight = isNarrow ? 220 : 250;
 
@@ -646,6 +686,80 @@ const AdminDashboard = () => {
                                             </Bar>
                                         </BarChart>
                                     </ResponsiveContainer>
+                                )}
+                            </ChartCard>
+                        </div>
+
+                        {/* Row 3: Submission and duty activity */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
+                            <ChartCard
+                                icon={ClipboardList}
+                                title="Submission Status"
+                                subtitle="Monthly submission records by current review status."
+                            >
+                                {!hasSubmissionStatusData ? (
+                                    <EmptyState>No submissions in the last six months.</EmptyState>
+                                ) : (
+                                    <>
+                                        <ResponsiveContainer width="100%" height={chartHeight}>
+                                            <BarChart data={submissionStatusByMonth} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
+                                                <CartesianGrid {...gridProps} vertical={false} />
+                                                <XAxis dataKey="month" tick={axisStyle} stroke={BORDER} />
+                                                <YAxis tick={axisStyle} stroke={BORDER} allowDecimals={false} />
+                                                <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
+                                                {SUBMISSION_STATUS_SERIES.map((series, index) => (
+                                                    <Bar
+                                                        key={series.key}
+                                                        dataKey={series.key}
+                                                        name={series.name}
+                                                        stackId="submission-status"
+                                                        fill={series.color}
+                                                        radius={index === SUBMISSION_STATUS_SERIES.length - 1 ? [5, 5, 0, 0] : undefined}
+                                                        maxBarSize={40}
+                                                    />
+                                                ))}
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                        <ChartSeriesLegend series={SUBMISSION_STATUS_SERIES} />
+                                    </>
+                                )}
+                            </ChartCard>
+
+                            <ChartCard
+                                icon={CalendarDays}
+                                title="Duty Attendance"
+                                subtitle="Monthly attendance records by status."
+                            >
+                                {!hasDutyAttendanceData ? (
+                                    <EmptyState>No duty attendance in the last six months.</EmptyState>
+                                ) : (
+                                    <>
+                                        <ResponsiveContainer width="100%" height={chartHeight}>
+                                            <BarChart data={dutyAttendanceByMonth} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
+                                                <CartesianGrid {...gridProps} vertical={false} />
+                                                <XAxis dataKey="month" tick={axisStyle} stroke={BORDER} />
+                                                <YAxis tick={axisStyle} stroke={BORDER} allowDecimals={false} />
+                                                <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
+                                                {DUTY_ATTENDANCE_SERIES.map((series, index) => (
+                                                    <Bar
+                                                        key={series.key}
+                                                        dataKey={series.key}
+                                                        name={series.name}
+                                                        stackId="duty-attendance"
+                                                        fill={series.color}
+                                                        radius={index === DUTY_ATTENDANCE_SERIES.length - 1 ? [5, 5, 0, 0] : undefined}
+                                                        maxBarSize={40}
+                                                    />
+                                                ))}
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <ChartSeriesLegend series={DUTY_ATTENDANCE_SERIES} />
+                                            <p style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>
+                                                {makeUpAttendanceTotal} make-up attendance records included
+                                            </p>
+                                        </div>
+                                    </>
                                 )}
                             </ChartCard>
                         </div>

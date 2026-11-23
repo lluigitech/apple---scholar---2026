@@ -138,7 +138,7 @@ test('Admin cannot make a compliance review decision', async () => {
   assert.equal(queryCount, 0);
 });
 
-test('public Cloudinary-generated PDFs preview from their upload URL', async () => {
+test('registered public Cloudinary PDFs preview when their cloud differs from current config', async () => {
   const originalCloudName = process.env.CLOUDINARY_CLOUD_NAME;
   const originalPrivateDownloadUrl = cloudinary.utils.private_download_url;
   const originalFetch = global.fetch;
@@ -147,7 +147,7 @@ test('public Cloudinary-generated PDFs preview from their upload URL', async () 
   let privateDownloadCalled = false;
   const responseHeaders = {};
 
-  process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
+  process.env.CLOUDINARY_CLOUD_NAME = 'current-cloud';
   cloudinary.utils.private_download_url = () => {
     privateDownloadCalled = true;
     return 'https://res.cloudinary.com/test-cloud/image/authenticated/private_download/submission-11.pdf';

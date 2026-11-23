@@ -1590,6 +1590,48 @@ exports.getComplianceSummary = (req, res) => {
 // Returns monthly scholar submissions for review
 exports.getMonthlySubmissions = (req, res) => {
     const { year_level, month } = req.query;
+    const includeArchivedStatus = req.query.include_archived_status === '1';
+
+    const respondWithSubmissions = (submissions) => {
+        if (!includeArchivedStatus) return res.json(submissions);
+
+        let archivedSql = `
+            SELECT DISTINCT
+                s.scholar_id,
+                u.id AS userId,
+                u.full_name AS scholarName,
+                u.year_level
+            FROM submissions s
+            INNER JOIN users u ON u.scholar_id = s.scholar_id
+            WHERE s.status = 'approved'
+              AND s.finalized_at IS NOT NULL
+              AND COALESCE(s.archived_at, s.archive_at) IS NOT NULL
+        `;
+        const archivedValues = [];
+
+        if (month) {
+            const [year, monthStr] = month.split('-');
+            archivedSql += ` AND YEAR(s.submitted_at) = ? AND MONTH(s.submitted_at) = ?`;
+            archivedValues.push(parseInt(year), parseInt(monthStr));
+        }
+
+        if (year_level) {
+            archivedSql += ` AND ${yearLevelSqlExpression('u.year_level')} = ?`;
+            archivedValues.push(normalizeYearLevel(year_level));
+        }
+
+        db.query(archivedSql, archivedValues, (err, archivedSubmissions) => {
+            if (err) {
+                console.error('Error fetching archived monthly submission status:', err);
+                return res.status(500).json({ error: 'Failed to fetch archived monthly submission status.' });
+            }
+
+            res.json({
+                submissions,
+                archivedSubmissions: archivedSubmissions || [],
+            });
+        });
+    };
 
     let sql = `
         SELECT
@@ -1644,7 +1686,7 @@ exports.getMonthlySubmissions = (req, res) => {
         }
 
         if (!submissions || submissions.length === 0) {
-            return res.json([]);
+            return respondWithSubmissions([]);
         }
 
         const submissionIds = submissions.map(s => s.id);
@@ -1685,7 +1727,7 @@ exports.getMonthlySubmissions = (req, res) => {
                 ],
             }));
 
-            res.json(enrichedSubmissions);
+            respondWithSubmissions(enrichedSubmissions);
         });
     });
 };

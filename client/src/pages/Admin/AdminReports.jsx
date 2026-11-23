@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import axios from 'axios';
 import MonthlyReportsTab from '../../components/Admin/Reports/MonthlyReportsTab';
 import AttendanceReportsTab from '../../components/Admin/Reports/AttendanceReportsTab';
@@ -187,6 +187,7 @@ export default function AdminReports() {
 
   const [statusFilter, setStatusFilter] = useState('all');
   const [reports, setReports] = useState([]);
+  const [archivedSubmissions, setArchivedSubmissions] = useState([]);
   const [monthlyLoading, setMonthlyLoading] = useState(false);
   const [monthlyError, setMonthlyError] = useState('');
   const [selectedReport, setSelectedReport] = useState(null);
@@ -242,19 +243,24 @@ export default function AdminReports() {
     }
   };
 
-  const fetchMonthlyReports = async () => {
+  const fetchMonthlyReports = useCallback(async () => {
     setMonthlyLoading(true);
     setMonthlyError('');
     try {
       const params = {};
       if (monthlyFilterMonth) params.month = monthlyFilterMonth;
       if (monthlyFilterYearLevel) params.year_level = monthlyFilterYearLevel;
+      params.include_archived_status = '1';
 
       const res = await axios.get(`${API}/admin/reports/monthly-submissions`, {
         ...authHeaders(),
         params,
       });
-      setReports(res.data || []);
+      if (!Array.isArray(res.data?.submissions) || !Array.isArray(res.data?.archivedSubmissions)) {
+        throw new Error('Monthly submission response did not include submission records and archived status.');
+      }
+      setReports(res.data.submissions);
+      setArchivedSubmissions(res.data.archivedSubmissions);
     } catch (err) {
       console.error(err);
       setMonthlyError(
@@ -265,7 +271,7 @@ export default function AdminReports() {
     } finally {
       setMonthlyLoading(false);
     }
-  };
+  }, [monthlyFilterMonth, monthlyFilterYearLevel]);
 
   const fetchAttendanceReports = async () => {
     setAttendanceLoading(true);
@@ -355,7 +361,7 @@ export default function AdminReports() {
 
   useEffect(() => {
     if (activeTab === 'monthly-reports') fetchMonthlyReports();
-  }, [activeTab, monthlyFilterMonth, monthlyFilterYearLevel]);
+  }, [activeTab, fetchMonthlyReports]);
 
   useEffect(() => {
     if (activeTab === 'attendance' && !attendanceFetched) fetchAttendanceReports();
@@ -370,17 +376,17 @@ export default function AdminReports() {
         setComplianceError('');
       }
       if (Array.isArray(refreshed.submissions)) {
-        setReports(refreshed.submissions);
-        setMonthlyError('');
+        fetchMonthlyReports();
       }
     };
     window.addEventListener('admin-refresh-reports', applyRefreshedReports);
     return () => window.removeEventListener('admin-refresh-reports', applyRefreshedReports);
-  }, []);
+  }, [fetchMonthlyReports]);
 
   const filteredMonthly = useMemo(() => {
-    if (statusFilter !== 'not-submitted') return reports;
-    if (!complianceFetched || !monthlyFilterMonth || monthlyLoading || monthlyError) return [];
+    if (statusFilter === 'submitted') return reports;
+    const reportsForStatus = statusFilter === 'not-submitted' ? [] : reports;
+    if (!complianceFetched || !monthlyFilterMonth || monthlyLoading || monthlyError) return reportsForStatus;
 
     const hasYearLevel = complianceRows.some(row => row.year || row.yearLevel || row.year_level);
     const registry = monthlyFilterYearLevel
@@ -391,7 +397,7 @@ export default function AdminReports() {
         : []
       : complianceRows;
     const submittedIdentifiers = new Set(
-      reports.flatMap(report => [
+      [...reports, ...archivedSubmissions].flatMap(report => [
         report.userId,
         report.user_id,
         report.scholar_id,
@@ -401,7 +407,7 @@ export default function AdminReports() {
       ]).map(value => String(value || '').trim().toLowerCase()).filter(Boolean)
     );
 
-    return registry
+    const notSubmitted = registry
       .filter(scholar => {
         const identifiers = [
           scholar.id,
@@ -426,7 +432,8 @@ export default function AdminReports() {
         status: 'not-submitted',
         isMissing: true,
       }));
-  }, [statusFilter, reports, complianceRows, complianceFetched, monthlyFilterMonth, monthlyFilterYearLevel, monthlyLoading, monthlyError]);
+    return statusFilter === 'not-submitted' ? notSubmitted : [...reports, ...notSubmitted];
+  }, [statusFilter, reports, archivedSubmissions, complianceRows, complianceFetched, monthlyFilterMonth, monthlyFilterYearLevel, monthlyLoading, monthlyError]);
 
   const monthlyCounts = useMemo(() => {
     const counts = { all: reports.length, accepted: 0, 'medium-risk': 0, 'high-risk': 0 };
@@ -446,9 +453,11 @@ export default function AdminReports() {
     if (activeTab === 'monthly-reports') {
       const total = reports.length;
 
-      // Scholars who submitted in the selected month (a scholar may have more than one record).
+      // Include archived records when determining historical submission status.
       const submittedKeys = new Set(
-        reports.map(r => r.userId || r.user_id || r.scholar_id || r.studentId || r.scholarName).filter(Boolean)
+        [...reports, ...archivedSubmissions]
+          .map(r => r.userId || r.user_id || r.scholar_id || r.studentId || r.scholarName)
+          .filter(Boolean)
       );
 
       // Registry = every scholar from the compliance summary, narrowed by year level when the rows carry one.
@@ -504,7 +513,7 @@ export default function AdminReports() {
       { key: 'late', icon: Icon.Clock, label: 'Late', value: attendanceCounts.late, helper: { text: pct(attendanceCounts.late, total), dot: true }, accent: WARNING },
       { key: 'absent', icon: Icon.Alert, label: 'Absent', value: attendanceCounts.absent, helper: { text: pct(attendanceCounts.absent, total), dot: true }, accent: DANGER },
     ];
-  }, [activeTab, reports, monthlyCounts, complianceRows, complianceFetched, monthlyFilterMonth, monthlyFilterYearLevel, attendanceData]);
+  }, [activeTab, reports, archivedSubmissions, monthlyCounts, complianceRows, complianceFetched, monthlyFilterMonth, monthlyFilterYearLevel, attendanceData]);
 
   return (
     <div className="min-h-screen w-full" style={{ background: BG, color: INK }}>

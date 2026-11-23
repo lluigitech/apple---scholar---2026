@@ -181,7 +181,7 @@ const mapRow = row => {
     submittedDate: formatDate(pick(row, 'submitted_at', 'submittedAt')),
     type: 'Monthly Progress Report',
     score, quality, sentiment, sentimentScore: sScore,
-    experimentalClassification: cb?.primary_classification || cb?.experimental_classification || null,
+    letterClassification: cb?.primary_classification || cb?.experimental_classification || null,
     sentimentKeywords: Array.isArray(row.sentiment_keywords) ? row.sentiment_keywords : [],
     pdfUrl: pick(row, 'letter_pdf_url', 'letterPdfUrl', 'generated_pdf_path', 'generatedPdfPath', 'letter_file_url', 'file_url') || null,
     review: normReview(pick(row, 'review_status', 'staff_action', 'staffAction')),
@@ -451,17 +451,13 @@ function ReviewModal({ letter, onClose, onDecide, initialMode = null }) {
               </div>
             )}
 
-            {letter.experimentalClassification && (
+            {letter.letterClassification && (
               <div className="mt-3" style={{ border: `1px solid ${RULE}`, borderRadius: 12, background: `${AMBER}0a`, padding: '12px 16px' }}>
-                <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', color: CLAY }}>TF-IDF + LOGISTIC REGRESSION · PRIMARY CLASSIFICATION</p>
+                <p style={{ ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', color: CLAY }}>AUTOMATED SENTIMENT · TF-IDF + LOGISTIC REGRESSION</p>
                 <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <p style={{ ...body, fontSize: '0.78rem', color: INK }}>
-                    Sentiment: <strong>{letter.experimentalClassification.sentiment.label}</strong>
-                    <span style={{ color: MUTED }}> ({letter.experimentalClassification.sentiment.confidence_percent}% confidence)</span>
-                  </p>
-                  <p style={{ ...body, fontSize: '0.78rem', color: INK }}>
-                    Academic tone: <strong>{letter.experimentalClassification.academic_tone.label}</strong>
-                    <span style={{ color: MUTED }}> ({letter.experimentalClassification.academic_tone.confidence_percent}% confidence)</span>
+                    Sentiment: <strong>{letter.letterClassification.sentiment.label}</strong>
+                    <span style={{ color: MUTED }}> ({letter.letterClassification.sentiment.confidence_percent}% confidence)</span>
                   </p>
                 </div>
                 <p style={{ ...body, fontSize: '0.7rem', color: MUTED, marginTop: 6 }}>

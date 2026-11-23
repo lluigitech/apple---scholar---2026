@@ -3,11 +3,11 @@
 The Python service provides:
 
 - `GET /health` — loads and verifies the active classifier and reports readiness.
-- `POST /classify` with `{"letter":"..."}` — predicts sentiment and academic tone.
+- `POST /classify` with `{"letter":"..."}` — predicts letter sentiment.
 
-Both classifications use the canonical TF-IDF + Logistic Regression artifacts in
-`experimental-letter-classifier/`. Keep all four model and vectorizer files in
-their existing directories. The Flask service loads and caches the classifier
+The classifier uses the canonical TF-IDF + Logistic Regression artifacts in
+`letter-classifier/sentiment_model/`. Keep the model and vectorizer files in
+that directory. The Flask service loads and caches the classifier
 when `/health` or `/classify` is first called.
 
 The monthly letter body score is calculated separately by the Node backend
@@ -15,7 +15,7 @@ using Rule-Based Letter Body Scoring V3. It is not calculated by this service.
 Historical submissions keep their original stored scores and breakdowns.
 
 The classifier's confidence values are automated estimates, not calibrated
-certainty values. The models have not been independently validated for accuracy
+certainty values. The model has not been independently validated for accuracy
 on real-world scholar letters. Do not use predictions alone for sanctions or
 disciplinary decisions.
 

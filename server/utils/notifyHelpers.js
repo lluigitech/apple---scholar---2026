@@ -128,6 +128,12 @@ const normalizeYearLevel = (value) => {
     return gradeMatch ? `grade ${gradeMatch[1]}` : normalized;
 };
 
+const normalizeYearLevelForSql = (value) => String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+
 const buildRecipientEmailText = (title, content, scope) => {
     const intro = `You have a new ${scope} notification from Kalinga Scholar.`;
     return `${intro}\n\nTitle: ${title}\n\n${content}\n\nPlease check your dashboard for more details.`;
@@ -158,24 +164,33 @@ const getAnnouncementRecipients = async (announcementId) => {
 
     const announcement = announcementRows[0];
     const targetRoles = normalizeRoleList(announcement.target_roles);
+    const roleSource = targetRoles.length
+        ? targetRoles
+        : (announcement.created_by_role ? [announcement.created_by_role] : ['scholar', 'staff', 'officer']);
+    const roles = [...new Set(roleSource
+        .map(role => String(role || '').trim().toLowerCase())
+        .filter(role => ['admin', 'scholar', 'staff', 'officer'].includes(role)))];
+    if (!roles.length) throw new Error('Announcement has no valid recipient roles.');
+
     const targetLevels = normalizeTargetLevels(announcement.target_levels);
-    const roles = targetRoles.length ? targetRoles : (announcement.created_by_role ? [announcement.created_by_role] : ['scholar', 'staff', 'officer']);
+    const rawTargetLevels = parseJsonArray(announcement.target_levels);
+    const normalizedTargetLevels = [...new Set(
+        [...targetLevels, ...rawTargetLevels].map(normalizeYearLevelForSql).filter(Boolean)
+    )];
 
     let sql = `SELECT u.id, u.scholar_id, u.full_name, u.email, u.role, u.year_level, p.settings_json AS preferences
                FROM users u LEFT JOIN admin_preferences p ON p.user_id = u.id
-               WHERE u.status = 'active'`;
-    const values = [];
+               WHERE LOWER(TRIM(COALESCE(u.status, ''))) = 'active'
+                 AND LOWER(TRIM(COALESCE(u.role, ''))) IN (${roles.map(() => '?').join(', ')})
+                 AND u.email IS NOT NULL AND TRIM(u.email) <> ''`;
+    const values = [...roles];
 
-    if (roles.includes('scholar')) {
-        sql += ` AND u.role = 'scholar'`;
-        if (targetLevels.length) {
-            const placeholders = targetLevels.map(() => '?').join(', ');
-            sql += ` AND (u.year_level IS NULL OR u.year_level IN (${placeholders}))`;
-            values.push(...targetLevels);
-        }
-    } else {
-        sql += ` AND u.role IN (${roles.map(() => '?').join(', ')})`;
-        values.push(...roles);
+    if (roles.includes('scholar') && normalizedTargetLevels.length) {
+        const roleExpression = `LOWER(TRIM(COALESCE(u.role, '')))`;
+        const levelExpression = `LOWER(REPLACE(REPLACE(TRIM(COALESCE(u.year_level, '')), '_', ' '), '-', ' '))`;
+        const placeholders = normalizedTargetLevels.map(() => '?').join(', ');
+        sql += ` AND (${roleExpression} <> 'scholar' OR u.year_level IS NULL OR ${levelExpression} IN (${placeholders}))`;
+        values.push(...normalizedTargetLevels);
     }
 
     sql += ' ORDER BY u.full_name';
@@ -686,17 +701,30 @@ exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
                 ok: true,
                 already_sent: true,
                 sent_count: 0,
+                recipient_count: 0,
                 message: 'This announcement was already emailed within the last 24 hours.',
             });
         }
-        const transporter = getTransporter();
-
-        if (!transporter) {
-            return cb(null, { ok: false, error: 'SMTP not configured' });
-        }
 
         if (!recipients.length) {
-            return cb(null, { ok: true, sent: 0, message: 'No matching recipients found for this announcement' });
+            return cb(null, {
+                ok: false,
+                error: 'No active recipients with email addresses match this announcement audience.',
+                recipient_count: 0,
+                sent_count: 0,
+                failed_count: 0,
+            });
+        }
+
+        const transporter = getTransporter();
+        if (!transporter) {
+            return cb(null, {
+                ok: false,
+                error: 'SMTP not configured',
+                recipient_count: recipients.length,
+                sent_count: 0,
+                failed_count: recipients.length,
+            });
         }
 
         const sent = [];
@@ -705,10 +733,11 @@ exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
         const text = buildRecipientEmailText(announcement.title, announcement.content, 'announcement');
 
         for (const recipient of recipients) {
+            const recipientEmail = String(recipient.email || '').trim();
             try {
                 const info = await transporter.sendMail({
                     from: process.env.SMTP_FROM || process.env.SMTP_USER,
-                    to: recipient.email,
+                    to: recipientEmail,
                     subject,
                     text,
                     html: buildAnnouncementEmail({
@@ -723,24 +752,35 @@ exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
                     }),
                 });
 
-                sent.push({ recipient: recipient.email, messageId: info.messageId || null });
+                const normalizeAddress = (address) => String(address?.address || address || '').trim().toLowerCase();
+                const normalizedEmail = recipientEmail.toLowerCase();
+                const wasRejected = Array.isArray(info.rejected)
+                    && info.rejected.some(address => normalizeAddress(address) === normalizedEmail);
+                const wasAccepted = !Array.isArray(info.accepted)
+                    || info.accepted.some(address => normalizeAddress(address) === normalizedEmail);
+                if (wasRejected || !wasAccepted) {
+                    throw new Error('SMTP server did not accept the recipient address.');
+                }
+
+                sent.push({ recipient: recipientEmail, messageId: info.messageId || null });
                 await logNotification({
                     scholar_id: recipient.scholar_id,
-                    recipient: recipient.email,
+                    recipient: recipientEmail,
                     channel: 'email',
                     type: 'announcement_notification',
                     status: 'sent',
                     detail: `announcement:${announcementId}:sent:${info.messageId || 'sent'}`,
                 });
             } catch (sendErr) {
-                failures.push({ recipient: recipient.email, error: String(sendErr) });
+                const message = String(sendErr.message || sendErr);
+                failures.push({ recipient: recipientEmail, error: message });
                 await logNotification({
-                    scholar_id: recipient.scholar_id,
-                    recipient: recipient.email,
+                    scholar_id: recipient.scholar_id || null,
+                    recipient: recipientEmail,
                     channel: 'email',
                     type: 'announcement_notification',
                     status: 'failed',
-                    detail: String(sendErr),
+                    detail: `announcement:${announcementId}:failed:${message}`,
                 });
             }
         }
@@ -749,6 +789,7 @@ exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
             ok: failures.length === 0,
             announcement_id: announcement.id,
             announcement_title: announcement.title,
+            recipient_count: recipients.length,
             sent_count: sent.length,
             failed_count: failures.length,
             sent,

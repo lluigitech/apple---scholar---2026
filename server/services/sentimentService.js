@@ -11,7 +11,7 @@ const mapSentimentLabelToValue = (label) => {
     return 0;
 };
 
-const normalizeExperimentalClassification = (payload) => {
+const normalizeLetterSentiment = (payload) => {
     if (!payload || payload.success !== true) return null;
 
     const normalizePrediction = (value, labels) => {
@@ -34,20 +34,18 @@ const normalizeExperimentalClassification = (payload) => {
     };
 
     const sentiment = normalizePrediction(payload.sentiment, ['negative', 'neutral', 'positive']);
-    const academicTone = normalizePrediction(payload.academic_tone, ['formal', 'moderate', 'informal']);
-    if (!sentiment || !academicTone) return null;
+    if (!sentiment) return null;
 
     return {
-        model_type: 'TF-IDF + Logistic Regression',
+        model_type: 'Automated Letter Sentiment Classifier (TF-IDF + Logistic Regression)',
         sentiment_score: mapSentimentLabelToValue(sentiment.label),
         sentiment,
-        academic_tone: academicTone,
         automated_estimate: true,
         disclaimer: 'Automated model estimate; not independently validated for real-world accuracy.',
     };
 };
 
-const predictExperimentalLetterClassification = async (letterText) => {
+const predictLetterSentiment = async (letterText) => {
     if (!letterText || !String(letterText).trim()) return null;
 
     try {
@@ -61,14 +59,14 @@ const predictExperimentalLetterClassification = async (letterText) => {
             },
         });
 
-        const classification = normalizeExperimentalClassification(response?.data);
+        const classification = normalizeLetterSentiment(response?.data);
         if (!classification) {
-            console.warn('Experimental classifier returned an invalid classification.');
+            console.warn('Automated letter classifier returned an invalid classification.');
             return null;
         }
         return classification;
     } catch (error) {
-        console.warn('Experimental classification service unavailable:', error?.message || error);
+        console.warn('Automated letter classification service unavailable:', error?.message || error);
         return null;
     }
 };
@@ -76,6 +74,6 @@ const predictExperimentalLetterClassification = async (letterText) => {
 module.exports = {
     ML_SERVICE_URL,
     mapSentimentLabelToValue,
-    normalizeExperimentalClassification,
-    predictExperimentalLetterClassification,
+    normalizeLetterSentiment,
+    predictLetterSentiment,
 };

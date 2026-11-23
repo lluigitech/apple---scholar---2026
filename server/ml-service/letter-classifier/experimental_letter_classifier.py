@@ -1,6 +1,6 @@
 # ============================================================
 # APPLE SCHOLAR 2026
-# Experimental Sentiment + Academic Tone Classifier
+# Automated Letter Sentiment Classifier
 # Local Windows / Backend-compatible version
 # ============================================================
 
@@ -11,7 +11,6 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent
 
 SENTIMENT_DIR = BASE_DIR / "sentiment_model"
-TONE_DIR = BASE_DIR / "academic_tone_model"
 
 HIGH_CONFIDENCE_THRESHOLD = 0.70
 LOW_CONFIDENCE_THRESHOLD = 0.50
@@ -24,23 +23,14 @@ def load_artifact(path):
         return pickle.load(file)
 
 
-# Load both experimental models and their vectorizers.
-def load_models(
-    sentiment_dir=SENTIMENT_DIR,
-    tone_dir=TONE_DIR
-):
+# Load the sentiment model and its vectorizer.
+def load_models(sentiment_dir=SENTIMENT_DIR):
     return {
         "sentiment_vectorizer": load_artifact(
             sentiment_dir / "sentiment_tfidf_vectorizer.pkl"
         ),
         "sentiment_model": load_artifact(
             sentiment_dir / "sentiment_logistic_regression.pkl"
-        ),
-        "tone_vectorizer": load_artifact(
-            tone_dir / "academic_tone_tfidf_vectorizer.pkl"
-        ),
-        "tone_model": load_artifact(
-            tone_dir / "academic_tone_logistic_regression.pkl"
         )
     }
 
@@ -54,7 +44,7 @@ def get_confidence_status(confidence):
     return "Low"
 
 
-# Predict sentiment and academic tone.
+# Predict letter sentiment.
 def predict_letter(letter_text, models=None):
 
     if not isinstance(letter_text, str) or not letter_text.strip():
@@ -92,30 +82,6 @@ def predict_letter(letter_text, models=None):
 
     sentiment_confidence = float(max(sentiment_probabilities))
 
-    # ---------------- ACADEMIC TONE ----------------
-
-    tone_features = (
-        models["tone_vectorizer"].transform([letter_text])
-    )
-
-    tone_prediction = (
-        models["tone_model"].predict(tone_features)[0]
-    )
-
-    tone_probabilities = (
-        models["tone_model"].predict_proba(tone_features)[0]
-    )
-
-    tone_probability_map = {
-        str(label): float(probability)
-        for label, probability in zip(
-            models["tone_model"].classes_,
-            tone_probabilities
-        )
-    }
-
-    tone_confidence = float(max(tone_probabilities))
-
     # ---------------- STAFF REVIEW FLAGS ----------------
 
     review_flags = []
@@ -130,11 +96,6 @@ def predict_letter(letter_text, models=None):
     elif sentiment_confidence < HIGH_CONFIDENCE_THRESHOLD:
         review_flags.append("Moderate sentiment confidence.")
 
-    if tone_confidence < LOW_CONFIDENCE_THRESHOLD:
-        review_flags.append("Low academic tone confidence.")
-    elif tone_confidence < HIGH_CONFIDENCE_THRESHOLD:
-        review_flags.append("Moderate academic tone confidence.")
-
     if sentiment_prediction == "Negative":
         review_flags.append(
             "Negative sentiment detected; staff review recommended."
@@ -144,7 +105,7 @@ def predict_letter(letter_text, models=None):
 
     return {
         "success": True,
-        "model_type": "Experimental TF-IDF + Logistic Regression",
+        "model_type": "Automated Letter Sentiment Classifier (TF-IDF + Logistic Regression)",
         "word_count": word_count,
 
         "sentiment": {
@@ -159,23 +120,11 @@ def predict_letter(letter_text, models=None):
             "probabilities": sentiment_probability_map
         },
 
-        "academic_tone": {
-            "prediction": str(tone_prediction),
-            "confidence": tone_confidence,
-            "confidence_percent": round(
-                tone_confidence * 100, 2
-            ),
-            "confidence_status": get_confidence_status(
-                tone_confidence
-            ),
-            "probabilities": tone_probability_map
-        },
-
         "requires_staff_review": bool(review_flags),
         "review_flags": review_flags,
 
         "limitations": [
-            "Experimental classifiers trained using synthetic letters.",
+            "Classifiers trained using synthetic letters.",
             "Not validated for real-world student populations.",
             "Confidence scores are not calibrated certainty estimates.",
             "Not for automatic sanctions or disciplinary decisions.",

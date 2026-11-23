@@ -7,10 +7,10 @@ from pathlib import Path
 from flask import Flask, jsonify, request
 
 
-def load_experimental_classifier():
-    classifier_dir = Path(__file__).resolve().parent / "experimental-letter-classifier"
+def load_letter_classifier():
+    classifier_dir = Path(__file__).resolve().parent / "letter-classifier"
     if not classifier_dir.is_dir():
-        raise FileNotFoundError("Experimental classifier directory is unavailable.")
+        raise FileNotFoundError("Letter classifier directory is unavailable.")
 
     classifier_path = str(classifier_dir)
     if classifier_path not in sys.path:
@@ -20,7 +20,6 @@ def load_experimental_classifier():
 
     models = load_models(
         sentiment_dir=classifier_dir / "sentiment_model",
-        tone_dir=classifier_dir / "academic_tone_model",
     )
     return lambda letter: predict_letter(letter, models)
 
@@ -61,7 +60,7 @@ def create_app(classifier=None, api_key=None):
             with app.config["classifier_lock"]:
                 classifier_predictor = app.config["classifier"]
                 if classifier_predictor is None:
-                    classifier_predictor = load_experimental_classifier()
+                    classifier_predictor = load_letter_classifier()
                     app.config["classifier"] = classifier_predictor
         return classifier_predictor
 
@@ -82,7 +81,6 @@ def create_app(classifier=None, api_key=None):
             "model": "TF-IDF + Logistic Regression",
             "classifier_loaded": True,
             "sentiment_model": "TF-IDF + Logistic Regression",
-            "academic_tone_model": "TF-IDF + Logistic Regression",
         })
 
     @app.post("/classify")
@@ -97,13 +95,13 @@ def create_app(classifier=None, api_key=None):
         try:
             result = get_classifier()(letter)
             if not isinstance(result, dict) or result.get("success") is not True:
-                raise ValueError("Experimental classifier returned an invalid result.")
+                raise ValueError("Letter classifier returned an invalid result.")
             return jsonify(result)
         except ValueError as error:
             return jsonify({"error": str(error)}), 400
         except Exception:
-            app.logger.exception("Experimental letter classification failed.")
-            return jsonify({"error": "Experimental classification unavailable."}), 503
+            app.logger.exception("Automated letter classification failed.")
+            return jsonify({"error": "Automated letter classification unavailable."}), 503
 
     return app
 

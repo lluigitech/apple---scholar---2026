@@ -15,7 +15,7 @@ assert.match(controllerContent, /normalizedPayload\.content_score = normalizeSub
 assert.match(controllerContent, /body_score: v3Evaluation\.totalScore/);
 assert.match(controllerContent, /source: classification \? 'rule_based_v3_tfidf' : 'rule_based_v3'/);
 assert.match(controllerContent, /fallback: !classification/);
-assert.match(controllerContent, /predictExperimentalLetterClassification\(normalizedPayload\.letter_content\)/);
+assert.match(controllerContent, /predictLetterSentiment\(normalizedPayload\.letter_content\)/);
 assert.match(controllerContent, /normalizedPayload\.sentiment_score = normalizeSubmissionValue\(classification\.sentiment_score\)/);
 assert.match(controllerContent, /breakdown\.primary_classification = classification/);
 assert.doesNotMatch(

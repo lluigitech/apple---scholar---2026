@@ -58,6 +58,8 @@ test('dashboard summary returns zero counts for successful empty aggregates', as
     'FROM tasks': [{ total: 0, active: 0, overdue: 0 }],
     'FROM duties': [{ total: 0, cancelled: 0, upcoming: 0, today: 0, past: 0, assigned_groups: 0, assigned_scholar_assignments: 0 }],
     'FROM submissions s': [],
+    'FROM submissions AS submission_status': [],
+    'FROM duty_attendance AS attendance': [],
     'FROM submissions': [{
       total_records: 0, approved: 0, pending: 0, rejected: 0,
       scored_records: 0, excellent_scores: 0, good_scores: 0,
@@ -80,9 +82,11 @@ test('dashboard summary returns zero counts for successful empty aggregates', as
     duties: {
       total: 0, cancelled: 0, upcoming: 0, today: 0, past: 0,
       assignedGroups: 0, assignedScholarAssignments: 0,
+      attendanceByMonth: [],
     },
     submissions: {
       totalRecords: 0, approved: 0, pending: 0, rejected: 0,
+      statusByMonth: [],
       qualityScore: {
         scoredRecords: 0, excellent: 0, good: 0,
         needsImprovement: 0, nonCompliant: 0, average: 0,
@@ -106,6 +110,12 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
     'FROM duties': [{
       total: '6', cancelled: '1', upcoming: '2', today: '1', past: '2',
       assigned_groups: '4', assigned_scholar_assignments: '12',
+    }],
+    'FROM submissions AS submission_status': [{
+      month: '2026-10', approved: '3', pending: '2', rejected: '1',
+    }],
+    'FROM duty_attendance AS attendance': [{
+      month: '2026-10', present: '6', late: '2', absent: '2', makeup: '2',
     }],
     'FROM submissions s': [
       {
@@ -134,6 +144,12 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
   assert.equal(response.body.tasks.overdue, 2);
   assert.equal(response.body.duties.cancelled, 1);
   assert.equal(response.body.duties.assignedScholarAssignments, 12);
+  assert.deepEqual(response.body.duties.attendanceByMonth, [
+    { month: '2026-10', present: 6, late: 2, absent: 2, makeup: 2 },
+  ]);
+  assert.deepEqual(response.body.submissions.statusByMonth, [
+    { month: '2026-10', approved: 3, pending: 2, rejected: 1 },
+  ]);
   assert.equal(response.body.submissions.sentiment.negative, 1);
   assert.equal(response.body.submissions.sentiment.unscored, 7);
   assert.deepEqual(response.body.submissions.qualityScore, {
@@ -165,11 +181,14 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
   assert.match(activityQuery.sql, /SELECT al\.id, al\.action, al\.module, al\.details/);
   const dutyQuery = captured.find((query) => query.sql.includes('FROM duties'));
   assert.match(dutyQuery.sql, /SELECT DISTINCT dga\.duty_id, sgm\.scholar_id/);
+  const dutyAttendanceQuery = captured.find((query) => query.sql.includes('FROM duty_attendance AS attendance'));
+  assert.match(dutyAttendanceQuery.sql, /attendance\.status\) IN \('absent', 'excused'\)/);
   const submissionQuery = captured.find((query) => query.sql.includes('FROM submissions'));
   assert.match(submissionQuery.sql, /quality_score >= 90/);
   assert.match(submissionQuery.sql, /quality_score >= 75 AND quality_score < 90/);
   assert.match(submissionQuery.sql, /quality_score >= 50 AND quality_score < 75/);
   assert.match(submissionQuery.sql, /quality_score < 50/);
+  assert.match(submissionQuery.sql, /submission_type = 'letter' AND sentiment_score > 0/);
   const monthlyScoreQuery = captured.find((query) => query.sql.includes('FROM submissions s'));
   assert.match(monthlyScoreQuery.sql, /DATE_FORMAT\(s\.submitted_at, '%Y-%m'\)/);
   assert.match(monthlyScoreQuery.sql, /u\.year_level/);
@@ -186,6 +205,8 @@ test('dashboard summary returns an error when an aggregate query fails', async (
     'FROM tasks': [{ total: 0, active: 0, overdue: 0 }],
     'FROM duties': [{ total: 0, cancelled: 0, upcoming: 0, today: 0, past: 0, assigned_groups: 0, assigned_scholar_assignments: 0 }],
     'FROM submissions s': [],
+    'FROM submissions AS submission_status': [],
+    'FROM duty_attendance AS attendance': [],
     'FROM submissions': [{
       total_records: 0, approved: 0, pending: 0, rejected: 0,
       scored_records: 0, excellent_scores: 0, good_scores: 0,

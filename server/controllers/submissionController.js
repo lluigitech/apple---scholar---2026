@@ -17,7 +17,7 @@ const { canAccessScholar, logPrivacyAccess } = require('../middleware/privacyAcc
 const { consumeCompleted, removeSession } = require('../services/resumableUploadService');
 const r2Storage = require('../services/r2StorageService');
 const {
-    predictExperimentalLetterClassification,
+    predictLetterSentiment,
 } = require('../services/sentimentService');
 const { scoreLetterBodyExperimentalV3 } = require('../services/experimentalLetterBodyScoringV3');
 const { inspectMonthlyLetterSubmission } = require('../services/monthlyLetterSubmissionGuard');
@@ -628,14 +628,13 @@ exports.submitCompliance = async (req, res) => {
                 v3: v3Evaluation,
             }));
 
-            const classification = await predictExperimentalLetterClassification(normalizedPayload.letter_content);
+            const classification = await predictLetterSentiment(normalizedPayload.letter_content);
             contentPrediction = classification;
             if (classification) {
                 normalizedPayload.sentiment_score = normalizeSubmissionValue(classification.sentiment_score);
                 normalizedPayload.sentiment_label = normalizeSubmissionValue(classification.sentiment.label);
                 const breakdown = JSON.parse(normalizedPayload.content_breakdown);
                 breakdown.primary_classification = classification;
-                breakdown.experimental_classification = classification;
                 normalizedPayload.content_breakdown = normalizeSubmissionValue(JSON.stringify(breakdown));
             }
         }
@@ -861,7 +860,7 @@ exports.submitCompliance = async (req, res) => {
     }
 };
 
-// Score the letter body with V3 rules; classify sentiment and tone with TF-IDF + Logistic Regression.
+// Score the letter body with V3 rules; classify sentiment with TF-IDF + Logistic Regression.
 exports.predictLetterScore = async (req, res) => {
     const rawLetter = typeof req.body?.letter_content === 'string'
         ? req.body.letter_content
@@ -886,7 +885,7 @@ exports.predictLetterScore = async (req, res) => {
         Object.entries(v3Evaluation.categories).map(([label, category]) => [label, category.score])
     );
     const v3Percentage = Math.round((v3Evaluation.totalScore / v3Evaluation.maxTotalScore) * 100);
-    const classification = await predictExperimentalLetterClassification(rawLetter);
+    const classification = await predictLetterSentiment(rawLetter);
 
     return res.json({
         score: v3Percentage,
@@ -905,7 +904,6 @@ exports.predictLetterScore = async (req, res) => {
         v3: v3Evaluation,
         sentiment: classification?.sentiment_score ?? null,
         sentiment_label: classification?.sentiment.label ?? null,
-        academic_tone: classification?.academic_tone.label ?? null,
         classification: classification ? 'tfidf_logistic_regression' : null,
         source: classification ? 'rule_based_v3_tfidf' : 'rule_based_v3',
         fallback: !classification,
@@ -988,8 +986,14 @@ exports.previewCloudinaryFile = async (req, res) => {
 
         // Basic safety check: only allow proxying actual Cloudinary URLs.
         const parsedUrl = new URL(url);
-        const configuredCloudName = process.env.CLOUDINARY_CLOUD_NAME;
-        if (!['http:', 'https:'].includes(parsedUrl.protocol) || parsedUrl.hostname !== 'res.cloudinary.com' || !configuredCloudName || parsedUrl.pathname.split('/')[1] !== configuredCloudName) {
+        const pathSegments = parsedUrl.pathname.split('/');
+        const configuredCloudName = String(process.env.CLOUDINARY_CLOUD_NAME || '').trim();
+        const cloudNameMatchesConfig = configuredCloudName && pathSegments[1] === configuredCloudName;
+        const isPublicUpload = pathSegments[3] === 'upload';
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)
+            || parsedUrl.hostname !== 'res.cloudinary.com'
+            || !pathSegments[1]
+            || (!cloudNameMatchesConfig && !isPublicUpload)) {
             return res.status(400).json({ error: 'Invalid file source' });
         }
 
@@ -997,7 +1001,7 @@ exports.previewCloudinaryFile = async (req, res) => {
             db.query('SELECT public_id, resource_type, file_format, scholar_id FROM file_assets WHERE file_url = ? LIMIT 1', [url], (queryErr, rows) => queryErr ? reject(queryErr) : resolve(rows));
         });
         let fetchUrl = url;
-        const isAuthenticatedDelivery = parsedUrl.pathname.split('/').includes('authenticated');
+        const isAuthenticatedDelivery = pathSegments[3] === 'authenticated';
         if (assetRows.length && assetRows[0].scholar_id !== scholarId) {
             await logPrivacyAccess(req, {
                 action: 'DENIED_ACCESS',

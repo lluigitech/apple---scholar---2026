@@ -133,6 +133,21 @@ const docStatusMeta = (value) => {
     if (v === 'expired') return { label: value, color: DANGER, tint: DANGER_TINT };
     return { label: value || 'Active', color: SUCCESS, tint: SUCCESS_TINT };
 };
+const formatDocumentType = (value) => {
+    const raw = String(value || '').trim();
+    const normalized = raw.toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+    const knownLabels = {
+        letter: 'Monthly Letter',
+        'monthly letter': 'Monthly Letter',
+        report_card: 'Report Card',
+        'report card': 'Report Card',
+        grades: 'Report Card',
+        cor: 'COR',
+        other: 'Other Documents',
+        'other documents': 'Other Documents',
+    };
+    return knownLabels[normalized] || normalized.replace(/\b\w/g, (letter) => letter.toUpperCase()) || '—';
+};
 
 /* VERIFY: which keys of the scholar-detail response feed each section.
    Only keys that exist in the response are shown; nothing is fabricated. */
@@ -742,11 +757,6 @@ export default function ArchiveManagement() {
                                     {archivedYears.map((y) => <option key={y} value={String(y)}>{y}</option>)}
                                 </select>
                             </FilterField>
-                            <button className="act-btn" disabled={!hasUserFilters}
-                                onClick={() => { setSSearch(''); setSRole(''); setSYear(''); setSStatus(''); setSArchYear(''); setSCompliance(''); }}
-                                style={{ ...body, display: 'inline-flex', alignItems: 'center', gap: 6, height: 42, padding: '0 18px', borderRadius: 12, fontSize: '0.82rem', fontWeight: 600, color: PRIMARY, background: SURFACE, border: `1px solid ${PRIMARY}`, cursor: hasUserFilters ? 'pointer' : 'default', opacity: hasUserFilters ? 1 : 0.5 }}>
-                                Reset Filters
-                            </button>
                         </div>
                         {showComplianceNote && (
                             <p style={{ ...body, fontSize: '0.76rem', color: MUTED, padding: '10px 22px 0' }}>
@@ -859,11 +869,11 @@ export default function ArchiveManagement() {
                                 <input className="exec-input" style={{ ...fieldStyle, height: 42 }} type="text" inputMode="numeric" placeholder="e.g. 2026" aria-label="Year"
                                     value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
                             </FilterField>
-                            <FilterField label="Document type" style={{ flex: '0 1 170px', minWidth: 140 }}>
-                                <select className="exec-input filter-select" style={{ ...fieldStyle, height: 42 }} value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Document type">
+                            <FilterField label="Submission type" style={{ flex: '0 1 170px', minWidth: 140 }}>
+                                <select className="exec-input filter-select" style={{ ...fieldStyle, height: 42 }} value={category} onChange={(e) => setCategory(e.target.value)} aria-label="Submission type">
                                     <option value="">All Types</option>
-                                    {category && !docCategories.includes(category) && <option value={category}>{category}</option>}
-                                    {docCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+                                    {category && !docCategories.includes(category) && <option value={category}>{formatDocumentType(category)}</option>}
+                                    {docCategories.map((c) => <option key={c} value={c}>{formatDocumentType(c)}</option>)}
                                 </select>
                             </FilterField>
                             <FilterField label="Retention status" style={{ flex: '0 1 190px', minWidth: 160 }}>
@@ -874,11 +884,6 @@ export default function ArchiveManagement() {
                                     <option value="expired">Eligible for disposal</option>
                                 </select>
                             </FilterField>
-                            <button className="act-btn" disabled={!hasDocFilters}
-                                onClick={() => { setDSearch(''); setCategory(''); setYear(''); setDMonth(''); setDRetention(''); }}
-                                style={{ ...body, display: 'inline-flex', alignItems: 'center', gap: 6, height: 42, padding: '0 18px', borderRadius: 12, fontSize: '0.82rem', fontWeight: 600, color: PRIMARY, background: SURFACE, border: `1px solid ${PRIMARY}`, cursor: hasDocFilters ? 'pointer' : 'default', opacity: hasDocFilters ? 1 : 0.5 }}>
-                                Reset Filters
-                            </button>
                         </div>
 
                         {docsLoading ? <TableSkeleton /> : !filteredDocs.length ? (
@@ -888,7 +893,7 @@ export default function ArchiveManagement() {
                             <div className="desktop-only exec-table-scroll overflow-x-auto">
                                 <table className="w-full min-w-[900px] text-left" style={{ borderCollapse: 'collapse' }}>
                                     <thead><tr style={{ background: BG }}>
-                                        {['Scholar', 'Document', 'Type', 'Uploaded', 'Retention', 'Status', 'Actions'].map((h) => <th key={h} style={thStyle}>{h}</th>)}
+                                        {['Scholar', 'Document', 'Submission Type', 'Uploaded', 'Retention', 'Status', 'Actions'].map((h) => <th key={h} style={thStyle}>{h}</th>)}
                                     </tr></thead>
                                     <tbody>
                                         {dPaged.items.map((row) => {
@@ -911,7 +916,7 @@ export default function ArchiveManagement() {
                                                         </div>
                                                     </td>
                                                     <td style={tdStyle}>
-                                                        <span className="inline-flex items-center px-2.5 py-1" style={{ ...body, fontSize: '0.72rem', fontWeight: 600, color: BRONZE, border: `1px solid ${BRONZE}55`, borderRadius: 999 }}>{row.category || '—'}</span>
+                                                        <span className="inline-flex items-center px-2.5 py-1" style={{ ...body, fontSize: '0.72rem', fontWeight: 600, color: BRONZE, border: `1px solid ${BRONZE}55`, borderRadius: 999 }}>{formatDocumentType(row.category)}</span>
                                                     </td>
                                                     <td style={{ ...tdStyle, ...body, fontSize: '0.83rem', color: MUTED }}>{formatDate(row.uploaded_at)}</td>
                                                     <td style={tdStyle}><RetentionCell until={row.retention_until} /></td>
@@ -1036,7 +1041,7 @@ export default function ArchiveManagement() {
                                         <FileText size={14} style={{ color: BRONZE, flexShrink: 0 }} />
                                         <div className="min-w-0 flex-1">
                                             <p className="truncate" style={{ ...body, fontSize: '0.84rem', color: INK }}>{d.file_name || '—'}</p>
-                                            <p style={{ ...body, fontSize: '0.72rem', color: MUTED }}>{[d.category, formatDate(d.uploaded_at)].filter(Boolean).join('  ·  ')}</p>
+                                            <p style={{ ...body, fontSize: '0.72rem', color: MUTED }}>{[formatDocumentType(d.category), formatDate(d.uploaded_at)].filter(Boolean).join('  ·  ')}</p>
                                         </div>
                                         {d.file_path && <ActionBtn icon={Eye} onClick={() => openStoredFile(d.file_path)} title="View document" />}
                                     </div>

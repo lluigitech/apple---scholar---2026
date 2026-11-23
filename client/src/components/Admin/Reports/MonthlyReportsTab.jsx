@@ -711,7 +711,11 @@ export default function MonthlyReportsTab({
             <div>
               <h2 id="scholar-submissions-title" style={{ ...display, fontSize: '1.25rem', fontWeight: 600, color: INK }}>Submission Records</h2>
               <p style={{ ...body, fontSize: '0.82rem', color: MUTED, marginTop: 2 }}>
-                {statusFilter === 'not-submitted' ? 'Scholars without a submission for the selected period.' : 'List of scholars and their submitted requirements.'}
+                {statusFilter === 'not-submitted'
+                  ? 'Scholars without a submission for the selected period.'
+                  : statusFilter === 'all' && month
+                    ? 'Submitted records and scholars without a submission for the selected month.'
+                    : 'List of scholars and their submitted requirements.'}
               </p>
             </div>
 
@@ -791,7 +795,7 @@ export default function MonthlyReportsTab({
               <div style={{ width: 52, height: 52, borderRadius: '50%', background: `${BRONZE}14`, color: BRONZE, display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 12px' }}>
                 <FolderOpen size={24} />
               </div>
-              <h3 style={{ ...display, fontSize: '1.1rem', color: INK }}>No submissions found</h3>
+              <h3 style={{ ...display, fontSize: '1.1rem', color: INK }}>No records found</h3>
               <p style={{ ...body, fontSize: '0.84rem', color: MUTED, marginTop: 4 }}>
                 {hasActiveFilters ? 'Try changing or resetting the filters.' : 'Submissions appear here after scholars send their documents.'}
               </p>

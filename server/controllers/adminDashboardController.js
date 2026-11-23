@@ -122,11 +122,38 @@ exports.getSummary = async (req, res) => {
       COALESCE(SUM(CASE WHEN quality_score >= 50 AND quality_score < 75 THEN 1 ELSE 0 END), 0) AS needs_improvement_scores,
       COALESCE(SUM(CASE WHEN quality_score < 50 THEN 1 ELSE 0 END), 0) AS non_compliant_scores,
       AVG(quality_score) AS average_quality_score,
-      COALESCE(SUM(CASE WHEN sentiment_score > 0 THEN 1 ELSE 0 END), 0) AS positive_sentiment,
-      COALESCE(SUM(CASE WHEN sentiment_score = 0 THEN 1 ELSE 0 END), 0) AS neutral_sentiment,
-      COALESCE(SUM(CASE WHEN sentiment_score < 0 THEN 1 ELSE 0 END), 0) AS negative_sentiment,
-      COALESCE(SUM(CASE WHEN sentiment_score IS NULL THEN 1 ELSE 0 END), 0) AS unscored_sentiment
+      COALESCE(SUM(CASE WHEN submission_type = 'letter' AND sentiment_score > 0 THEN 1 ELSE 0 END), 0) AS positive_sentiment,
+      COALESCE(SUM(CASE WHEN submission_type = 'letter' AND sentiment_score = 0 THEN 1 ELSE 0 END), 0) AS neutral_sentiment,
+      COALESCE(SUM(CASE WHEN submission_type = 'letter' AND sentiment_score < 0 THEN 1 ELSE 0 END), 0) AS negative_sentiment,
+      COALESCE(SUM(CASE WHEN submission_type = 'letter' AND sentiment_score IS NULL THEN 1 ELSE 0 END), 0) AS unscored_sentiment
     FROM submissions
+  `;
+
+  const submissionStatusByMonthSql = `
+    SELECT DATE_FORMAT(submission_status.submitted_at, '%Y-%m') AS month,
+      COALESCE(SUM(CASE WHEN LOWER(submission_status.status) = 'approved' THEN 1 ELSE 0 END), 0) AS approved,
+      COALESCE(SUM(CASE WHEN LOWER(submission_status.status) = 'pending' THEN 1 ELSE 0 END), 0) AS pending,
+      COALESCE(SUM(CASE WHEN LOWER(submission_status.status) = 'rejected' THEN 1 ELSE 0 END), 0) AS rejected
+    FROM submissions AS submission_status
+    WHERE submission_status.submitted_at >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 5 MONTH)
+      AND submission_status.submitted_at < DATE_ADD(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
+    GROUP BY DATE_FORMAT(submission_status.submitted_at, '%Y-%m')
+    ORDER BY month ASC
+  `;
+
+  const dutyAttendanceByMonthSql = `
+    SELECT DATE_FORMAT(COALESCE(d.duty_date, attendance.marked_at), '%Y-%m') AS month,
+      COALESCE(SUM(CASE WHEN LOWER(attendance.status) = 'present' THEN 1 ELSE 0 END), 0) AS present,
+      COALESCE(SUM(CASE WHEN LOWER(attendance.status) = 'late' THEN 1 ELSE 0 END), 0) AS late,
+      COALESCE(SUM(CASE WHEN LOWER(attendance.status) IN ('absent', 'excused') THEN 1 ELSE 0 END), 0) AS absent,
+      COALESCE(SUM(CASE WHEN COALESCE(attendance.is_makeup, 0) = 1 THEN 1 ELSE 0 END), 0) AS makeup
+    FROM duty_attendance AS attendance
+    LEFT JOIN duties d ON d.id = attendance.duty_id
+    WHERE COALESCE(d.duty_date, attendance.marked_at) >= DATE_SUB(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 5 MONTH)
+      AND COALESCE(d.duty_date, attendance.marked_at) < DATE_ADD(DATE_FORMAT(CURRENT_DATE(), '%Y-%m-01'), INTERVAL 1 MONTH)
+      AND COALESCE(LOWER(d.status), 'upcoming') <> 'cancelled'
+    GROUP BY DATE_FORMAT(COALESCE(d.duty_date, attendance.marked_at), '%Y-%m')
+    ORDER BY month ASC
   `;
 
   const qualityScoreByMonthLevelSql = `
@@ -158,7 +185,7 @@ exports.getSummary = async (req, res) => {
   `;
 
   try {
-    const [userSummaryRows, recentUsers, scholarGrowth, announcementRows, taskRows, dutyRows, submissionRows, qualityScoreByMonthLevelRows, activityRows] = await Promise.all([
+    const [userSummaryRows, recentUsers, scholarGrowth, announcementRows, taskRows, dutyRows, submissionRows, submissionStatusByMonthRows, dutyAttendanceByMonthRows, qualityScoreByMonthLevelRows, activityRows] = await Promise.all([
       queryRows(userSummarySql),
       queryRows(recentUsersSql, [5]),
       queryRows(scholarGrowthSql),
@@ -166,6 +193,8 @@ exports.getSummary = async (req, res) => {
       queryRows(taskSql),
       queryRows(dutySql),
       queryRows(submissionSql),
+      queryRows(submissionStatusByMonthSql),
+      queryRows(dutyAttendanceByMonthSql),
       queryRows(qualityScoreByMonthLevelSql),
       queryRows(activitySql, [10]),
     ]);
@@ -203,12 +232,25 @@ exports.getSummary = async (req, res) => {
         past: toCount(duties.past),
         assignedGroups: toCount(duties.assigned_groups),
         assignedScholarAssignments: toCount(duties.assigned_scholar_assignments),
+        attendanceByMonth: dutyAttendanceByMonthRows.map((row) => ({
+          month: row.month,
+          present: toCount(row.present),
+          late: toCount(row.late),
+          absent: toCount(row.absent),
+          makeup: toCount(row.makeup),
+        })),
       },
       submissions: {
         totalRecords: toCount(submissions.total_records),
         approved: toCount(submissions.approved),
         pending: toCount(submissions.pending),
         rejected: toCount(submissions.rejected),
+        statusByMonth: submissionStatusByMonthRows.map((row) => ({
+          month: row.month,
+          approved: toCount(row.approved),
+          pending: toCount(row.pending),
+          rejected: toCount(row.rejected),
+        })),
         qualityScore: {
           scoredRecords: toCount(submissions.scored_records),
           excellent: toCount(submissions.excellent_scores),

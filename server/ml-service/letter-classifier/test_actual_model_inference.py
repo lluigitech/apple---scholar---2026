@@ -56,49 +56,42 @@ SAMPLES = [
 ]
 
 SENTIMENT_LABELS = {"negative", "neutral", "positive"}
-TONE_LABELS = {"formal", "moderate", "informal"}
 
 
 def assert_prediction_is_valid(result, sample_code):
     assert result.get("success") is True, f"{sample_code}: prediction did not succeed"
 
     sentiment = result.get("sentiment")
-    tone = result.get("academic_tone")
     assert isinstance(sentiment, dict), f"{sample_code}: missing sentiment result"
-    assert isinstance(tone, dict), f"{sample_code}: missing tone result"
     assert sentiment.get("prediction", "").lower() in SENTIMENT_LABELS, (
         f"{sample_code}: invalid sentiment label"
     )
-    assert tone.get("prediction", "").lower() in TONE_LABELS, (
-        f"{sample_code}: invalid academic tone label"
+
+    confidence = sentiment.get("confidence")
+    assert isinstance(confidence, (int, float)) and not isinstance(confidence, bool), (
+        f"{sample_code}: sentiment confidence is not numeric"
     )
+    assert math.isfinite(confidence), f"{sample_code}: sentiment confidence is not finite"
+    assert 0 <= confidence <= 1, f"{sample_code}: sentiment confidence is out of range"
 
-    for task_name, prediction in (("sentiment", sentiment), ("academic tone", tone)):
-        confidence = prediction.get("confidence")
-        assert isinstance(confidence, (int, float)) and not isinstance(confidence, bool), (
-            f"{sample_code}: {task_name} confidence is not numeric"
-        )
-        assert math.isfinite(confidence), f"{sample_code}: {task_name} confidence is not finite"
-        assert 0 <= confidence <= 1, f"{sample_code}: {task_name} confidence is out of range"
-
-        probabilities = prediction.get("probabilities")
-        assert isinstance(probabilities, dict) and probabilities, (
-            f"{sample_code}: {task_name} probabilities are missing"
-        )
-        probability_values = list(probabilities.values())
-        assert all(
-            isinstance(value, (int, float))
-            and math.isfinite(value)
-            and 0 <= value <= 1
-            for value in probability_values
-        ), f"{sample_code}: {task_name} contains invalid probabilities"
-        assert math.isclose(sum(probability_values), 1.0, rel_tol=1e-5, abs_tol=1e-5), (
-            f"{sample_code}: {task_name} probabilities do not sum to 1"
-        )
+    probabilities = sentiment.get("probabilities")
+    assert isinstance(probabilities, dict) and probabilities, (
+        f"{sample_code}: sentiment probabilities are missing"
+    )
+    probability_values = list(probabilities.values())
+    assert all(
+        isinstance(value, (int, float))
+        and math.isfinite(value)
+        and 0 <= value <= 1
+        for value in probability_values
+    ), f"{sample_code}: sentiment contains invalid probabilities"
+    assert math.isclose(sum(probability_values), 1.0, rel_tol=1e-5, abs_tol=1e-5), (
+        f"{sample_code}: sentiment probabilities do not sum to 1"
+    )
 
 
 def main():
-    print("Loading actual sentiment/tone models and TF-IDF vectorizers...")
+    print("Loading actual sentiment model and TF-IDF vectorizer...")
     models = load_models()
     print("Model artifacts loaded.")
 
@@ -134,7 +127,7 @@ def main():
     api_prediction = api_response.get_json()
     assert_prediction_is_valid(api_prediction, "API")
     assert api_prediction["sentiment"]["prediction"] == results[0][2]["sentiment"]["prediction"]
-    assert api_prediction["academic_tone"]["prediction"] == results[0][2]["academic_tone"]["prediction"]
+    assert "academic_tone" not in api_prediction
 
     for payload in (None, {}, {"letter": "  "}, {"letter": 123}):
         response = test_client.post(
@@ -144,20 +137,18 @@ def main():
         )
         assert response.status_code == 400, "The /classify endpoint accepted invalid input."
 
-    print("\nActual model inference results (fictional samples; no text or personal data shown):")
-    print(f"{'Code':<6} {'Sample style':<38} {'Sentiment':<12} {'Confidence':>10} {'Academic tone':<12} {'Confidence':>10}")
-    print("-" * 94)
+    print("\nActual sentiment inference results (fictional samples; no text or personal data shown):")
+    print(f"{'Code':<6} {'Sample style':<38} {'Sentiment':<12} {'Confidence':>10}")
+    print("-" * 70)
     for sample_code, sample_style, result in results:
         sentiment = result["sentiment"]
-        tone = result["academic_tone"]
         print(
             f"{sample_code:<6} {sample_style:<38} "
-            f"{sentiment['prediction']:<12} {sentiment['confidence'] * 100:>9.2f}% "
-            f"{tone['prediction']:<12} {tone['confidence'] * 100:>9.2f}%"
+            f"{sentiment['prediction']:<12} {sentiment['confidence'] * 100:>9.2f}%"
         )
 
     print("\nPASS: artifacts loaded; 10/10 outputs validated; repeatability and invalid-input checks passed.")
-    print("PASS: /classify returned real-model labels and confidence through Flask's in-process test client.")
+    print("PASS: /classify returned real-model sentiment and confidence through Flask's in-process test client.")
     print("Note: These are inference smoke tests only, not accuracy metrics or human-validated results.")
 
 

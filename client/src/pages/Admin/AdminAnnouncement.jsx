@@ -578,8 +578,36 @@ const AdminAnnouncement = () => {
         setNotifyingId(id);
         try {
             const res = await axios.post(`${API}/admin/announcements/${id}/notify`, {}, authHeaders());
-            const sentCount = res.data?.sent_count ?? 0;
-            setFeedback({ id, type: 'success', text: `Sent to ${sentCount} recipient(s).` });
+            const result = res.data || {};
+            if (result.already_sent) {
+                setFeedback({
+                    id,
+                    type: 'success',
+                    text: result.message || 'This announcement was already emailed within the last 24 hours.',
+                });
+            } else {
+                const sentCount = Number.isFinite(result.sent_count) ? result.sent_count : 0;
+                const failedCount = Number.isFinite(result.failed_count) ? result.failed_count : 0;
+                const recipientCount = Number.isFinite(result.recipient_count)
+                    ? result.recipient_count
+                    : sentCount + failedCount;
+                if (result.ok === false || failedCount > 0 || sentCount === 0) {
+                    setFeedback({
+                        id,
+                        type: 'error',
+                        text: result.error
+                            || (failedCount > 0
+                                ? `Sent to ${sentCount} of ${recipientCount} recipients; ${failedCount} failed.`
+                                : result.message || 'No notification emails were sent.'),
+                    });
+                } else {
+                    setFeedback({
+                        id,
+                        type: 'success',
+                        text: `Sent to ${sentCount} of ${recipientCount} recipients.`,
+                    });
+                }
+            }
         } catch (err) {
             setFeedback({ id, type: 'error', text: err.response?.data?.error || 'Could not send notifications.' });
         } finally {

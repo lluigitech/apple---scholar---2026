@@ -12,7 +12,6 @@ class MlApiTests(unittest.TestCase):
         classifier = lambda letter: {
             "success": True,
             "sentiment": {"prediction": "Neutral", "confidence": 0.8},
-            "academic_tone": {"prediction": "Formal", "confidence": 0.7},
             "requires_staff_review": False,
             "review_flags": [],
         }
@@ -25,12 +24,12 @@ class MlApiTests(unittest.TestCase):
         self.assertEqual(response.json["status"], "ready")
         self.assertTrue(response.json["classifier_loaded"])
         self.assertEqual(response.json["sentiment_model"], "TF-IDF + Logistic Regression")
-        self.assertEqual(response.json["academic_tone_model"], "TF-IDF + Logistic Regression")
+        self.assertNotIn("academic_tone_model", response.json)
 
     def test_health_loads_canonical_classifier_before_reporting_ready(self):
         application = create_app(api_key="test-api-key")
         classifier = lambda _letter: {"success": True}
-        with patch("ml_api.load_experimental_classifier", return_value=classifier) as loader:
+        with patch("ml_api.load_letter_classifier", return_value=classifier) as loader:
             response = application.test_client().get("/health")
 
         self.assertEqual(response.status_code, 200)
@@ -40,7 +39,7 @@ class MlApiTests(unittest.TestCase):
     def test_health_reports_unavailable_when_classifier_cannot_load(self):
         application = create_app(api_key="test-api-key")
         application.logger.disabled = True
-        with patch("ml_api.load_experimental_classifier", side_effect=RuntimeError("load failed")):
+        with patch("ml_api.load_letter_classifier", side_effect=RuntimeError("load failed")):
             response = application.test_client().get("/health")
 
         self.assertEqual(response.status_code, 503)
@@ -63,7 +62,7 @@ class MlApiTests(unittest.TestCase):
         self.assertEqual(unauthorized.status_code, 401)
         self.assertEqual(authorized.status_code, 200)
 
-    def test_classify_returns_sentiment_and_academic_tone(self):
+    def test_classify_returns_sentiment_without_academic_tone(self):
         response = self.app.post(
             "/classify",
             json={"letter": "A test letter."},
@@ -72,7 +71,7 @@ class MlApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["sentiment"]["prediction"], "Neutral")
-        self.assertEqual(response.json["academic_tone"]["prediction"], "Formal")
+        self.assertNotIn("academic_tone", response.json)
 
     def test_classify_rejects_missing_or_invalid_letter(self):
         for payload in (None, {}, {"letter": "  "}, {"letter": 123}):
@@ -99,11 +98,11 @@ class MlApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json, {"error": "Experimental classification unavailable."})
+        self.assertEqual(response.json, {"error": "Automated letter classification unavailable."})
 
     def test_wsgi_starts_without_loading_a_model(self):
         with patch.dict(os.environ, {"ML_SERVICE_API_KEY": "test-api-key"}):
-            with patch("ml_api.load_experimental_classifier", side_effect=AssertionError("unexpected eager load")):
+            with patch("ml_api.load_letter_classifier", side_effect=AssertionError("unexpected eager load")):
                 sys.modules.pop("wsgi", None)
                 module = importlib.import_module("wsgi")
 
