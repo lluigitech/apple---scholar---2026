@@ -513,7 +513,7 @@ const ArchiveModal = ({ user, onClose, onConfirm, loading, error }) => (
     </ModalShell>
 );
 
-// ── Delete Modal ───────────────────────────────────────────────
+// ── Permanent delete modal ─────────────────────────────────────
 const DeleteModal = ({ user, onClose, onConfirm, loading, error }) => (
     <ModalShell
         icon={<Trash2 size={17} />}
@@ -523,8 +523,7 @@ const DeleteModal = ({ user, onClose, onConfirm, loading, error }) => (
     >
         <div className="px-6 pb-6 pt-2 text-center">
             <p style={{ ...sans, fontSize: '0.82rem', color: MUTED, lineHeight: 1.6 }}>
-                This will mark <span style={{ fontWeight: 700, color: INK }}>{user.full_name}</span> as inactive in the registry.
-                The current backend behavior marks the account inactive rather than permanently removing its record.
+                Permanently delete <span style={{ fontWeight: 700, color: INK }}>{user.full_name}</span> and its account-specific data? Shared scholar records will be kept, but links to this account will be removed. This cannot be undone.
             </p>
             <ErrBox msg={error} />
             <div className="flex gap-2.5 mt-5">
@@ -532,7 +531,7 @@ const DeleteModal = ({ user, onClose, onConfirm, loading, error }) => (
                 <button onClick={onConfirm} disabled={loading}
                     className="flex-1 py-2.5 rounded-lg transition-colors hover:opacity-90 disabled:opacity-60"
                     style={{ ...sans, fontSize: '0.85rem', fontWeight: 600, background: `${DANGER}14`, color: DANGER, border: `1px solid ${DANGER}40`, cursor: loading ? 'default' : 'pointer' }}>
-                    {loading ? 'Processing…' : 'Delete'}
+                    {loading ? 'Deleting…' : 'Delete permanently'}
                 </button>
             </div>
         </div>

@@ -773,33 +773,124 @@ exports.assignUserRole = (req, res) => {
     });
 };
 
-// Soft-delete users by marking status as 'inactive' to avoid FK constraint issues
-exports.deleteUser = (req, res) => {
-    const userId = req.params.id;
-    db.query('UPDATE users SET status = ? WHERE id = ?', ['inactive', userId], (err, result) => {
-        if (err) {
-            console.error('Error soft-deleting user:', err);
-            try {
-                const logPath = path.join(__dirname, '..', 'logs', 'delete_errors.log');
-                const entry = `[${new Date().toISOString()}] SOFT-DELETE /api/admin/users/${userId} ERROR: ${err.stack || err}\n`;
-                fs.appendFile(logPath, entry, (fsErr) => {
-                    if (fsErr) console.error('Failed writing delete error log:', fsErr);
-                });
-            } catch (e) {
-                console.error('Failed to write delete error log:', e);
-            }
-            return res.status(500).json({ error: 'Error deleting user', details: err.message });
+exports.deleteUser = async (req, res) => {
+    const userId = String(req.params.id || '');
+    if (!/^[1-9]\d*$/.test(userId) || !Number.isSafeInteger(Number(userId))) {
+        return res.status(400).json({ error: 'A valid user ID is required.' });
+    }
+
+    let connection;
+    try {
+        connection = await db.promise().getConnection();
+        await connection.beginTransaction();
+
+        const [users] = await connection.query(
+            'SELECT id, scholar_id, full_name, email, role FROM users WHERE id = ? FOR UPDATE',
+            [userId]
+        );
+        if (!users.length) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'User not found.' });
         }
-        if (result && result.affectedRows === 0) return res.status(404).json({ error: 'User not found' });
-        logAuditEvent({
+
+        const user = users[0];
+        const role = String(user.role || '').toLowerCase();
+        if (role === 'scholar') {
+            await connection.rollback();
+            return res.status(400).json({ error: 'Scholar accounts must be archived to preserve academic records.' });
+        }
+        if (!['admin', 'staff', 'officer'].includes(role)) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'This account cannot be permanently deleted.' });
+        }
+        if (role === 'admin') {
+            if (Number(user.id) === Number(req.user?.id)) {
+                await connection.rollback();
+                return res.status(400).json({ error: 'You cannot delete your own administrator account.' });
+            }
+            const [admins] = await connection.query(
+                `SELECT id FROM users
+                 WHERE role = 'admin' AND COALESCE(status, '') <> 'archived'
+                 FOR UPDATE`
+            );
+            if (admins.length <= 1) {
+                await connection.rollback();
+                return res.status(409).json({ error: 'The last administrator account cannot be deleted.' });
+            }
+        }
+
+        const sharedReferenceUpdates = [
+            ['UPDATE announcements SET created_by = NULL WHERE created_by = ?', [userId]],
+            ['UPDATE tasks SET created_by = NULL WHERE created_by = ?', [userId]],
+            ['UPDATE duties SET created_by = NULL WHERE created_by = ?', [userId]],
+            ['UPDATE officer_duties SET created_by = NULL WHERE created_by = ?', [userId]],
+            ['UPDATE scholar_groups SET created_by = NULL, assigned_staff_id = NULL WHERE created_by = ? OR assigned_staff_id = ?', [userId, userId]],
+            ['UPDATE duty_group_assignments SET assigned_by = NULL WHERE assigned_by = ?', [userId]],
+            ['UPDATE officer_year_level_assignments SET assigned_by = NULL WHERE assigned_by = ?', [userId]],
+            ['UPDATE duty_attendance SET marked_by_id = NULL WHERE marked_by_id = ?', [userId]],
+            ['UPDATE duty_makeup_permissions SET approved_by = NULL WHERE approved_by = ?', [userId]],
+            ['UPDATE submission_media SET approved_by = NULL WHERE approved_by = ?', [userId]],
+            ['UPDATE compliance_settings SET updated_by = NULL WHERE updated_by = ?', [userId]],
+            ['UPDATE privacy_settings SET updated_by = NULL WHERE updated_by = ?', [userId]],
+            ['UPDATE compliance_incident_log SET triggered_by = NULL WHERE triggered_by = ?', [userId]],
+            ['UPDATE compliance_bonus_log SET triggered_by = NULL WHERE triggered_by = ?', [userId]],
+            ['UPDATE scholar_interventions SET performed_by = NULL WHERE performed_by = ?', [userId]],
+            ['UPDATE privacy_requests SET processed_by = NULL WHERE processed_by = ?', [userId]],
+        ];
+        for (const [sql, values] of sharedReferenceUpdates) {
+            await connection.query(sql, values);
+        }
+
+        await connection.query('DELETE FROM data_consents WHERE user_id = ?', [userId]);
+        await connection.query('DELETE FROM privacy_requests WHERE user_id = ?', [userId]);
+        await connection.query('DELETE FROM privacy_access_logs WHERE user_id = ?', [userId]);
+        await connection.query('DELETE FROM audit_logs WHERE user_id = ?', [userId]);
+        if (user.email) {
+            await connection.query(
+                'DELETE FROM notification_logs WHERE LOWER(TRIM(recipient)) = LOWER(TRIM(?))',
+                [user.email]
+            );
+        }
+
+        if (role === 'admin') {
+            await connection.query('DELETE FROM admin_preferences WHERE user_id = ?', [userId]);
+        } else if (role === 'staff') {
+            await connection.query('DELETE FROM staff_notification_preferences_v2 WHERE staff_id = ?', [userId]);
+            await connection.query('DELETE FROM staff_attendance WHERE staff_id = ?', [userId]);
+        } else if (role === 'officer') {
+            await connection.query('DELETE FROM officer_notification_preferences WHERE officer_id = ?', [userId]);
+            await connection.query('DELETE FROM officer_year_level_assignments WHERE officer_id = ?', [userId]);
+            await connection.query('DELETE FROM officer_attendance WHERE officer_id = ?', [userId]);
+        }
+
+        const [deleteResult] = await connection.query('DELETE FROM users WHERE id = ?', [userId]);
+        if (!deleteResult.affectedRows) {
+            await connection.rollback();
+            return res.status(404).json({ error: 'User not found.' });
+        }
+
+        await connection.commit();
+        await logAuditEvent({
             req,
             action: 'delete',
             module: 'User Management',
-            details: `Deactivated user ${userId}`,
+            details: `Permanently deleted ${role} account ${user.full_name} (${user.scholar_id || userId})`,
             result: 'success',
         });
-        res.json({ message: 'User marked inactive (soft-deleted)' });
-    });
+        return res.json({ message: 'User permanently deleted.', userId: Number(userId) });
+    } catch (error) {
+        if (connection) {
+            try {
+                await connection.rollback();
+            } catch (rollbackError) {
+                console.error('Failed to roll back user deletion:', rollbackError);
+            }
+        }
+        console.error('Failed to permanently delete user. Database error code:', error.code || 'unknown');
+        return res.status(500).json({ error: 'Unable to permanently delete user.' });
+    } finally {
+        connection?.release();
+    }
 };
 
 // ─── SCHOLAR PROFILE ──────────────────────────────────────────
