@@ -5,6 +5,7 @@ const { test } = require('node:test');
 const dbPath = require.resolve('../config/db');
 let lookupCount = 0;
 let savedPreferences;
+let userUpdateError = null;
 const connection = {
   beginTransaction(callback) {
     callback(null);
@@ -35,6 +36,10 @@ const connection = {
 const fakeDb = {
   query(sql, values, callback) {
     lookupCount += 1;
+    if (sql.startsWith('UPDATE users SET full_name=')) {
+      callback(userUpdateError, { affectedRows: userUpdateError ? 0 : 1 });
+      return;
+    }
     if (sql.includes('SELECT u.full_name AS displayName')) {
       callback(null, [{
         displayName: 'Admin',
@@ -134,6 +139,18 @@ const invokeGet = () => new Promise(resolve => {
   adminController.getAdminSettings({ user: { id: 5 } }, res);
 });
 
+const invokeUserUpdate = body => new Promise(resolve => {
+  const res = {
+    status(statusCode) {
+      return { json: responseBody => resolve({ statusCode, body: responseBody }) };
+    },
+    json(responseBody) {
+      resolve({ statusCode: 200, body: responseBody });
+    },
+  };
+  adminController.updateUser({ params: { id: '15' }, body }, res);
+});
+
 test('administrator settings normalize a previously saved 30-minute timeout to 20 minutes', async () => {
   const response = await invokeGet();
 
@@ -182,4 +199,22 @@ test('administrator settings reject page sizes outside 10, 20, and 50', async ()
     assert.equal(response.statusCode, 400, `${pageSize} rows should be rejected`);
     assert.equal(lookupCount, 0);
   }
+});
+
+test('editing a user reports duplicate email addresses as a conflict', async () => {
+  const duplicateError = new Error('Duplicate email');
+  duplicateError.code = 'ER_DUP_ENTRY';
+  userUpdateError = duplicateError;
+
+  const response = await invokeUserUpdate({
+    full_name: 'Scholar Name',
+    email: 'used@example.test',
+    role: 'scholar',
+    year_level: 'grade_7',
+    status: 'active',
+  });
+
+  assert.equal(response.statusCode, 409);
+  assert.match(response.body.error, /email address is already in use/i);
+  userUpdateError = null;
 });

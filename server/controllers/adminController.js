@@ -730,7 +730,13 @@ exports.updateUser = async (req, res) => {
             params = [full_name, email, role, finalYearLevel, status, id];
         }
         db.query(sql, params, (err) => {
-            if (err) return res.status(500).json({ error: 'Error updating user' });
+            if (err) {
+                if (err.code === 'ER_DUP_ENTRY') {
+                    return res.status(409).json({ error: 'That email address is already in use.' });
+                }
+                console.error('Failed to update user. Database error code:', err.code || 'unknown');
+                return res.status(500).json({ error: 'Error updating user' });
+            }
             logAuditEvent({
                 req,
                 action: 'edit',
