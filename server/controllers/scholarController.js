@@ -145,6 +145,14 @@ exports.updateProfile = (req, res) => {
         return res.status(400).json({ error: 'No valid profile fields provided.' });
     }
 
+    if (Object.prototype.hasOwnProperty.call(updates, 'email')) {
+        const email = updates.email;
+        if (typeof email !== 'string' || email.length > 255 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ error: 'Enter a valid email address.' });
+        }
+        updates.email = email.toLowerCase();
+    }
+
     const normalizedYearLevel = updates.year_level ? normalizeYearLevel(updates.year_level) : null;
     if (updates.year_level && !normalizedYearLevel) {
         return res.status(400).json({ error: 'Invalid year level.' });
@@ -160,7 +168,13 @@ exports.updateProfile = (req, res) => {
     const params = [...Object.values(updates), requestedId];
 
     db.query(sql, params, (err) => {
-        if (err) return res.status(500).json({ error: 'Error updating profile.' });
+        if (err) {
+            if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(409).json({ error: 'That email address is already in use.' });
+            }
+            console.error('Failed to update scholar profile. Database error code:', err.code || 'unknown');
+            return res.status(500).json({ error: 'Error updating profile.' });
+        }
 
         const fetchSql = `
             SELECT id, scholar_id, full_name, email, role, year_level, birth_date, age, course, track_strand, school, phone, address, status, created_at

@@ -1,6 +1,6 @@
 import { API_ORIGIN } from '../../utils/apiConfig.js';
 import { getAdminPageSize } from '../../utils/adminPreferences';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -629,9 +629,9 @@ const UserManagement = () => {
     const [selectedUser, setSelectedUser] = useState(null);
     const [createdAccount, setCreatedAccount] = useState(null);
 
-    const fetchUsers = async () => {
+    const fetchUsers = useCallback(async (silent = false) => {
         try {
-            setLoading(true);
+            if (!silent) setLoading(true);
             setRegistryError('');
             const token = localStorage.getItem('token');
             const res = await axios.get(`${API_ORIGIN}/api/admin/users`, {
@@ -642,15 +642,23 @@ const UserManagement = () => {
             console.error('Error fetching users:', err);
             setRegistryError(err.response?.data?.error || 'Unable to load the user registry. Please refresh and try again.');
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        // Load the user registry once when the page opens.
         // eslint-disable-next-line react-hooks/set-state-in-effect
         fetchUsers();
-    }, []);
+        const refreshVisibleUsers = () => {
+            if (document.visibilityState === 'visible') fetchUsers(true);
+        };
+        const intervalId = window.setInterval(refreshVisibleUsers, 30000);
+        document.addEventListener('visibilitychange', refreshVisibleUsers);
+        return () => {
+            window.clearInterval(intervalId);
+            document.removeEventListener('visibilitychange', refreshVisibleUsers);
+        };
+    }, [fetchUsers]);
 
     const closeModal = () => setModal(null);
 

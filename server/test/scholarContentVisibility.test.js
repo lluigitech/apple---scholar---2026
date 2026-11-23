@@ -14,12 +14,12 @@ const scholarController = require('../controllers/scholarController');
 
 delete require.cache[dbPath];
 
-const invoke = (handler, req, rows) => new Promise((resolve, reject) => {
+const invoke = (handler, req, rows, queryError = null) => new Promise((resolve, reject) => {
   let query;
   fakeDb.query = (sql, values, callback) => {
     if (typeof values === 'function') callback = values;
     query = { sql, values: typeof values === 'function' ? [] : values };
-    callback(null, rows);
+    callback(queryError, rows);
   };
   const res = {
     status(code) {
@@ -56,6 +56,19 @@ test('scholar announcements are creation-cutoff and audience filtered', async ()
   assert.match(response.query.sql, /a\.created_at > scholar\.created_at/);
   assert.deepEqual(response.body.map(item => item.id), [1, 4]);
   assert.equal(response.body[0].scholar_year_level, undefined);
+});
+
+test('scholar profile update reports duplicate email addresses as a conflict', async () => {
+  const duplicateError = new Error('Duplicate email');
+  duplicateError.code = 'ER_DUP_ENTRY';
+  const response = await invoke(scholarController.updateProfile, {
+    params: { id: '7' },
+    user: { id: 7, role: 'scholar' },
+    body: { email: 'used@example.test' },
+  }, [], duplicateError);
+
+  assert.equal(response.status, 409);
+  assert.match(response.body.error, /email address is already in use/i);
 });
 
 test('scholar duties use the authenticated account creation cutoff', async () => {
