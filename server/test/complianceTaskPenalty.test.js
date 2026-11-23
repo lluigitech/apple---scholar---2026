@@ -16,6 +16,8 @@ const {
   hasNonOverdueComplianceViolation,
   getComplianceRiskTier,
   getComplianceRiskThresholds,
+  resolveGradeScale,
+  isGradeWithinScale,
   defaults,
 } = require('../utils/complianceLogger');
 Module._load = originalLoad;
@@ -341,6 +343,25 @@ test('risk bands classify compliance scores as low, medium, or high', () => {
     lowRiskMinCompliance: 75,
     mediumRiskMinCompliance: 50,
   });
+});
+
+test('grade scale resolution accepts stored year-level keys and display labels', () => {
+  assert.equal(resolveGradeScale('grade_12'), 'k12');
+  assert.equal(resolveGradeScale('Grade 12'), 'k12');
+  assert.equal(resolveGradeScale('college_1'), 'college');
+  assert.equal(resolveGradeScale('College 1'), 'college');
+  assert.equal(resolveGradeScale('1st Year College'), 'college');
+});
+
+test('grade validation accepts failing K-12 grades while preserving each scale range', () => {
+  assert.equal(isGradeWithinScale('k12', 0), true);
+  assert.equal(isGradeWithinScale('k12', 74.99), true);
+  assert.equal(isGradeWithinScale('k12', 100), true);
+  assert.equal(isGradeWithinScale('k12', 100.01), false);
+  assert.equal(isGradeWithinScale('college', 1), true);
+  assert.equal(isGradeWithinScale('college', 5), true);
+  assert.equal(isGradeWithinScale('college', 0.99), false);
+  assert.equal(isGradeWithinScale('college', 5.01), false);
 });
 
 test('a lone overdue task deducts points but does not immediately trigger a compliance flag', () => {

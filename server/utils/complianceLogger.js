@@ -262,10 +262,21 @@ const getComplianceSettings = (callback) => {
 };
 
 const resolveGradeScale = (yearLevel) => {
-    const normalized = typeof yearLevel === 'string' ? yearLevel.trim() : '';
-    if (/^Grade\s+\d+$/i.test(normalized)) return 'k12';
-    if (/^(1st|2nd|3rd|4th|5th)\s+Year(\s+College)?$/i.test(normalized)) return 'college';
+    const normalized = typeof yearLevel === 'string'
+        ? yearLevel.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ')
+        : '';
+    if (/^grade\s+\d+$/.test(normalized)) return 'k12';
+    if (/^college\s+[1-5]$/.test(normalized)
+        || /^(1st|2nd|3rd|4th|5th)\s+year(\s+college)?$/.test(normalized)) return 'college';
     return 'k12';
+};
+
+const isGradeWithinScale = (gradeScale, rawGrade) => {
+    const grade = Number(rawGrade);
+    if (!Number.isFinite(grade)) return false;
+    if (gradeScale === 'college') return grade >= 1.00 && grade <= 5.00;
+    if (gradeScale === 'k12') return grade >= 0 && grade <= 100;
+    return false;
 };
 
 const normalizeAcademicGrade = (gradeScale, rawGrade) => {
@@ -653,6 +664,7 @@ module.exports = {
     hasNonOverdueComplianceViolation,
     getComplianceSettings,
     resolveGradeScale,
+    isGradeWithinScale,
     normalizeAcademicGrade,
     getAcademicTier,
     calculateComplianceScore,

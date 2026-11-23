@@ -9,18 +9,21 @@ const fakeDb = { query: null };
 const injectedPaths = [];
 let predictedNegativeLetters = 0;
 let predictedNegativeMonths = '';
+let predictedCompliance = 100;
+let predictedMinimum = 76;
+let predictedAbsentDutyCount = 0;
 
 const makeComplianceScore = () => ({
-  overallCompliance: 100,
-  riskScore: 0,
+  overallCompliance: predictedCompliance,
+  riskScore: 100 - predictedCompliance,
   totalDeduction: 0,
   totalBonusPoints: 0,
   bonuses: { earlySubmission: 0, consecutiveEarly: 0, perfectAttendance: 0, totalBonusPoints: 0 },
-  minComplianceNum: 50,
+  minComplianceNum: predictedMinimum,
   deductions: {
     missedSubmission: { points: 0, overdueTasks: 0, penalizedTasks: 0 },
     lateDuty: { points: 0, lateCount: 0 },
-    absentDuty: { points: 0, absentCount: 0 },
+    absentDuty: { points: 0, absentCount: predictedAbsentDutyCount },
     lateSubmission: { points: 0, daysSinceSubmission: 0, penalizedPeriods: 0 },
     negativeLetter: { points: 0, negativeLetters: predictedNegativeLetters },
     qualityDrop: { points: 0, avgQuality: null },
@@ -31,10 +34,10 @@ const makeComplianceScore = () => ({
     total_service_hours: 0,
     avg_quality: null,
     attendance_rate: null,
-    absent: 0,
+    absent: predictedAbsentDutyCount,
     negative_letters: predictedNegativeLetters,
     days_since_submission: 0,
-    total_duties: 0,
+    total_duties: predictedAbsentDutyCount,
     present: 0,
     late: 0,
   },
@@ -129,7 +132,7 @@ test('intervention history is returned newest-first from the database query', as
   assert.match(query.sql, /ORDER BY created_at DESC/);
 });
 
-test('sentiment flags trigger for five different months or three consecutive months without compliance deductions', async () => {
+test('only below-minimum scores appear, with active issues retained as review details', async () => {
   const scholarRows = [{
     id: 7,
     scholar_id: 'SCH-1',
@@ -164,18 +167,27 @@ test('sentiment flags trigger for five different months or three consecutive mon
     }
   };
 
+  predictedCompliance = 85;
+  predictedMinimum = 76;
+  predictedAbsentDutyCount = 3;
   predictedNegativeLetters = 4;
   predictedNegativeMonths = '2026-01,2026-03,2026-05,2026-07';
-  const belowSpreadThreshold = await invoke(flaggedController.getFlaggedScholars, { query: {} });
-  assert.deepEqual(belowSpreadThreshold.body, []);
+  const aboveMinimum = await invoke(flaggedController.getFlaggedScholars, { query: {} });
+  assert.deepEqual(aboveMinimum.body, []);
 
   predictedNegativeLetters = 5;
   predictedNegativeMonths = '2026-01,2026-03,2026-05,2026-07,2026-09';
+  predictedCompliance = 76;
+  const atMinimum = await invoke(flaggedController.getFlaggedScholars, { query: {} });
+  assert.deepEqual(atMinimum.body, []);
+
+  predictedCompliance = 75;
   const atSpreadThreshold = await invoke(flaggedController.getFlaggedScholars, { query: {} });
   assert.equal(atSpreadThreshold.body.length, 1);
   assert.equal(atSpreadThreshold.body[0].negative_sentiment_month_count, 5);
   assert.equal(atSpreadThreshold.body[0].negative_sentiment_spread_month_threshold, 5);
   assert.ok(atSpreadThreshold.body[0].flags.some(flag => flag.type === 'Negative Sentiment'));
+  assert.ok(atSpreadThreshold.body[0].flags.some(flag => flag.type === 'Absent Duty'));
 
   predictedNegativeLetters = 3;
   predictedNegativeMonths = '2026-12,2027-01,2027-02';
@@ -183,8 +195,8 @@ test('sentiment flags trigger for five different months or three consecutive mon
   assert.equal(atConsecutiveThreshold.body.length, 1);
   assert.equal(atConsecutiveThreshold.body[0].negative_sentiment_consecutive_months, 3);
   assert.equal(atConsecutiveThreshold.body[0].negative_sentiment_consecutive_month_threshold, 3);
-  assert.equal(atConsecutiveThreshold.body[0].overall_compliance, 100);
-  assert.equal(atConsecutiveThreshold.body[0].risk_score, 0);
+  assert.equal(atConsecutiveThreshold.body[0].overall_compliance, 75);
+  assert.equal(atConsecutiveThreshold.body[0].risk_score, 25);
 });
 
 const invoke = (handler, req) => new Promise(resolve => {

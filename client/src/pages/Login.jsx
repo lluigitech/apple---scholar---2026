@@ -61,6 +61,11 @@ const Login = () => {
                 localStorage.setItem('email', res.data.email || email);
                 localStorage.setItem('id', res.data.id);
                 localStorage.setItem('scholar_id', res.data.scholar_id);
+                if (res.data.year_level) {
+                    localStorage.setItem('year_level', res.data.year_level);
+                } else {
+                    localStorage.removeItem('year_level');
+                }
                 if (res.data.must_change_password) {
                     localStorage.setItem('must_change_password', 'true');
                 } else {

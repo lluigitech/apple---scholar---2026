@@ -170,6 +170,7 @@ router.post('/login', (req, res) => {
                 email: user.email,
                 id: user.id,
                 scholar_id: user.scholar_id,
+                year_level: user.year_level || null,
                 must_change_password: user.must_change_password === 1,
                 birth_date: user.birth_date || null,
                 age: currentAge ?? user.age ?? null,

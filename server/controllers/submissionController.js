@@ -11,7 +11,7 @@ const http = require('http');
 const https = require('https');
 const { URL } = require('url');
 const { normalizeSubmissionValue } = require('../utils/submissionPayload');
-const { logComplianceIncident, clampCompliance, getComplianceSettings, calculateCurrentCompliance, resolveGradeScale } = require('../utils/complianceLogger');
+const { logComplianceIncident, clampCompliance, getComplianceSettings, calculateCurrentCompliance, resolveGradeScale, isGradeWithinScale } = require('../utils/complianceLogger');
 const { logAuditEvent } = require('../utils/auditLogger');
 const { canAccessScholar, logPrivacyAccess } = require('../middleware/privacyAccess');
 const { consumeCompleted, removeSession } = require('../services/resumableUploadService');
@@ -1821,15 +1821,13 @@ const saveGradesWithProofPath = (req, res, scholar_id, semester, academic_year, 
                     return res.status(400).json({ error: 'Each subject needs subject_name, units, and grade' });
                 }
                 const g = parseFloat(subj.grade);
-                const validForScale = gradeScale === 'college'
-                    ? (!isNaN(g) && g >= 1.00 && g <= 5.00)
-                    : (!isNaN(g) && g >= 75 && g <= 100);
+                const validForScale = isGradeWithinScale(gradeScale, g);
 
                 if (!validForScale) {
                     return res.status(400).json({
                         error: gradeScale === 'college'
                             ? `Invalid grade for ${subj.subject_name}. Must be 1.00-5.00.`
-                            : `Invalid grade for ${subj.subject_name}. Must be 75-100 for K-12.`,
+                            : `Invalid grade for ${subj.subject_name}. Must be 0-100 for K-12.`,
                     });
                 }
             }

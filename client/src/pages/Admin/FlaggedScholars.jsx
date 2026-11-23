@@ -857,7 +857,7 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
 
                 <AdminPageHeader
                     title="Flagged Scholars"
-                    description="Scholars with active compliance flags or scores below the configured minimum appear here for review."
+                    description="Scholars below the configured minimum compliance score appear here for review. Active issues explain the flag but do not add above-threshold scholars to this list."
                     actions={
                         <div className="flex flex-wrap items-center gap-3 flex-shrink-0">
                         <button type="button" className="fs-focus disabled:opacity-60" disabled={loading || filtered.length === 0}
@@ -933,7 +933,7 @@ const FlaggedScholars = ({ portalLabel = 'Portal' }) => {
                         <div className="flex flex-col items-center justify-center py-14" style={{ border: `1px dashed ${BORDER}`, borderRadius: 14 }}>
                             <UserX size={38} strokeWidth={1} style={{ color: BORDER }} className="mb-3" />
                             <p style={{ ...sans, fontSize: '0.85rem', fontWeight: 700, color: MUTED }}>No flagged scholars found.</p>
-                            <p style={{ ...sans, fontSize: '0.75rem', color: MUTED, marginTop: 4 }}>All scholars are currently compliant.</p>
+                            <p style={{ ...sans, fontSize: '0.75rem', color: MUTED, marginTop: 4 }}>No scholars are below the configured minimum compliance score.</p>
                         </div>
                     ) : (
                         <>

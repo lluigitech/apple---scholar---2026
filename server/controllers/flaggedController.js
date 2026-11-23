@@ -1,7 +1,6 @@
 const db = require('../config/db');
 const {
     calculateComplianceScore,
-    hasNonOverdueComplianceViolation,
     getComplianceRiskTier,
     getOverdueComplianceTaskCounts,
 } = require('../utils/complianceLogger');
@@ -340,7 +339,7 @@ exports.getFlaggedScholars = (req, res) => {
                                 );
                             }
 
-                            if (riskLevel === 'low' && !hasNonOverdueComplianceViolation(score) && !hasNegativeSentimentFlag) return;
+                            if (overallCompliance >= score.minComplianceNum) return;
 
                             results.push({
                                 scholar_id:   scholar.scholar_id,

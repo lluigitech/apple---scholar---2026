@@ -522,12 +522,12 @@ const ComplianceManager = ({ embedded = false }) => {
 
                         {/* ── 3. Flagging rules ── */}
                         <div style={{ ...cardStyle, padding: 20 }}>
-                            <CardHeader icon={AlertTriangle} title="Flagging Rules" subtitle={`A score below ${minScoreLabel} is flagged; active issues may also trigger a separate review flag.`} />
+                            <CardHeader icon={AlertTriangle} title="Flagging Rules" subtitle={`Only scores below ${minScoreLabel} appear in Flagged Scholars.`} />
                             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" style={{ marginTop: 16 }}>
                                 {[
                                     { n: '01', title: 'Score starts at 100', text: 'Penalties lower it. Eligible maintenance credit may offset deductions.' },
                                     { n: '02', title: 'Overdue tasks deduct points', text: 'An overdue task does not create a flag by itself.' },
-                                    { n: '03', title: `Below ${minScoreLabel} is flagged`, text: 'Other active compliance issues may also be flagged for review.' },
+                                    { n: '03', title: `Below ${minScoreLabel} is flagged`, text: 'Active issues are shown as review details but do not add above-threshold scholars to the list.' },
                                     { n: '04', title: 'Negative sentiment review', text: 'Flag after negative letters in 5 different months or 3 consecutive months within the account year. This does not deduct compliance points.' },
                                 ].map((step) => (
                                     <div key={step.n} style={{ background: BG, borderRadius: 12, padding: '14px 16px' }}>
@@ -538,7 +538,7 @@ const ComplianceManager = ({ embedded = false }) => {
                                 ))}
                             </div>
                             <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 12, lineHeight: 1.55 }}>
-                                {riskBandExplanation} Risk level is separate from flag status; an active flag can appear at any risk level.
+                                {riskBandExplanation} Risk level describes the score band. Flagged Scholars only lists scholars below the configured minimum; active issues appear as details and do not change list eligibility.
                                 Overdue tasks, late or absent duty attendance, prolonged gaps between submissions, and low submission quality affect the score. Their settings are in Penalty Rules below. Negative sentiment can trigger a separate review flag, but it does not affect the score.
                             </p>
                         </div>

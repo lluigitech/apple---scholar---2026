@@ -37,6 +37,18 @@ const YEAR_LEVEL_LABELS = {
     college_4: '4th Year College', college_5: '5th Year College',
 };
 
+const normalizeYearLevelKey = (value) => {
+    const normalized = String(value || '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+    const gradeMatch = normalized.match(/^grade\s+(\d+)$/);
+    if (gradeMatch) return `grade_${gradeMatch[1]}`;
+
+    const collegeMatch = normalized.match(/^(?:college\s+([1-5])|(1st|2nd|3rd|4th|5th)\s+year(?:\s+college)?)$/);
+    if (!collegeMatch) return '';
+
+    const year = collegeMatch[1] || ({ '1st': 1, '2nd': 2, '3rd': 3, '4th': 4, '5th': 5 })[collegeMatch[2]];
+    return `college_${year}`;
+};
+
 const emptySubject = () => ({
     key: Math.random().toString(36).slice(2),
     subject_name: '',
@@ -94,25 +106,31 @@ const ChecklistRow = ({ done, label }) => (
 
 const ScholarGrades = () => {
     const scholarId = localStorage.getItem('scholar_id');
-
-    // ── Grading system auto-detection ──
-    // Reads the same `year_level` value already stored in localStorage by
-    // the rest of the Scholar module (see ScholarNotification.jsx). If it's
-    // missing or unrecognized, this defaults to GWA — the exact behavior
-    // the original form always had — so nothing changes for scholars whose
-    // level we can't determine.
-    const rawYearLevel = localStorage.getItem('year_level') || '';
-    const isSHS = rawYearLevel.startsWith('grade_');
-    const gradingSystem = isSHS ? 'percentage' : 'gwa';
-    const yearLevelLabel = YEAR_LEVEL_LABELS[rawYearLevel] || 'Not set';
+    const userId = localStorage.getItem('id');
+    const [rawYearLevel, setRawYearLevel] = useState('');
+    const [yearLevelLoading, setYearLevelLoading] = useState(Boolean(userId));
+    const [yearLevelError, setYearLevelError] = useState(userId ? '' : 'Scholar credentials not found. Please log in again.');
+    const normalizedYearLevel = normalizeYearLevelKey(rawYearLevel);
+    const isSHS = normalizedYearLevel.startsWith('grade_');
+    const isCollege = normalizedYearLevel.startsWith('college_');
+    const gradingSystem = isSHS ? 'percentage' : isCollege ? 'gwa' : null;
+    const yearLevelLabel = YEAR_LEVEL_LABELS[normalizedYearLevel] || rawYearLevel || 'Not set';
 
     const gradeBounds = gradingSystem === 'gwa'
         ? { min: 1.00, max: 5.00, step: 0.25, placeholder: 'GWA (1.00–5.00)' }
-        : { min: 0, max: 100, step: 1, placeholder: 'Percentage (0–100)' };
+        : gradingSystem === 'percentage'
+            ? { min: 0, max: 100, step: 1, placeholder: 'Percentage (0–100)' }
+            : null;
 
-    const gradeLabel = gradingSystem === 'gwa' ? 'General Weighted Average (GWA)' : 'Percentage Grade';
-    const averageLabel = gradingSystem === 'gwa' ? 'Computed GWA (Preview)' : 'Computed Average (Preview)';
-    const summaryAverageLabel = gradingSystem === 'gwa' ? 'General Weighted Average' : 'General Average';
+    const gradeLabel = gradingSystem === 'gwa'
+        ? 'General Weighted Average (GWA)'
+        : gradingSystem === 'percentage' ? 'Percentage Grade' : 'Grade';
+    const averageLabel = gradingSystem === 'gwa'
+        ? 'Computed GWA (Preview)'
+        : gradingSystem === 'percentage' ? 'Computed Average (Preview)' : 'Average (Preview)';
+    const summaryAverageLabel = gradingSystem === 'gwa'
+        ? 'General Weighted Average'
+        : gradingSystem === 'percentage' ? 'General Average' : 'Average';
 
     const [grades, setGrades]               = useState([]);
     const [loading, setLoading]              = useState(true);
@@ -149,6 +167,31 @@ const ScholarGrades = () => {
     };
 
     useEffect(() => { fetchGrades(); }, [scholarId]);
+
+    useEffect(() => {
+        if (!userId) return undefined;
+        let active = true;
+        const fetchYearLevel = async () => {
+            try {
+                const { data } = await axios.get(`${API_ORIGIN}/api/scholar/profile/${userId}`, {
+                    headers: authHeader(),
+                });
+                if (!active) return;
+                const profileYearLevel = String(data?.year_level || '').trim();
+                setRawYearLevel(profileYearLevel);
+                setYearLevelError('');
+                if (profileYearLevel) localStorage.setItem('year_level', profileYearLevel);
+                else localStorage.removeItem('year_level');
+            } catch (err) {
+                console.error('Error fetching scholar year level:', err);
+                if (active) setYearLevelError('Unable to verify your year level. Please refresh or contact an administrator.');
+            } finally {
+                if (active) setYearLevelLoading(false);
+            }
+        };
+        fetchYearLevel();
+        return () => { active = false; };
+    }, [userId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -229,10 +272,10 @@ const ScholarGrades = () => {
     })();
 
     const filledForSubmit = subjects.filter(s => s.subject_name.trim() && s.grade !== '');
-    const gradesValid = filledForSubmit.length > 0 && filledForSubmit.every(s => {
+    const gradesValid = Boolean(gradeBounds && filledForSubmit.length > 0 && filledForSubmit.every(s => {
         const g = parseFloat(s.grade);
         return !isNaN(g) && g >= gradeBounds.min && g <= gradeBounds.max;
-    });
+    }));
 
     const handleSubmit = async () => {
         setError('');
@@ -240,6 +283,18 @@ const ScholarGrades = () => {
 
         if (!scholarId) {
             setError('No scholar account found. Please log in again.');
+            return;
+        }
+        if (yearLevelLoading) {
+            setError('Please wait while we verify your year level.');
+            return;
+        }
+        if (yearLevelError) {
+            setError(yearLevelError);
+            return;
+        }
+        if (!gradeBounds) {
+            setError('Your year level is not set or is not recognized. Update it in Settings before submitting grades.');
             return;
         }
 
@@ -321,7 +376,12 @@ const ScholarGrades = () => {
 
     // "Passing" reads in the direction each grading system actually works:
     // lower is better for GWA, higher is better for percentage.
-    const isPassingGrade = (g) => gradingSystem === 'gwa' ? g <= 3.00 : g >= 75;
+    const isPassingGrade = (g) => {
+        if (gradingSystem === 'gwa') return g <= 3.00;
+        if (gradingSystem === 'percentage') return g >= 75;
+        return null;
+    };
+    const previewPassStatus = previewAverage === null ? null : isPassingGrade(parseFloat(previewAverage));
 
     // Validation checklist — derived straight from existing state, no new
     // backend fields.
@@ -371,12 +431,14 @@ const ScholarGrades = () => {
                 </div>
                 <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '14px 16px' }}>
                     <p style={{ ...body, fontSize: '0.68rem', fontWeight: 600, color: BRONZE }}>Year Level</p>
-                    <p style={{ ...display, fontSize: '1.15rem', fontWeight: 600, color: INK, marginTop: 4 }}>{yearLevelLabel}</p>
+                    <p style={{ ...display, fontSize: '1.15rem', fontWeight: 600, color: INK, marginTop: 4 }}>
+                        {yearLevelLoading ? 'Checking…' : yearLevelLabel}
+                    </p>
                 </div>
                 <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 14, padding: '14px 16px' }}>
                     <p style={{ ...body, fontSize: '0.68rem', fontWeight: 600, color: BRONZE }}>Grading System</p>
                     <p style={{ ...display, fontSize: '1.15rem', fontWeight: 600, color: INK, marginTop: 4 }}>
-                        {gradingSystem === 'gwa' ? 'GWA (1.00–5.00)' : 'Percentage (0–100)'}
+                        {yearLevelLoading ? 'Checking…' : gradingSystem === 'gwa' ? 'GWA (1.00–5.00)' : gradingSystem === 'percentage' ? 'Percentage (0–100)' : 'Not available'}
                     </p>
                 </div>
             </div>
@@ -389,6 +451,23 @@ const ScholarGrades = () => {
                         title={taskDeadline?.closed ? 'Task closed' : undefined}
                     >
                         {deadlineMessage}
+                    </AlertStrip>
+                </div>
+            )}
+            {yearLevelLoading && (
+                <div style={{ marginBottom: 20 }}>
+                    <AlertStrip color={WARNING}>Checking your year level to select the correct grading system…</AlertStrip>
+                </div>
+            )}
+            {yearLevelError && (
+                <div style={{ marginBottom: 20 }}>
+                    <AlertStrip color={DANGER} icon={AlertTriangle}>{yearLevelError}</AlertStrip>
+                </div>
+            )}
+            {!yearLevelLoading && !yearLevelError && !gradingSystem && (
+                <div style={{ marginBottom: 20 }}>
+                    <AlertStrip color={DANGER} icon={AlertTriangle} title="Year level not set">
+                        Update your year level in Settings before entering grades so the correct grading system is used.
                     </AlertStrip>
                 </div>
             )}
@@ -468,10 +547,11 @@ const ScholarGrades = () => {
                                                     onChange={e => setSubjectField(s.key, 'units', e.target.value)}
                                                 />
                                                 <input
-                                                    type="number" min={gradeBounds.min} max={gradeBounds.max} step={gradeBounds.step}
+                                                    type="number" min={gradeBounds?.min} max={gradeBounds?.max} step={gradeBounds?.step}
                                                     className={inputCls}
                                                     style={inputStyle}
-                                                    placeholder={gradeBounds.placeholder}
+                                                    placeholder={gradeBounds?.placeholder || 'Set year level in Settings'}
+                                                    disabled={!gradeBounds}
                                                     value={s.grade}
                                                     onChange={e => setSubjectField(s.key, 'grade', e.target.value)}
                                                 />
@@ -579,7 +659,7 @@ const ScholarGrades = () => {
                             </span>
                             <button
                                 onClick={handleSubmit}
-                                disabled={submitting || checkingDeadline || !taskDeadline?.assigned || taskDeadline.closed || Boolean(deadlineCheckError)}
+                                disabled={!gradeBounds || submitting || checkingDeadline || !taskDeadline?.assigned || taskDeadline.closed || Boolean(deadlineCheckError)}
                                 className="flex items-center justify-center gap-2 transition-opacity hover:opacity-90 disabled:opacity-60"
                                 style={{ padding: '11px 24px', borderRadius: 12, border: 'none', ...body, fontSize: '0.82rem', fontWeight: 700, color: '#fff', background: `linear-gradient(120deg, ${PRIMARY} 0%, ${PRIMARY_DEEP} 100%)`, cursor: submitting ? 'wait' : 'pointer' }}
                             >
@@ -615,8 +695,8 @@ const ScholarGrades = () => {
                                 </div>
                                 <div className="flex items-baseline justify-between mt-2">
                                     <span style={{ ...body, fontSize: '0.82rem', color: MUTED }}>Academic Standing</span>
-                                    <span style={{ ...body, fontSize: '0.82rem', fontWeight: 700, color: isPassingGrade(parseFloat(previewAverage)) ? SUCCESS : DANGER }}>
-                                        {isPassingGrade(parseFloat(previewAverage)) ? 'Passing' : 'Needs Improvement'}
+                                    <span style={{ ...body, fontSize: '0.82rem', fontWeight: 700, color: previewPassStatus === null ? MUTED : previewPassStatus ? SUCCESS : DANGER }}>
+                                        {previewPassStatus === null ? 'Set year level to check standing' : previewPassStatus ? 'Passing' : 'Needs Improvement'}
                                     </span>
                                 </div>
                             </>
@@ -687,17 +767,21 @@ const ScholarGrades = () => {
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    {sem.subjects.map((subj, ji) => (
-                                                        <tr key={ji} style={{ borderTop: `1px solid ${BORDER}` }}>
-                                                            <td style={{ ...body, fontSize: '0.83rem', fontWeight: 600, color: INK, padding: '10px 18px' }}>{subj.subject_name}</td>
-                                                            <td style={{ ...body, fontSize: '0.83rem', color: MUTED, padding: '10px 18px' }}>{subj.units}</td>
-                                                            <td style={{ padding: '10px 18px' }}>
-                                                                <span style={{ ...body, fontSize: '0.76rem', fontWeight: 700, padding: '2px 9px', borderRadius: 999, color: isPassingGrade(subj.grade) ? SUCCESS : DANGER, background: `${isPassingGrade(subj.grade) ? SUCCESS : DANGER}14` }}>
-                                                                    {subj.grade.toFixed(2)}
-                                                                </span>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
+                                                    {sem.subjects.map((subj, ji) => {
+                                                        const passed = isPassingGrade(subj.grade);
+                                                        const gradeColor = passed === null ? MUTED : passed ? SUCCESS : DANGER;
+                                                        return (
+                                                            <tr key={ji} style={{ borderTop: `1px solid ${BORDER}` }}>
+                                                                <td style={{ ...body, fontSize: '0.83rem', fontWeight: 600, color: INK, padding: '10px 18px' }}>{subj.subject_name}</td>
+                                                                <td style={{ ...body, fontSize: '0.83rem', color: MUTED, padding: '10px 18px' }}>{subj.units}</td>
+                                                                <td style={{ padding: '10px 18px' }}>
+                                                                    <span style={{ ...body, fontSize: '0.76rem', fontWeight: 700, padding: '2px 9px', borderRadius: 999, color: gradeColor, background: `${gradeColor}14` }}>
+                                                                        {subj.grade.toFixed(2)}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
                                                 </tbody>
                                             </table>
                                         </div>

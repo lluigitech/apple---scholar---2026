@@ -16,6 +16,7 @@ const {
     getComplianceRiskThresholds,
     getComplianceRiskTier,
     resolveGradeScale,
+    isGradeWithinScale,
 } = require('../utils/complianceLogger');
 
 exports.getPrivacyRequests = (req, res) => {
@@ -1076,15 +1077,13 @@ exports.addScholarGrade = (req, res) => {
         const scholarId = lookupData[0].scholar_id;
         const gradeScale = resolveGradeScale(lookupData[0].year_level || '');
         const parsedGrade = parseFloat(grade);
-        const validForScale = gradeScale === 'college'
-            ? (!isNaN(parsedGrade) && parsedGrade >= 1.00 && parsedGrade <= 5.00)
-            : (!isNaN(parsedGrade) && parsedGrade >= 75 && parsedGrade <= 100);
+        const validForScale = isGradeWithinScale(gradeScale, parsedGrade);
 
         if (!validForScale) {
             return res.status(400).json({
                 error: gradeScale === 'college'
                     ? 'Invalid grade. Must be 1.00-5.00 for college.'
-                    : 'Invalid grade. Must be 75-100 for K-12.',
+                    : 'Invalid grade. Must be 0-100 for K-12.',
             });
         }
 

@@ -473,7 +473,7 @@ const AdminDashboard = () => {
                     </p>
                 )}
 
-                {/* ── KPI strip ── */}
+                {/* ── 1. KPI strip — at-a-glance numbers ── */}
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
                     <KpiCard icon={AlertTriangle} color={DANGER} label="Flagged scholars" loading={loading}
                         value={flaggedTotal} note={`${highRiskTotal} high risk`} />
@@ -486,7 +486,7 @@ const AdminDashboard = () => {
                         value={negativeLetters} note={`Out of ${lettersTotal} letters analysed`} />
                 </div>
 
-                {/* ── Quick access zone: Operations (wide) + Governance (side) ── */}
+                {/* ── 2. Quick access: Operations (wide) + Governance (side) ── */}
                 <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-3 sm:gap-5 items-stretch">
 
                     {/* Operations Overview */}
@@ -551,7 +551,7 @@ const AdminDashboard = () => {
                     </section>
                 </div>
 
-                {/* ── Analytics ── */}
+                {/* ── Analytics, ordered by priority ── */}
                 {loading ? (
                     <div className="grid grid-cols-1 gap-3 sm:gap-5">
                         <Skeleton className="h-64 sm:h-72" />
@@ -559,31 +559,65 @@ const AdminDashboard = () => {
                     </div>
                 ) : (
                     <>
-                        {/* Row 1: Scholar Growth + Scoring Status */}
-                        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-3 sm:gap-5">
-                            <ChartCard icon={BarChart3} title="Scholar Growth" subtitle="Monthly registrations of scholars.">
-                                {scholarGrowth.length === 0 ? (
-                                    <EmptyState>No registration dates are available yet, so growth can't be charted.</EmptyState>
+                        {/* 3. Needs attention: Risk + Submission status */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
+                            <ChartCard icon={ShieldCheck} title="Risk Distribution" subtitle="Flagged scholars by risk level.">
+                                {flaggedTotal === 0 ? (
+                                    <EmptyState>No risk data yet.</EmptyState>
                                 ) : (
                                     <ResponsiveContainer width="100%" height={chartHeight}>
-                                        <AreaChart data={scholarGrowth} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
-                                            <defs>
-                                                <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="0%" stopColor={PRIMARY} stopOpacity={0.22} />
-                                                    <stop offset="100%" stopColor={PRIMARY} stopOpacity={0.02} />
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid {...gridProps} />
-                                            <XAxis dataKey="month" tick={axisStyle} stroke={BORDER} />
-                                            <YAxis tick={axisStyle} stroke={BORDER} allowDecimals={false} />
-                                            <Tooltip content={<ChartTooltip />} />
-                                            <Area type="monotone" dataKey="total" name="Scholars" stroke={PRIMARY} strokeWidth={2.5}
-                                                fill="url(#growthFill)" dot={{ fill: PRIMARY, r: 3 }} activeDot={{ r: 5 }} />
-                                        </AreaChart>
+                                        <BarChart data={riskDistribution} layout="vertical" margin={{ top: 4, left: 4, right: 36, bottom: 0 }}>
+                                            <CartesianGrid {...gridProps} horizontal={false} />
+                                            <XAxis type="number" tick={axisStyle} stroke={BORDER} allowDecimals={false} />
+                                            <YAxis type="category" dataKey="level" tick={axisStyle} stroke={BORDER} width={isNarrow ? 60 : 72} />
+                                            <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
+                                            <Bar dataKey="value" name="Scholars" radius={[0, 6, 6, 0]} barSize={20}>
+                                                {riskDistribution.map((entry) => (
+                                                    <Cell key={entry.level} fill={entry.color} />
+                                                ))}
+                                                <LabelList dataKey="value" position="right" style={{ ...axisStyle, fontWeight: 600, fill: INK }} />
+                                            </Bar>
+                                        </BarChart>
                                     </ResponsiveContainer>
                                 )}
                             </ChartCard>
 
+                            <ChartCard
+                                icon={ClipboardList}
+                                title="Submission Status"
+                                subtitle="Monthly submission records by current review status."
+                            >
+                                {!hasSubmissionStatusData ? (
+                                    <EmptyState>No submissions in the last six months.</EmptyState>
+                                ) : (
+                                    <>
+                                        <ResponsiveContainer width="100%" height={chartHeight}>
+                                            <BarChart data={submissionStatusByMonth} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
+                                                <CartesianGrid {...gridProps} vertical={false} />
+                                                <XAxis dataKey="month" tick={axisStyle} stroke={BORDER} />
+                                                <YAxis tick={axisStyle} stroke={BORDER} allowDecimals={false} />
+                                                <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
+                                                {SUBMISSION_STATUS_SERIES.map((series, index) => (
+                                                    <Bar
+                                                        key={series.key}
+                                                        dataKey={series.key}
+                                                        name={series.name}
+                                                        stackId="submission-status"
+                                                        fill={series.color}
+                                                        radius={index === SUBMISSION_STATUS_SERIES.length - 1 ? [5, 5, 0, 0] : undefined}
+                                                        maxBarSize={40}
+                                                    />
+                                                ))}
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                        <ChartSeriesLegend series={SUBMISSION_STATUS_SERIES} />
+                                    </>
+                                )}
+                            </ChartCard>
+                        </div>
+
+                        {/* 4. Letter quality: Scoring + Sentiment */}
+                        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-3 sm:gap-5">
                             <ChartCard
                                 icon={BarChart3}
                                 title="Scoring Status"
@@ -631,40 +665,8 @@ const AdminDashboard = () => {
                                                 ))}
                                             </BarChart>
                                         </ResponsiveContainer>
-                                        {/* Wrapping legend (replaces the chart's own legend, which overflowed on phones) */}
-                                        <ul className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3" style={{ listStyle: 'none', margin: 0, padding: 0, marginTop: 12 }}>
-                                            {QUALITY_SCORE_BANDS.map((band) => (
-                                                <li key={band.key} className="flex items-center gap-1.5" style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>
-                                                    <span aria-hidden="true" style={{ width: 10, height: 10, borderRadius: 3, background: band.color, flexShrink: 0 }} />
-                                                    {band.name}
-                                                </li>
-                                            ))}
-                                        </ul>
+                                        <ChartSeriesLegend series={QUALITY_SCORE_BANDS} />
                                     </div>
-                                )}
-                            </ChartCard>
-                        </div>
-
-                        {/* Row 2: Risk Distribution + NLP Sentiment */}
-                        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-3 sm:gap-5">
-                            <ChartCard icon={ShieldCheck} title="Risk Distribution" subtitle="Flagged scholars by risk level.">
-                                {flaggedTotal === 0 ? (
-                                    <EmptyState>No risk data yet.</EmptyState>
-                                ) : (
-                                    <ResponsiveContainer width="100%" height={isNarrow ? 190 : 230}>
-                                        <BarChart data={riskDistribution} layout="vertical" margin={{ top: 4, left: 4, right: 36, bottom: 0 }}>
-                                            <CartesianGrid {...gridProps} horizontal={false} />
-                                            <XAxis type="number" tick={axisStyle} stroke={BORDER} allowDecimals={false} />
-                                            <YAxis type="category" dataKey="level" tick={axisStyle} stroke={BORDER} width={isNarrow ? 60 : 72} />
-                                            <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
-                                            <Bar dataKey="value" name="Scholars" radius={[0, 6, 6, 0]} barSize={20}>
-                                                {riskDistribution.map((entry) => (
-                                                    <Cell key={entry.level} fill={entry.color} />
-                                                ))}
-                                                <LabelList dataKey="value" position="right" style={{ ...axisStyle, fontWeight: 600, fill: INK }} />
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
                                 )}
                             </ChartCard>
 
@@ -672,7 +674,7 @@ const AdminDashboard = () => {
                                 {lettersTotal === 0 ? (
                                     <EmptyState>No sentiment data yet.</EmptyState>
                                 ) : (
-                                    <ResponsiveContainer width="100%" height={isNarrow ? 210 : 230}>
+                                    <ResponsiveContainer width="100%" height={chartHeight}>
                                         <BarChart data={sentimentBreakdown} margin={{ top: 16, right: 12, left: -16, bottom: 0 }}>
                                             <CartesianGrid {...gridProps} />
                                             <XAxis dataKey="label" tick={axisStyle} stroke={BORDER} />
@@ -690,41 +692,8 @@ const AdminDashboard = () => {
                             </ChartCard>
                         </div>
 
-                        {/* Row 3: Submission and duty activity */}
+                        {/* 5. Activity trends: Duty attendance + Scholar growth */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
-                            <ChartCard
-                                icon={ClipboardList}
-                                title="Submission Status"
-                                subtitle="Monthly submission records by current review status."
-                            >
-                                {!hasSubmissionStatusData ? (
-                                    <EmptyState>No submissions in the last six months.</EmptyState>
-                                ) : (
-                                    <>
-                                        <ResponsiveContainer width="100%" height={chartHeight}>
-                                            <BarChart data={submissionStatusByMonth} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
-                                                <CartesianGrid {...gridProps} vertical={false} />
-                                                <XAxis dataKey="month" tick={axisStyle} stroke={BORDER} />
-                                                <YAxis tick={axisStyle} stroke={BORDER} allowDecimals={false} />
-                                                <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
-                                                {SUBMISSION_STATUS_SERIES.map((series, index) => (
-                                                    <Bar
-                                                        key={series.key}
-                                                        dataKey={series.key}
-                                                        name={series.name}
-                                                        stackId="submission-status"
-                                                        fill={series.color}
-                                                        radius={index === SUBMISSION_STATUS_SERIES.length - 1 ? [5, 5, 0, 0] : undefined}
-                                                        maxBarSize={40}
-                                                    />
-                                                ))}
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                        <ChartSeriesLegend series={SUBMISSION_STATUS_SERIES} />
-                                    </>
-                                )}
-                            </ChartCard>
-
                             <ChartCard
                                 icon={CalendarDays}
                                 title="Duty Attendance"
@@ -762,11 +731,34 @@ const AdminDashboard = () => {
                                     </>
                                 )}
                             </ChartCard>
+
+                            <ChartCard icon={BarChart3} title="Scholar Growth" subtitle="Monthly registrations of scholars.">
+                                {scholarGrowth.length === 0 ? (
+                                    <EmptyState>No registration dates are available yet, so growth can't be charted.</EmptyState>
+                                ) : (
+                                    <ResponsiveContainer width="100%" height={chartHeight}>
+                                        <AreaChart data={scholarGrowth} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
+                                            <defs>
+                                                <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor={PRIMARY} stopOpacity={0.22} />
+                                                    <stop offset="100%" stopColor={PRIMARY} stopOpacity={0.02} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid {...gridProps} />
+                                            <XAxis dataKey="month" tick={axisStyle} stroke={BORDER} />
+                                            <YAxis tick={axisStyle} stroke={BORDER} allowDecimals={false} />
+                                            <Tooltip content={<ChartTooltip />} />
+                                            <Area type="monotone" dataKey="total" name="Scholars" stroke={PRIMARY} strokeWidth={2.5}
+                                                fill="url(#growthFill)" dot={{ fill: PRIMARY, r: 3 }} activeDot={{ r: 5 }} />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                )}
+                            </ChartCard>
                         </div>
                     </>
                 )}
 
-                {/* ── Recent Users + System Activity ── */}
+                {/* ── 6. Recent Users + System Activity ── */}
                 <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-3 sm:gap-5">
                     {/* Recent Users */}
                     <section className="min-w-0 overflow-hidden p-4 sm:p-6" style={cardStyle}>
