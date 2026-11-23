@@ -131,6 +131,23 @@ const skeletons = (n, h) => (
 
 const pickEditable = (p) => ({ fullName: p.fullName, email: p.email, phone: p.phone, yearLevel: p.yearLevel });
 
+const syncRememberedScholarEmail = (studentId, previousEmail, nextEmail) => {
+  const rememberedLogin = (localStorage.getItem('remembered_login') || '').trim().toLowerCase();
+  const rememberedEmail = (localStorage.getItem('remembered_email') || '').trim().toLowerCase();
+  const normalizedStudentId = String(studentId || '').trim().toLowerCase();
+  const normalizedPreviousEmail = String(previousEmail || '').trim().toLowerCase();
+  const matchesRememberedAccount = (normalizedStudentId && rememberedLogin === normalizedStudentId)
+    || (normalizedPreviousEmail && rememberedLogin === normalizedPreviousEmail)
+    || (normalizedPreviousEmail && rememberedEmail === normalizedPreviousEmail);
+
+  if (!matchesRememberedAccount) return;
+
+  localStorage.setItem('remembered_email', nextEmail);
+  if (normalizedPreviousEmail && rememberedLogin === normalizedPreviousEmail) {
+    localStorage.setItem('remembered_login', nextEmail);
+  }
+};
+
 // ─────────────────────────────────────────────────────────────
 const ScholarSettings = () => {
   const userId = localStorage.getItem('id');
@@ -178,6 +195,7 @@ const ScholarSettings = () => {
         };
         setProfile(next);
         setSavedProfile(pickEditable(next));
+        syncRememberedScholarEmail(next.studentId, initialProfile.email, next.email);
         if (data.year_level) localStorage.setItem('year_level', data.year_level);
       } catch (err) {
         if (!mounted) return;
@@ -322,6 +340,7 @@ const ScholarSettings = () => {
           setSavedProfile(pickEditable(next));
           localStorage.setItem('name', next.fullName);
           localStorage.setItem('email', next.email);
+          syncRememberedScholarEmail(next.studentId, savedProfile.email, next.email);
           if (data.year_level) localStorage.setItem('year_level', data.year_level);
         } else {
           setNotifSaved(task.draft);
