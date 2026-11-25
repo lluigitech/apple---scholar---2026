@@ -9,7 +9,7 @@ import {
     Users, ShieldCheck, Megaphone,
     AlertTriangle, Clock,
     ArrowRight, MessageSquare, ShieldAlert, CalendarDays,
-    ClipboardList, Settings, Star, BarChart3, TrendingUp, UserPlus, Gauge,
+    ClipboardList, Settings, BarChart3, TrendingUp, UserPlus, Gauge,
 } from 'lucide-react';
 import { formatAdminDate, formatAdminMonth } from '../../utils/adminPreferences';
 import AdminNotifications from '../../components/Admin/AdminNotifications';
@@ -341,7 +341,6 @@ const AdminDashboard = () => {
     const quickLinks = [
         { label: 'User Registry', desc: 'Manage access roles', path: '/admin/users', icon: Users },
         { label: 'Flagged Focus', desc: 'Review critical risk', path: '/admin/flagged', icon: AlertTriangle },
-        { label: 'NLP Evaluator', desc: 'Sift emotional vibes', path: '/admin/correspondence', icon: MessageSquare },
         { label: 'Security Audit', desc: 'Privacy trail records', path: '/admin/security', icon: ShieldAlert },
     ];
 
@@ -486,70 +485,55 @@ const AdminDashboard = () => {
                         value={negativeLetters} note={`Out of ${lettersTotal} letters analysed`} />
                 </div>
 
-                {/* ── 2. Quick access: Operations (wide) + Governance (side) ── */}
-                <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-3 sm:gap-5 items-stretch">
+                {/* ── 2. Operations & governance — compact single grid ── */}
+                <section aria-labelledby="ops-heading" className="min-w-0 p-4 sm:p-5" style={cardStyle}>
+                    <div className="flex items-center gap-3 mb-3.5">
+                        <IconBubble icon={Settings} color={PRIMARY} size={36} iconSize={16} />
+                        <div className="min-w-0">
+                            <h2 id="ops-heading" style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.25 }}>Operations Overview</h2>
+                            <p style={{ ...sans, fontSize: '0.72rem', color: MUTED, marginTop: 1, lineHeight: 1.4 }}>Key operations and governance tools in one place.</p>
+                        </div>
+                    </div>
 
-                    {/* Operations Overview */}
-                    <section aria-labelledby="ops-heading" className="min-w-0 p-4 sm:p-6 flex flex-col" style={cardStyle}>
-                        <div className="flex items-center gap-3 mb-4">
-                            <IconBubble icon={Settings} color={PRIMARY} size={40} iconSize={18} />
-                            <div className="min-w-0">
-                                <h2 id="ops-heading" style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.25 }}>Operations Overview</h2>
-                                <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 1, lineHeight: 1.4 }}>Quick access to key administrative operations.</p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 flex-1">
-                            {operationsCards.map((card) => {
-                                const showCount = card.count !== null && card.count !== undefined && !loading;
-                                const count = showCount && (
-                                    <span style={{ ...serif, fontSize: '1.7rem', fontWeight: 700, color: INK, lineHeight: 1 }}>{card.count}</span>
-                                );
-                                return (
-                                    <button key={card.title} type="button" onClick={() => navigate(card.path)}
-                                        aria-label={card.action}
-                                        className="dash-focus dash-hover text-left min-w-0 flex items-center sm:items-stretch sm:flex-col gap-3 p-3.5 sm:p-4"
-                                        style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, cursor: 'pointer' }}>
-                                        <div className="flex items-center justify-between sm:w-full flex-shrink-0">
-                                            <IconBubble icon={card.icon} color={PRIMARY} size={42} iconSize={19} />
-                                            <span className="hidden sm:block">{count}</span>
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <h3 style={{ ...serif, fontSize: '0.98rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.25 }}>{card.title}</h3>
-                                            <p style={{ ...sans, fontSize: '0.74rem', color: MUTED, marginTop: 3, lineHeight: 1.5, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{card.desc}</p>
-                                        </div>
-                                        <span className="sm:hidden flex-shrink-0">{count}</span>
-                                        <span className="hidden sm:flex items-center gap-1.5 pt-3" style={{ ...sans, fontSize: '0.74rem', fontWeight: 600, color: PRIMARY, borderTop: `1px solid ${BORDER}` }}>
-                                            {card.action} <ArrowRight size={12} />
-                                        </span>
-                                        <ArrowRight size={14} className="sm:hidden flex-shrink-0" style={{ color: PRIMARY }} />
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </section>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+                        {/* Operations (with live counts) */}
+                        {operationsCards.map((card) => {
+                            const showCount = card.count !== null && card.count !== undefined && !loading;
+                            return (
+                                <button key={card.title} type="button" onClick={() => navigate(card.path)}
+                                    aria-label={card.action}
+                                    className="dash-focus dash-hover flex items-center gap-3 p-3 text-left min-w-0"
+                                    style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, cursor: 'pointer', minHeight: 64 }}>
+                                    <IconBubble icon={card.icon} color={PRIMARY} size={38} iconSize={17} />
+                                    <div className="flex-1 min-w-0">
+                                        <p style={{ ...serif, fontSize: '0.92rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.25 }}>{card.title}</p>
+                                        <p className="truncate" style={{ ...sans, fontSize: '0.7rem', color: MUTED, marginTop: 1 }}>{card.desc}</p>
+                                    </div>
+                                    {showCount && (
+                                        <span className="flex-shrink-0 px-2.5 py-1 rounded-full" style={{ ...serif, fontSize: '1.05rem', fontWeight: 700, color: INK, background: SURFACE, border: `1px solid ${BORDER}`, lineHeight: 1.1, minWidth: 34, textAlign: 'center' }}>{card.count}</span>
+                                    )}
+                                </button>
+                            );
+                        })}
 
-                    {/* Governance Shortcuts */}
-                    <section className="min-w-0 p-4 sm:p-6 flex flex-col" style={cardStyle}>
-                        <PanelHeader icon={Star} title="Governance Shortcuts" subtitle="Quick access to commonly used tools." />
-                        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-1 gap-2.5 flex-1 content-start">
-                            {quickLinks.map(link => {
-                                const Icon = link.icon;
-                                return (
-                                    <button key={link.path} type="button" onClick={() => navigate(link.path)}
-                                        className="dash-focus dash-hover flex items-center gap-3 p-3 text-left min-w-0"
-                                        style={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 14, cursor: 'pointer', minHeight: 60 }}>
-                                        <IconBubble icon={Icon} color={PRIMARY} size={38} iconSize={16} />
-                                        <div className="flex-1 min-w-0">
-                                            <p style={{ ...sans, fontSize: '0.82rem', fontWeight: 700, color: INK }}>{link.label}</p>
-                                            <p style={{ ...sans, fontSize: '0.7rem', color: MUTED, marginTop: 1 }}>{link.desc}</p>
-                                        </div>
-                                        <ArrowRight size={14} style={{ color: PRIMARY, flexShrink: 0 }} />
-                                    </button>
-                                );
-                            })}
-                        </div>
-                    </section>
-                </div>
+                        {/* Governance shortcuts */}
+                        {quickLinks.map(link => {
+                            const Icon = link.icon;
+                            return (
+                                <button key={link.path} type="button" onClick={() => navigate(link.path)}
+                                    className="dash-focus dash-hover flex items-center gap-3 p-3 text-left min-w-0"
+                                    style={{ background: SURFACE, border: `1px dashed ${PRIMARY}44`, borderRadius: 14, cursor: 'pointer', minHeight: 64 }}>
+                                    <IconBubble icon={Icon} color={BRONZE} size={38} iconSize={17} />
+                                    <div className="flex-1 min-w-0">
+                                        <p style={{ ...sans, fontSize: '0.82rem', fontWeight: 700, color: INK }}>{link.label}</p>
+                                        <p className="truncate" style={{ ...sans, fontSize: '0.7rem', color: MUTED, marginTop: 1 }}>{link.desc}</p>
+                                    </div>
+                                    <ArrowRight size={14} style={{ color: PRIMARY, flexShrink: 0 }} />
+                                </button>
+                            );
+                        })}
+                    </div>
+                </section>
 
                 {/* ── Analytics, ordered by priority ── */}
                 {loading ? (
