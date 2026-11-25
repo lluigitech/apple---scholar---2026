@@ -441,7 +441,7 @@ const AdminDashboard = () => {
                 <header className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 sm:gap-5">
                     <div className="min-w-0">
                         <span style={{ ...sans, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.24em', textTransform: 'uppercase', color: BRONZE }}>Admin Portal</span>
-                        <h1 style={{ ...serif, fontWeight: 700, color: PRIMARY, marginTop: 4, letterSpacing: '-0.01em', lineHeight: 1.15 }} className="text-[1.55rem] sm:text-[2rem]">Executive Intelligence Dashboard</h1>
+                        <h1 style={{ ...serif, fontWeight: 700, color: PRIMARY, marginTop: 4, letterSpacing: '-0.01em', lineHeight: 1.15 }} className="text-[1.55rem] sm:text-[2rem]">Dashboard</h1>
                         <p style={{ ...sans, fontSize: '0.85rem', color: MUTED, marginTop: 6, maxWidth: 640 }}>
                             Real-time operational overview of scholars, compliance, governance, security, and institutional performance.
                         </p>
@@ -485,13 +485,13 @@ const AdminDashboard = () => {
                         value={negativeLetters} note={`Out of ${lettersTotal} letters analysed`} />
                 </div>
 
-                {/* ── 2. Operations & governance — compact single grid ── */}
+                {/* ── 2. Quick access — announcements, tasks, duties and admin pages ── */}
                 <section aria-labelledby="ops-heading" className="min-w-0 p-4 sm:p-5" style={cardStyle}>
                     <div className="flex items-center gap-3 mb-3.5">
                         <IconBubble icon={Settings} color={PRIMARY} size={36} iconSize={16} />
                         <div className="min-w-0">
-                            <h2 id="ops-heading" style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.25 }}>Operations Overview</h2>
-                            <p style={{ ...sans, fontSize: '0.72rem', color: MUTED, marginTop: 1, lineHeight: 1.4 }}>Key operations and governance tools in one place.</p>
+                            <h2 id="ops-heading" style={{ ...serif, fontSize: '1.02rem', fontWeight: 700, color: PRIMARY, lineHeight: 1.25 }}>Quick Access</h2>
+                            <p style={{ ...sans, fontSize: '0.72rem', color: MUTED, marginTop: 1, lineHeight: 1.4 }}>Jump to the pages you use most.</p>
                         </div>
                     </div>
 
