@@ -57,9 +57,10 @@ const surfaceCard = {
   boxShadow: '0 1px 2px rgba(36,21,18,0.04)',
 };
 
+// Font size comes from the .mrt-field class: 16px on phones/tablets (stops iOS zoom), compact on desktop.
 const fieldStyle = {
   width: '100%', height: 44, padding: '0 14px', borderRadius: 12,
-  border: `1px solid ${BORDER}`, background: '#fff', ...body, fontSize: '0.85rem', color: INK, outline: 'none',
+  border: `1px solid ${BORDER}`, background: '#fff', ...body, color: INK, outline: 'none',
 };
 
 const labelStyle = { ...body, fontSize: '0.72rem', fontWeight: 700, color: PRIMARY, display: 'block', marginBottom: 6 };
@@ -196,7 +197,7 @@ const PdfLetterModal = ({ preview, onClose }) => {
   };
 
   const headerBtn = {
-    ...body, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, padding: '0 14px',
+    ...body, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, padding: '0 14px',
     borderRadius: 10, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', textDecoration: 'none',
   };
 
@@ -214,7 +215,7 @@ const PdfLetterModal = ({ preview, onClose }) => {
         style={{ background: SURFACE, border: `1px solid ${BORDER}`, boxShadow: '0 24px 60px -20px rgba(36,21,18,0.4)' }}
       >
         {/* Header */}
-        <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4" style={{ background: BG, borderBottom: `1px solid ${BORDER}` }}>
+        <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4" style={{ background: BG, borderBottom: `1px solid ${BORDER}`, paddingTop: 'max(0.75rem, env(safe-area-inset-top))' }}>
           <div className="flex min-w-0 items-center gap-3">
             <span
               className="hidden sm:flex shrink-0 items-center justify-center"
@@ -253,7 +254,7 @@ const PdfLetterModal = ({ preview, onClose }) => {
               type="button"
               onClick={onClose}
               aria-label="Close PDF preview"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full"
               style={{ background: '#fff', color: MUTED, border: `1px solid ${BORDER}`, cursor: 'pointer' }}
             >
               <X size={17} />
@@ -274,10 +275,10 @@ const PdfLetterModal = ({ preview, onClose }) => {
               </p>
             </div>
             <div className="flex w-full max-w-xs flex-col gap-2.5">
-              <a href={preview.url} target="_blank" rel="noopener noreferrer" style={{ ...headerBtn, height: 44, border: `1px solid ${PRIMARY}`, background: PRIMARY, color: '#fff' }}>
+              <a href={preview.url} target="_blank" rel="noopener noreferrer" style={{ ...headerBtn, height: 46, border: `1px solid ${PRIMARY}`, background: PRIMARY, color: '#fff' }}>
                 <ExternalLink size={15} /> Open PDF letter
               </a>
-              <a href={preview.url} download={fileName} style={{ ...headerBtn, height: 44, border: `1px solid ${PRIMARY}`, background: '#fff', color: PRIMARY }}>
+              <a href={preview.url} download={fileName} style={{ ...headerBtn, height: 46, border: `1px solid ${PRIMARY}`, background: '#fff', color: PRIMARY }}>
                 <Download size={15} /> Save to device
               </a>
             </div>
@@ -382,7 +383,7 @@ export default function MonthlyReportsTab({
         <p style={{ ...body, fontSize: '0.9rem', color: DANGER, marginBottom: 16 }}>{error}</p>
         <button
           onClick={onRefresh}
-          style={{ padding: '10px 22px', borderRadius: 10, background: PRIMARY, color: '#fff', ...body, fontWeight: 700, fontSize: '0.85rem', border: 'none', cursor: 'pointer' }}
+          style={{ padding: '12px 24px', minHeight: 44, borderRadius: 10, background: PRIMARY, color: '#fff', ...body, fontWeight: 700, fontSize: '0.85rem', border: 'none', cursor: 'pointer' }}
         >
           Retry
         </button>
@@ -516,21 +517,21 @@ export default function MonthlyReportsTab({
         }, { responseType: 'blob' });
         saveDownload(new Blob([response.data], { type: 'application/zip' }), `monthly-letters-pdf-${new Date().toISOString().slice(0, 10)}.zip`);
       } else {
-      for (const { report, id } of targets) {
-      const response = await postWithCurrentAuth(`${API}/submission/letters/pdf`, { submissionId: id }, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
-        responseType: 'blob',
-      });
-      const objectUrl = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
-      const link = document.createElement('a');
-      const safeName = String(report.scholarName || `Scholar-${id}`).replace(/[^a-z0-9._-]+/gi, '_');
-      link.href = objectUrl;
-      link.download = `${safeName}_${safeFilenamePart(periodOf(report))}_Monthly_Letter_${id}.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-      }
+        for (const { report, id } of targets) {
+          const response = await postWithCurrentAuth(`${API}/submission/letters/pdf`, { submissionId: id }, {
+            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+            responseType: 'blob',
+          });
+          const objectUrl = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+          const link = document.createElement('a');
+          const safeName = String(report.scholarName || `Scholar-${id}`).replace(/[^a-z0-9._-]+/gi, '_');
+          link.href = objectUrl;
+          link.download = `${safeName}_${safeFilenamePart(periodOf(report))}_Monthly_Letter_${id}.pdf`;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+        }
       }
     } catch (downloadError) {
       console.error('Could not download monthly letter PDF documents:', downloadError);
@@ -633,30 +634,86 @@ export default function MonthlyReportsTab({
   const th = { ...body, fontSize: '0.74rem', fontWeight: 700, color: INK, textAlign: 'left', padding: '12px 14px', whiteSpace: 'nowrap', borderBottom: `1px solid ${BORDER}`, background: BG };
   const td = { ...body, fontSize: '0.82rem', color: INK, padding: '12px 14px', whiteSpace: 'nowrap', borderBottom: `1px solid ${BORDER}66` };
   const actionBtn = { ...body, fontSize: '0.76rem', fontWeight: 600, padding: '5px 12px', borderRadius: 8, cursor: 'pointer', border: `1px solid ${PRIMARY}`, background: '#fff', color: PRIMARY };
+  const touchBtn = { ...actionBtn, fontSize: '0.8rem', padding: '8px 14px', minHeight: 40, borderRadius: 10 };
   const archiveDisabled = selectedIds.length === 0 || archiving;
 
+  const toolbarBtn = (disabled) => ({
+    minHeight: 44, padding: '0 16px', borderRadius: 10, border: `1px solid ${PRIMARY}`,
+    ...body, fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap',
+    cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
+  });
+
+  // Row actions — shared by the desktop table and the phone cards.
+  const renderRowActions = (r, touch = false) => {
+    const btn = touch ? touchBtn : actionBtn;
+    const isLetter = requirementOf(r) === 'Monthly Letter';
+    const submissionId = r.id || r._id;
+    const opening = generatingPdfId === submissionId;
+    const files = r.photos || [];
+
+    if (r.isMissing) return <span style={{ ...body, fontSize: '0.74rem', color: MUTED }}>—</span>;
+    if (isLetter) {
+      return (
+        <>
+          <button type="button" onClick={() => onSelectReport && onSelectReport(r)} style={btn}>
+            View
+          </button>
+          <button
+            type="button"
+            onClick={() => handleViewLetterPdf(r)}
+            disabled={!submissionId || opening}
+            aria-label={`View PDF letter for ${r.scholarName || 'scholar'}`}
+            title="View PDF letter"
+            className="flex items-center justify-center gap-1.5"
+            style={{
+              ...btn, padding: touch ? '8px 14px' : 0, width: touch ? 'auto' : 32, height: touch ? 'auto' : 28,
+              border: `1px solid ${BORDER}`,
+              cursor: !submissionId || opening ? 'wait' : 'pointer', opacity: opening ? 0.6 : 1,
+            }}
+          >
+            {opening ? <span style={{ fontSize: '0.7rem' }}>…</span> : <FileText size={14} />}
+            {touch && <span>{opening ? 'Opening…' : 'PDF'}</span>}
+          </button>
+        </>
+      );
+    }
+    if (files.length > 0) {
+      return files.map((media, mediaIndex) => (
+        <button
+          key={`${media.url || media.path}-${mediaIndex}`}
+          type="button"
+          onClick={() => handleViewDocument(r, media, mediaIndex)}
+          aria-label={`View ${requirementOf(r)} document${files.length > 1 ? ` ${mediaIndex + 1}` : ''} for ${r.scholarName || 'scholar'}`}
+          style={btn}
+        >
+          <span className="inline-flex items-center gap-1.5">
+            <Eye size={13} /> View{files.length > 1 ? ` ${mediaIndex + 1}` : ''}
+          </span>
+        </button>
+      ));
+    }
+    return <span style={{ ...body, fontSize: '0.74rem', color: MUTED }}>No file attached</span>;
+  };
+
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-3 sm:gap-5 min-w-0">
+      <style>{`
+        .mrt-field { font-size: 1rem; }
+        @media (min-width: 1024px) { .mrt-field { font-size: 0.85rem; } }
+      `}</style>
 
       {/* ── Filter bar (filters apply live) ── */}
       <div
-        className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_1.5fr_auto] items-end"
+        className="grid gap-3 p-3.5 sm:p-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_auto] items-end min-w-0"
         style={{ ...surfaceCard }}
       >
-        <div>
-          <label style={labelStyle}>Document Type</label>
-          <select value={docType} onChange={e => setDocType(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }} onFocus={focus} onBlur={blur}>
-            <option value="all">All Requirements</option>
-            {REQUIREMENT_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-          </select>
-        </div>
-
-        <div>
+        <div className="min-w-0 sm:col-span-2 lg:col-span-1">
           <label style={labelStyle}>Search Scholar</label>
           <div style={{ position: 'relative' }}>
             <Search size={15} style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: MUTED }} />
             <input
-              type="text"
+              type="search"
+              className="mrt-field"
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
               placeholder="Search scholar name or ID..."
@@ -667,20 +724,29 @@ export default function MonthlyReportsTab({
           </div>
         </div>
 
-        <div>
+        <div className="min-w-0">
+          <label style={labelStyle}>Document Type</label>
+          <select className="mrt-field" value={docType} onChange={e => setDocType(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }} onFocus={focus} onBlur={blur}>
+            <option value="all">All Requirements</option>
+            {REQUIREMENT_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+          </select>
+        </div>
+
+        <div className="min-w-0">
           <label style={labelStyle}>Status</label>
-          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }} onFocus={focus} onBlur={blur}>
+          <select className="mrt-field" value={statusFilter} onChange={e => setStatusFilter(e.target.value)} style={{ ...fieldStyle, cursor: 'pointer' }} onFocus={focus} onBlur={blur}>
             <option value="all">All Statuses</option>
             <option value="submitted">Submitted</option>
             <option value="not-submitted">Not Submitted</option>
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:col-span-2 lg:col-span-1">
           <button
             type="button"
             onClick={handleExportPdf}
             disabled={reportPdfLoading || searchedReports.length === 0}
+            className="flex items-center justify-center gap-2"
             style={{
               height: 44, padding: '0 16px', borderRadius: 12, border: 'none',
               background: PRIMARY, color: '#fff',
@@ -688,13 +754,13 @@ export default function MonthlyReportsTab({
               opacity: reportPdfLoading || searchedReports.length === 0 ? 0.6 : 1, whiteSpace: 'nowrap',
             }}
           >
-            <span className="inline-flex items-center gap-2"><FileText size={15} /> {reportPdfLoading ? 'Generating PDF…' : 'Export PDF'}</span>
+            <FileText size={15} /> {reportPdfLoading ? 'Generating…' : 'Export PDF'}
           </button>
           <button
             type="button"
             onClick={handleExportCsv}
             disabled={searchedReports.length === 0}
-            className="flex items-center gap-2"
+            className="flex items-center justify-center gap-2"
             style={{ height: 44, padding: '0 16px', borderRadius: 12, border: `1px solid ${PRIMARY}`, background: '#fff', color: PRIMARY, ...body, fontSize: '0.82rem', fontWeight: 700, cursor: searchedReports.length === 0 ? 'not-allowed' : 'pointer', opacity: searchedReports.length === 0 ? 0.6 : 1, whiteSpace: 'nowrap' }}
           >
             <FileSpreadsheet size={15} /> Export CSV
@@ -706,11 +772,11 @@ export default function MonthlyReportsTab({
       {loading ? (
         <Skeleton />
       ) : (
-        <section aria-labelledby="scholar-submissions-title" style={{ ...surfaceCard, padding: '1.25rem 1.25rem 1rem' }}>
-          <div className="flex flex-wrap items-start justify-between gap-3" style={{ marginBottom: 14 }}>
-            <div>
-              <h2 id="scholar-submissions-title" style={{ ...display, fontSize: '1.25rem', fontWeight: 600, color: INK }}>Submission Records</h2>
-              <p style={{ ...body, fontSize: '0.82rem', color: MUTED, marginTop: 2 }}>
+        <section aria-labelledby="scholar-submissions-title" className="min-w-0 p-3.5 sm:p-5" style={{ ...surfaceCard }}>
+          <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-3" style={{ marginBottom: 14 }}>
+            <div className="min-w-0">
+              <h2 id="scholar-submissions-title" style={{ ...display, fontWeight: 600, color: INK, lineHeight: 1.25 }} className="text-[1.1rem] sm:text-[1.25rem]">Submission Records</h2>
+              <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 2, lineHeight: 1.5 }}>
                 {statusFilter === 'not-submitted'
                   ? 'Scholars without a submission for the selected period.'
                   : statusFilter === 'all' && month
@@ -719,17 +785,15 @@ export default function MonthlyReportsTab({
               </p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 xl:flex xl:flex-wrap xl:justify-end gap-2">
               <button
                 type="button"
                 onClick={openArchiveModal}
                 disabled={archiveDisabled}
-                className="flex items-center gap-2"
+                className="flex items-center justify-center gap-2"
                 style={{
-                  height: 38, padding: '0 16px', borderRadius: 10, border: `1px solid ${PRIMARY}`,
+                  ...toolbarBtn(archiveDisabled),
                   background: archiveDisabled ? '#fff' : PRIMARY, color: archiveDisabled ? PRIMARY : '#fff',
-                  ...body, fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap',
-                  cursor: archiveDisabled ? 'not-allowed' : 'pointer', opacity: archiveDisabled ? 0.5 : 1,
                 }}
               >
                 <Archive size={14} />
@@ -740,39 +804,21 @@ export default function MonthlyReportsTab({
                 type="button"
                 onClick={handleDownloadAllLetterPdfs}
                 disabled={bulkPdfLoading || letterTargets.length === 0}
-                className="flex items-center gap-2"
-                style={{
-                  height: 38, padding: '0 16px', borderRadius: 10, border: `1px solid ${PRIMARY}`,
-                  background: '#fff', color: PRIMARY, ...body, fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap',
-                  cursor: bulkPdfLoading || letterTargets.length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: letterTargets.length === 0 ? 0.5 : 1,
-                }}
+                className="flex items-center justify-center gap-2"
+                style={{ ...toolbarBtn(bulkPdfLoading || letterTargets.length === 0), background: '#fff', color: PRIMARY }}
               >
                 <Download size={14} />
-                {bulkPdfLoading
-                  ? 'Preparing PDF letters…'
-                  : selected.size > 0
-                    ? `PDF letters (${letterTargets.length})`
-                    : `PDF letters (${letterTargets.length})`}
+                {bulkPdfLoading ? 'Preparing PDFs…' : `PDF letters (${letterTargets.length})`}
               </button>
               <button
                 type="button"
                 onClick={handleDownloadAllLetterDocxs}
                 disabled={bulkDocxLoading || letterTargets.length === 0}
-                className="flex items-center gap-2"
-                style={{
-                  height: 38, padding: '0 16px', borderRadius: 10, border: `1px solid ${PRIMARY}`,
-                  background: '#fff', color: PRIMARY, ...body, fontSize: '0.8rem', fontWeight: 700, whiteSpace: 'nowrap',
-                  cursor: bulkDocxLoading || letterTargets.length === 0 ? 'not-allowed' : 'pointer',
-                  opacity: letterTargets.length === 0 ? 0.5 : 1,
-                }}
+                className="flex items-center justify-center gap-2"
+                style={{ ...toolbarBtn(bulkDocxLoading || letterTargets.length === 0), background: '#fff', color: PRIMARY }}
               >
                 <Download size={14} />
-                {bulkDocxLoading
-                  ? 'Preparing DOCX letters…'
-                  : selected.size > 0
-                    ? `DOCS letters (${letterTargets.length})`
-                    : `DOCS letters (${letterTargets.length})`}
+                {bulkDocxLoading ? 'Preparing DOCX…' : `DOCS letters (${letterTargets.length})`}
               </button>
             </div>
           </div>
@@ -780,15 +826,24 @@ export default function MonthlyReportsTab({
           {archiveMessage && (
             <div role="status" className="flex items-center gap-2.5" style={{ background: '#EAF3EB', border: '1px solid #CFE3D2', borderRadius: 12, padding: '10px 14px', marginBottom: 12 }}>
               <CheckCircle2 size={16} style={{ color: '#4F7656', flexShrink: 0 }} />
-              <span style={{ ...body, fontSize: '0.82rem', color: '#4F7656', flex: 1 }}>{archiveMessage}</span>
-              <button type="button" onClick={() => setArchiveMessage('')} aria-label="Dismiss message" style={{ background: 'transparent', border: 'none', color: '#4F7656', cursor: 'pointer' }}>
+              <span style={{ ...body, fontSize: '0.82rem', color: '#4F7656', flex: 1, lineHeight: 1.45 }}>{archiveMessage}</span>
+              <button type="button" onClick={() => setArchiveMessage('')} aria-label="Dismiss message" style={{ background: 'transparent', border: 'none', color: '#4F7656', cursor: 'pointer', padding: 6 }}>
                 <X size={15} />
               </button>
             </div>
           )}
           {bulkPdfLoading && <p style={{ ...body, color: MUTED, fontSize: '0.8rem', marginBottom: 12 }}>Preparing PDF letters. This may take a moment…</p>}
           {bulkDocxLoading && <p style={{ ...body, color: MUTED, fontSize: '0.8rem', marginBottom: 12 }}>Preparing editable DOCX letters. This may take a moment…</p>}
-          {pdfError && <p role="alert" style={{ ...body, color: DANGER, fontSize: '0.8rem', marginBottom: 12 }}>{pdfError}</p>}
+          {pdfError && <p role="alert" style={{ ...body, color: DANGER, fontSize: '0.8rem', marginBottom: 12, lineHeight: 1.5 }}>{pdfError}</p>}
+
+          {selected.size > 0 && (
+            <div className="flex items-center justify-between gap-3" style={{ background: `${PRIMARY}0a`, border: `1px solid ${PRIMARY}33`, borderRadius: 12, padding: '8px 14px', marginBottom: 12 }}>
+              <span style={{ ...body, fontSize: '0.8rem', fontWeight: 600, color: PRIMARY }}>{selected.size} selected</span>
+              <button type="button" onClick={() => setSelected(new Set())} style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: PRIMARY, background: 'none', border: 'none', textDecoration: 'underline', cursor: 'pointer', padding: '6px 0' }}>
+                Clear selection
+              </button>
+            </div>
+          )}
 
           {searchedReports.length === 0 ? (
             <div className="text-center" style={{ padding: '3rem 1rem', border: `1px dashed ${BORDER}`, borderRadius: 14 }}>
@@ -802,7 +857,63 @@ export default function MonthlyReportsTab({
             </div>
           ) : (
             <>
-              <div style={{ overflowX: 'auto', border: `1px solid ${BORDER}`, borderRadius: 14 }}>
+              {/* Phones & tablets: card list */}
+              <div className="lg:hidden">
+                <label className="flex items-center gap-2.5 mb-2.5 px-1" style={{ ...body, fontSize: '0.8rem', fontWeight: 600, color: INK, minHeight: 36, cursor: pageKeys.length ? 'pointer' : 'default' }}>
+                  <input type="checkbox" aria-label="Select all on this page" checked={allOnPage} onChange={toggleAll} disabled={pageKeys.length === 0} style={{ accentColor: PRIMARY, width: 18, height: 18 }} />
+                  Select all on this page
+                </label>
+                <ul className="flex flex-col gap-2.5" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+                  {pageRows.map((r, i) => {
+                    const key = rowKey(r, start + i);
+                    const yl = r.year || r.yearLevel || r.year_level;
+                    return (
+                      <li
+                        key={key}
+                        className="p-3.5"
+                        style={{
+                          background: selected.has(key) ? `${PRIMARY}08` : '#fff',
+                          border: `1px solid ${selected.has(key) ? `${PRIMARY}55` : BORDER}`,
+                          borderRadius: 14,
+                        }}
+                      >
+                        <div className="flex items-start gap-3">
+                          <input
+                            type="checkbox"
+                            aria-label={`Select ${r.scholarName || 'row'}`}
+                            checked={selected.has(key)}
+                            onChange={() => toggleOne(key)}
+                            disabled={r.isMissing}
+                            style={{ accentColor: PRIMARY, width: 18, height: 18, marginTop: 2, flexShrink: 0 }}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p style={{ ...body, fontSize: '0.9rem', fontWeight: 700, color: INK, lineHeight: 1.3, overflowWrap: 'anywhere' }}>{r.scholarName || 'Unknown Scholar'}</p>
+                              <StatusBadge status={r.status} />
+                            </div>
+                            <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 3, overflowWrap: 'anywhere' }}>
+                              {[r.studentId || r.scholar_id, yl ? formatYearLevelLabel(yl) : null].filter(Boolean).join(' · ') || '—'}
+                            </p>
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mt-2.5">
+                              {!r.isMissing && <RequirementBadge type={requirementOf(r)} />}
+                              <span style={{ ...body, fontSize: '0.76rem', color: MUTED }}>{periodOf(r)}</span>
+                              <span style={{ ...body, fontSize: '0.76rem', color: MUTED }}>Submitted {fmtDate(r.submittedAt)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        {!r.isMissing && (
+                          <div className="flex flex-wrap items-center gap-2 mt-3 pt-3" style={{ borderTop: `1px solid ${BORDER}88` }}>
+                            {renderRowActions(r, true)}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+
+              {/* Desktop: table */}
+              <div className="hidden lg:block" style={{ overflowX: 'auto', border: `1px solid ${BORDER}`, borderRadius: 14 }}>
                 <table style={{ width: '100%', minWidth: 960, borderCollapse: 'collapse' }}>
                   <thead>
                     <tr>
@@ -818,10 +929,6 @@ export default function MonthlyReportsTab({
                     {pageRows.map((r, i) => {
                       const key = rowKey(r, start + i);
                       const yl = r.year || r.yearLevel || r.year_level;
-                      const isLetter = requirementOf(r) === 'Monthly Letter';
-                      const submissionId = r.id || r._id;
-                      const opening = generatingPdfId === submissionId;
-                      const files = r.photos || [];
                       return (
                         <tr key={key} style={{ background: selected.has(key) ? `${PRIMARY}08` : 'transparent' }}>
                           <td style={td}>
@@ -837,45 +944,7 @@ export default function MonthlyReportsTab({
                           <td style={td}><StatusBadge status={r.status} /></td>
                           <td style={td}>
                             <div className="flex items-center gap-1.5">
-                              {r.isMissing ? (
-                                <span style={{ ...body, fontSize: '0.74rem', color: MUTED }}>—</span>
-                              ) : isLetter ? (
-                                <>
-                                  <button type="button" onClick={() => onSelectReport && onSelectReport(r)} style={actionBtn}>
-                                    View
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleViewLetterPdf(r)}
-                                    disabled={!submissionId || opening}
-                                    aria-label={`View PDF letter for ${r.scholarName || 'scholar'}`}
-                                    title="View PDF letter"
-                                    className="flex items-center justify-center"
-                                    style={{
-                                      ...actionBtn, width: 32, height: 28, padding: 0, border: `1px solid ${BORDER}`,
-                                      cursor: !submissionId || opening ? 'wait' : 'pointer', opacity: opening ? 0.6 : 1,
-                                    }}
-                                  >
-                                    {opening ? <span style={{ fontSize: '0.7rem' }}>…</span> : <FileText size={14} />}
-                                  </button>
-                                </>
-                              ) : files.length > 0 ? (
-                                files.map((media, mediaIndex) => (
-                                  <button
-                                    key={`${media.url || media.path}-${mediaIndex}`}
-                                    type="button"
-                                    onClick={() => handleViewDocument(r, media, mediaIndex)}
-                                    aria-label={`View ${requirementOf(r)} document${files.length > 1 ? ` ${mediaIndex + 1}` : ''} for ${r.scholarName || 'scholar'}`}
-                                    style={actionBtn}
-                                  >
-                                    <span className="inline-flex items-center gap-1.5">
-                                      <Eye size={13} /> View{files.length > 1 ? ` ${mediaIndex + 1}` : ''}
-                                    </span>
-                                  </button>
-                                ))
-                              ) : (
-                                <span style={{ ...body, fontSize: '0.74rem', color: MUTED }}>No file attached</span>
-                              )}
+                              {renderRowActions(r)}
                             </div>
                           </td>
                         </tr>
@@ -886,38 +955,48 @@ export default function MonthlyReportsTab({
               </div>
 
               {/* ── Pagination ── */}
-              <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 4px 4px' }}>
-                <span style={{ ...body, fontSize: '0.8rem', color: MUTED }}>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3" style={{ padding: '14px 4px 4px' }}>
+                <span style={{ ...body, fontSize: '0.8rem', color: MUTED, lineHeight: 1.5 }}>
                   Showing {start + 1}–{Math.min(start + pageSize, searchedReports.length)} of {searchedReports.length} submission{searchedReports.length === 1 ? '' : 's'}{selected.size > 0 ? ` · ${selected.size} selected` : ''}
                 </span>
-                <nav className="flex items-center gap-1.5" aria-label="Pagination">
+                <nav className="flex items-center justify-between sm:justify-end gap-1.5" aria-label="Pagination">
                   <button
                     type="button" aria-label="Previous page" disabled={currentPage === 1}
                     onClick={() => setPage(currentPage - 1)}
-                    style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${BORDER}`, background: '#fff', color: INK, opacity: currentPage === 1 ? 0.4 : 1, cursor: currentPage === 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ width: 40, height: 40, borderRadius: 10, border: `1px solid ${BORDER}`, background: '#fff', color: INK, opacity: currentPage === 1 ? 0.4 : 1, cursor: currentPage === 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
                     <ChevronLeft size={16} />
                   </button>
-                  {pageList(currentPage, totalPages).map(p => (
-                    typeof p === 'string' ? (
-                      <span key={p} style={{ ...body, color: MUTED, padding: '0 4px' }}>…</span>
-                    ) : (
-                      <button
-                        key={p} type="button" onClick={() => setPage(p)} aria-current={p === currentPage ? 'page' : undefined}
-                        style={{
-                          minWidth: 34, height: 34, borderRadius: 10, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
-                          border: `1px solid ${p === currentPage ? PRIMARY : 'transparent'}`,
-                          background: p === currentPage ? PRIMARY : 'transparent', color: p === currentPage ? '#fff' : INK,
-                        }}
-                      >
-                        {p}
-                      </button>
-                    )
-                  ))}
+
+                  {/* Phones: compact "Page x of y" */}
+                  <span className="sm:hidden" style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: INK }}>
+                    Page {currentPage} of {totalPages}
+                  </span>
+
+                  {/* Larger screens: numbered pages */}
+                  <div className="hidden sm:flex items-center gap-1.5">
+                    {pageList(currentPage, totalPages).map(p => (
+                      typeof p === 'string' ? (
+                        <span key={p} style={{ ...body, color: MUTED, padding: '0 4px' }}>…</span>
+                      ) : (
+                        <button
+                          key={p} type="button" onClick={() => setPage(p)} aria-current={p === currentPage ? 'page' : undefined}
+                          style={{
+                            minWidth: 36, height: 36, borderRadius: 10, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer',
+                            border: `1px solid ${p === currentPage ? PRIMARY : 'transparent'}`,
+                            background: p === currentPage ? PRIMARY : 'transparent', color: p === currentPage ? '#fff' : INK,
+                          }}
+                        >
+                          {p}
+                        </button>
+                      )
+                    ))}
+                  </div>
+
                   <button
                     type="button" aria-label="Next page" disabled={currentPage === totalPages}
                     onClick={() => setPage(currentPage + 1)}
-                    style={{ width: 34, height: 34, borderRadius: 10, border: `1px solid ${BORDER}`, background: '#fff', color: INK, opacity: currentPage === totalPages ? 0.4 : 1, cursor: currentPage === totalPages ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                    style={{ width: 40, height: 40, borderRadius: 10, border: `1px solid ${BORDER}`, background: '#fff', color: INK, opacity: currentPage === totalPages ? 0.4 : 1, cursor: currentPage === totalPages ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
                     <ChevronRight size={16} />
                   </button>
@@ -939,7 +1018,7 @@ export default function MonthlyReportsTab({
       {/* ── Archive confirmation ── */}
       {archiveOpen && (
         <div
-          className="fixed inset-0 z-[100] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4"
           style={{ background: 'rgba(36,21,18,0.55)' }}
           onMouseDown={event => { if (event.target === event.currentTarget) closeArchiveModal(); }}
         >
@@ -947,11 +1026,17 @@ export default function MonthlyReportsTab({
             role="dialog"
             aria-modal="true"
             aria-labelledby="archive-modal-title"
-            style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: RADIUS, width: '100%', maxWidth: 460, boxShadow: '0 24px 60px -20px rgba(36,21,18,0.4)' }}
+            className="w-full rounded-t-[20px] sm:rounded-[16px]"
+            style={{ background: SURFACE, border: `1px solid ${BORDER}`, maxWidth: 460, boxShadow: '0 24px 60px -20px rgba(36,21,18,0.4)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
           >
-            <div style={{ padding: '22px 24px 8px' }}>
-              <h2 id="archive-modal-title" style={{ ...display, fontSize: '1.25rem', fontWeight: 600, color: INK }}>Archive Submission Records?</h2>
-              <p style={{ ...body, fontSize: '0.86rem', lineHeight: 1.6, color: MUTED, marginTop: 8 }}>
+            <div className="px-5 sm:px-6" style={{ paddingTop: 22, paddingBottom: 8 }}>
+              <div className="flex items-start gap-3">
+                <span className="flex items-center justify-center flex-shrink-0" style={{ width: 40, height: 40, borderRadius: '50%', background: `${PRIMARY}12`, color: PRIMARY }}>
+                  <Archive size={18} />
+                </span>
+                <h2 id="archive-modal-title" style={{ ...display, fontSize: '1.2rem', fontWeight: 600, color: INK, lineHeight: 1.3, paddingTop: 6 }}>Archive Submission Records?</h2>
+              </div>
+              <p style={{ ...body, fontSize: '0.86rem', lineHeight: 1.6, color: MUTED, marginTop: 12 }}>
                 You are about to archive {selectedIds.length} submission record{selectedIds.length === 1 ? '' : 's'}.
               </p>
               <p style={{ ...body, fontSize: '0.86rem', lineHeight: 1.6, color: MUTED, marginTop: 6 }}>
@@ -960,16 +1045,17 @@ export default function MonthlyReportsTab({
               {archiveError && (
                 <div role="alert" className="flex items-start gap-2" style={{ background: '#FBEAE8', border: '1px solid #F0CFCB', borderRadius: 10, padding: '10px 12px', marginTop: 14 }}>
                   <AlertTriangle size={15} style={{ color: DANGER, marginTop: 1, flexShrink: 0 }} />
-                  <span style={{ ...body, fontSize: '0.8rem', color: DANGER }}>{archiveError}</span>
+                  <span style={{ ...body, fontSize: '0.8rem', color: DANGER, lineHeight: 1.45 }}>{archiveError}</span>
                 </div>
               )}
             </div>
-            <div className="flex justify-end gap-2" style={{ padding: '16px 24px 22px' }}>
+            <div className="flex gap-2 px-5 sm:px-6 sm:justify-end" style={{ paddingTop: 16, paddingBottom: 22 }}>
               <button
                 type="button"
                 onClick={closeArchiveModal}
                 disabled={archiving}
-                style={{ ...body, height: 40, padding: '0 18px', borderRadius: 10, border: `1px solid ${BORDER}`, background: '#fff', color: INK, fontSize: '0.82rem', fontWeight: 600, cursor: archiving ? 'default' : 'pointer' }}
+                className="flex-1 sm:flex-none"
+                style={{ ...body, minHeight: 44, padding: '0 18px', borderRadius: 10, border: `1px solid ${BORDER}`, background: '#fff', color: INK, fontSize: '0.84rem', fontWeight: 600, cursor: archiving ? 'default' : 'pointer' }}
               >
                 Cancel
               </button>
@@ -977,7 +1063,8 @@ export default function MonthlyReportsTab({
                 type="button"
                 onClick={handleArchiveSelected}
                 disabled={archiving}
-                style={{ ...body, height: 40, padding: '0 18px', borderRadius: 10, border: `1px solid ${PRIMARY}`, background: PRIMARY, color: '#fff', fontSize: '0.82rem', fontWeight: 700, cursor: archiving ? 'wait' : 'pointer', opacity: archiving ? 0.7 : 1 }}
+                className="flex-[1.6] sm:flex-none"
+                style={{ ...body, minHeight: 44, padding: '0 18px', borderRadius: 10, border: `1px solid ${PRIMARY}`, background: PRIMARY, color: '#fff', fontSize: '0.84rem', fontWeight: 700, cursor: archiving ? 'wait' : 'pointer', opacity: archiving ? 0.7 : 1 }}
               >
                 {archiving ? 'Archiving…' : `Archive ${selectedIds.length} Record${selectedIds.length === 1 ? '' : 's'}`}
               </button>
