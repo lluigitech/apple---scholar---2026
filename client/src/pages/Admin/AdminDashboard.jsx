@@ -543,26 +543,43 @@ const AdminDashboard = () => {
                     </div>
                 ) : (
                     <>
-                        {/* 3. Needs attention: Risk + Submission status */}
+                        {/* 3. Needs attention: Duty attendance + Submission status */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
-                            <ChartCard icon={ShieldCheck} title="Risk Distribution" subtitle="Flagged scholars by risk level.">
-                                {flaggedTotal === 0 ? (
-                                    <EmptyState>No risk data yet.</EmptyState>
+                            <ChartCard
+                                icon={CalendarDays}
+                                title="Duty Attendance"
+                                subtitle="Monthly attendance records by status."
+                            >
+                                {!hasDutyAttendanceData ? (
+                                    <EmptyState>No duty attendance in the last six months.</EmptyState>
                                 ) : (
-                                    <ResponsiveContainer width="100%" height={chartHeight}>
-                                        <BarChart data={riskDistribution} layout="vertical" margin={{ top: 4, left: 4, right: 36, bottom: 0 }}>
-                                            <CartesianGrid {...gridProps} horizontal={false} />
-                                            <XAxis type="number" tick={axisStyle} stroke={BORDER} allowDecimals={false} />
-                                            <YAxis type="category" dataKey="level" tick={axisStyle} stroke={BORDER} width={isNarrow ? 60 : 72} />
-                                            <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
-                                            <Bar dataKey="value" name="Scholars" radius={[0, 6, 6, 0]} barSize={20}>
-                                                {riskDistribution.map((entry) => (
-                                                    <Cell key={entry.level} fill={entry.color} />
+                                    <>
+                                        <ResponsiveContainer width="100%" height={chartHeight}>
+                                            <BarChart data={dutyAttendanceByMonth} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
+                                                <CartesianGrid {...gridProps} vertical={false} />
+                                                <XAxis dataKey="month" tick={axisStyle} stroke={BORDER} />
+                                                <YAxis tick={axisStyle} stroke={BORDER} allowDecimals={false} />
+                                                <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
+                                                {DUTY_ATTENDANCE_SERIES.map((series, index) => (
+                                                    <Bar
+                                                        key={series.key}
+                                                        dataKey={series.key}
+                                                        name={series.name}
+                                                        stackId="duty-attendance"
+                                                        fill={series.color}
+                                                        radius={index === DUTY_ATTENDANCE_SERIES.length - 1 ? [5, 5, 0, 0] : undefined}
+                                                        maxBarSize={40}
+                                                    />
                                                 ))}
-                                                <LabelList dataKey="value" position="right" style={{ ...axisStyle, fontWeight: 600, fill: INK }} />
-                                            </Bar>
-                                        </BarChart>
-                                    </ResponsiveContainer>
+                                            </BarChart>
+                                        </ResponsiveContainer>
+                                        <div className="flex flex-wrap items-center justify-between gap-2">
+                                            <ChartSeriesLegend series={DUTY_ATTENDANCE_SERIES} />
+                                            <p style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>
+                                                {makeUpAttendanceTotal} make-up attendance records included
+                                            </p>
+                                        </div>
+                                    </>
                                 )}
                             </ChartCard>
 
@@ -676,43 +693,26 @@ const AdminDashboard = () => {
                             </ChartCard>
                         </div>
 
-                        {/* 5. Activity trends: Duty attendance + Scholar growth */}
+                        {/* 5. Risk + Scholar growth */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-5">
-                            <ChartCard
-                                icon={CalendarDays}
-                                title="Duty Attendance"
-                                subtitle="Monthly attendance records by status."
-                            >
-                                {!hasDutyAttendanceData ? (
-                                    <EmptyState>No duty attendance in the last six months.</EmptyState>
+                            <ChartCard icon={ShieldCheck} title="Risk Distribution" subtitle="Flagged scholars by risk level.">
+                                {flaggedTotal === 0 ? (
+                                    <EmptyState>No risk data yet.</EmptyState>
                                 ) : (
-                                    <>
-                                        <ResponsiveContainer width="100%" height={chartHeight}>
-                                            <BarChart data={dutyAttendanceByMonth} margin={{ top: 8, right: 12, left: -16, bottom: 0 }}>
-                                                <CartesianGrid {...gridProps} vertical={false} />
-                                                <XAxis dataKey="month" tick={axisStyle} stroke={BORDER} />
-                                                <YAxis tick={axisStyle} stroke={BORDER} allowDecimals={false} />
-                                                <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
-                                                {DUTY_ATTENDANCE_SERIES.map((series, index) => (
-                                                    <Bar
-                                                        key={series.key}
-                                                        dataKey={series.key}
-                                                        name={series.name}
-                                                        stackId="duty-attendance"
-                                                        fill={series.color}
-                                                        radius={index === DUTY_ATTENDANCE_SERIES.length - 1 ? [5, 5, 0, 0] : undefined}
-                                                        maxBarSize={40}
-                                                    />
+                                    <ResponsiveContainer width="100%" height={chartHeight}>
+                                        <BarChart data={riskDistribution} layout="vertical" margin={{ top: 4, left: 4, right: 36, bottom: 0 }}>
+                                            <CartesianGrid {...gridProps} horizontal={false} />
+                                            <XAxis type="number" tick={axisStyle} stroke={BORDER} allowDecimals={false} />
+                                            <YAxis type="category" dataKey="level" tick={axisStyle} stroke={BORDER} width={isNarrow ? 60 : 72} />
+                                            <Tooltip content={<ChartTooltip />} cursor={{ fill: `${BORDER}55` }} />
+                                            <Bar dataKey="value" name="Scholars" radius={[0, 6, 6, 0]} barSize={20}>
+                                                {riskDistribution.map((entry) => (
+                                                    <Cell key={entry.level} fill={entry.color} />
                                                 ))}
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                        <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <ChartSeriesLegend series={DUTY_ATTENDANCE_SERIES} />
-                                            <p style={{ ...sans, fontSize: '0.68rem', color: MUTED }}>
-                                                {makeUpAttendanceTotal} make-up attendance records included
-                                            </p>
-                                        </div>
-                                    </>
+                                                <LabelList dataKey="value" position="right" style={{ ...axisStyle, fontWeight: 600, fill: INK }} />
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
                                 )}
                             </ChartCard>
 
