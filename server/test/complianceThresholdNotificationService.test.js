@@ -8,6 +8,8 @@ const servicePath = require.resolve('../services/complianceThresholdNotification
 const notifications = [];
 const stateEvents = [];
 const sentEmails = [];
+let activeSends = 0;
+let maxConcurrentSends = 0;
 const scores = new Map([
   ['AS-071', { score: 74, minimumScore: 70 }],
   ['AS-069', { score: 68, minimumScore: 70 }],
@@ -64,8 +66,15 @@ Module._load = function (request, parent, isMain) {
     return {
       createTransport: () => ({
         sendMail: async message => {
-          sentEmails.push(message);
-          return { messageId: `threshold-test-${sentEmails.length}` };
+          activeSends += 1;
+          maxConcurrentSends = Math.max(maxConcurrentSends, activeSends);
+          try {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            sentEmails.push(message);
+            return { messageId: `threshold-test-${sentEmails.length}` };
+          } finally {
+            activeSends -= 1;
+          }
         },
       }),
     };
@@ -94,10 +103,13 @@ test('compliance threshold alerts notify at 75 and below 70, dedupe, and alert a
   notifications.length = 0;
   stateEvents.length = 0;
   sentEmails.length = 0;
+  activeSends = 0;
+  maxConcurrentSends = 0;
 
   const firstRun = await sendComplianceThresholdNotifications();
   assert.equal(firstRun.notified_count, 2);
   assert.equal(firstRun.email_count, 2);
+  assert.equal(maxConcurrentSends, 2);
   assert.deepEqual(
     notifications.filter(row => row.channel === 'system').map(row => row.type).sort(),
     ['compliance_below_minimum', 'compliance_near_minimum']

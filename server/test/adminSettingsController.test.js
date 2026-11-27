@@ -44,7 +44,7 @@ const fakeDb = {
       callback(null, [{
         displayName: 'Admin',
         email: 'admin@example.org',
-        preferences: JSON.stringify({ sessionTimeout: '30', paginationPageSize: 25 }),
+        preferences: JSON.stringify({ timezone: '(GMT+0) UTC', sessionTimeout: '30', paginationPageSize: 25 }),
         scheduledBackups: 1,
         backupIntervalHours: 24,
         backupRetentionCount: 14,
@@ -104,7 +104,6 @@ const settingsBody = (sessionTimeout, paginationPageSize = 10) => ({
   displayName: 'Admin',
   email: 'admin@example.org',
   preferences: {
-    timezone: '(GMT+8) Manila, Philippines',
     dateFormat: 'MMMM DD, YYYY',
     paginationPageSize,
     tableDensity: 'comfortable',
@@ -158,6 +157,7 @@ test('administrator settings normalize a previously saved 30-minute timeout to 2
   assert.equal(response.body.sessionTimeout, '20');
   assert.equal(response.body.paginationPageSize, 10);
   assert.equal('language' in response.body, false);
+  assert.equal('timezone' in response.body, false);
 });
 
 test('administrator settings accept the configured session timeout choices', async () => {

@@ -26,7 +26,11 @@ exports.getSummary = async (req, res) => {
   const userSummarySql = `
     SELECT
       COUNT(*) AS total,
-      COALESCE(SUM(CASE WHEN role = 'scholar' THEN 1 ELSE 0 END), 0) AS scholars
+      COALESCE(SUM(CASE WHEN role = 'scholar' THEN 1 ELSE 0 END), 0) AS scholars,
+      COALESCE(SUM(CASE
+        WHEN role = 'scholar' AND LOWER(COALESCE(status, '')) = 'active' THEN 1
+        ELSE 0
+      END), 0) AS active_scholars
     FROM users
     WHERE COALESCE(status, '') <> 'archived'
   `;
@@ -208,6 +212,7 @@ exports.getSummary = async (req, res) => {
       users: {
         total: toCount(users.total),
         scholars: toCount(users.scholars),
+        activeScholars: toCount(users.active_scholars),
       },
       recentUsers,
       scholarGrowth: scholarGrowth.map((row) => ({

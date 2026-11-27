@@ -2,13 +2,6 @@ const SETTINGS_KEY = 'admin-system-settings';
 const ADMIN_PAGE_SIZES = new Set([10, 20, 50]);
 const DEFAULT_ADMIN_PAGE_SIZE = 10;
 
-const TIMEZONES = {
-  '(GMT+8) Manila, Philippines': 'Asia/Manila',
-  '(GMT+0) UTC': 'UTC',
-  '(GMT+9) Tokyo, Japan': 'Asia/Tokyo',
-  '(GMT-5) New York, USA': 'America/New_York',
-};
-
 export const getAdminPreferences = () => {
   try {
     return JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}');
@@ -24,7 +17,7 @@ export const getAdminPageSize = (preferences = getAdminPreferences()) => {
 };
 
 export const getAdminLocale = () => 'en-PH';
-export const getAdminTimezone = (preferences = getAdminPreferences()) => TIMEZONES[preferences.timezone] || 'Asia/Manila';
+export const getAdminTimezone = () => 'Asia/Manila';
 
 export const formatAdminDate = (value, options = {}) => {
   if (!value) return '—';

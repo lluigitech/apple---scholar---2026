@@ -27,7 +27,6 @@ const DANGER = '#A24A4A';
 const body = { fontFamily: "'Inter', -apple-system, 'Segoe UI', sans-serif" };
 const display = { fontFamily: "'Playfair Display', 'Lora', Georgia, serif" };
 const input = { width: '100%', padding: '10px 12px', border: `1px solid ${BORDER}`, borderRadius: 9, background: '#FCFAF5', color: INK, fontSize: '0.86rem', outline: 'none', ...body };
-const control = { ...input, width: 'auto', minWidth: 160, background: CARD, boxShadow: '0 1px 2px rgba(36,21,18,0.06)', cursor: 'pointer', padding: '9px 12px' };
 const fieldLabel = { display: 'block', color: PRIMARY, fontSize: '0.68rem', fontWeight: 700, letterSpacing: '0.04em', marginBottom: 6, ...body };
 const cardShadow = '0 1px 2px rgba(36,21,18,0.04), 0 8px 24px -18px rgba(36,21,18,0.22)';
 const bentoCard = { background: CARD, border: `1px solid ${BORDER}`, borderRadius: 18, boxShadow: cardShadow };
@@ -42,13 +41,21 @@ const INTERACTIVE_CSS = `
 .ad-ghost:hover:not(:disabled) { background: #F3EBDD !important; }
 .ad-field:focus-within, select.ad-field:focus, input.ad-field:focus, textarea.ad-field:focus { border-color: #6D2140 !important; box-shadow: 0 0 0 3px rgba(109,33,64,0.12) !important; }
 /* Filter toolbar: 2 columns on small screens, a fixed 3-column grid on desktop so rows line up. */
-.ad-toolbar-grid { display: grid; gap: 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ad-toolbar-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .ad-toolbar-grid > .ad-full { grid-column: 1 / -1; }
 @media (min-width: 1000px) {
-  .ad-toolbar-grid { grid-template-columns: minmax(0, 1fr) 180px 210px; }
+  .ad-toolbar-grid { gap: 12px; grid-template-columns: minmax(0, 1fr) 180px 210px; }
   .ad-toolbar-grid > .ad-full { grid-column: auto; }
   .ad-toolbar-grid > .ad-date { grid-column: span 2; }
 }
+/* Touch devices: 16px form text stops iOS Safari from zooming the page on focus. */
+@media (max-width: 1023px) {
+  .ad-root input:not([type="checkbox"]):not([type="radio"]),
+  .ad-root select,
+  .ad-root textarea { font-size: 16px !important; }
+}
+.ad-noscroll { scrollbar-width: none; -ms-overflow-style: none; }
+.ad-noscroll::-webkit-scrollbar { display: none; }
 @media (prefers-reduced-motion: reduce) {
   .ad-kpi { transition: none; }
   .ad-kpi:hover { transform: none; }
@@ -113,19 +120,19 @@ const getGroupNames = (duty) =>
 
 const KpiCard = ({ icon: Icon, label, value, caption, footer, accent = PRIMARY, onClick }) => (
   <div
-    className="ad-kpi"
+    className="ad-kpi p-3.5 sm:p-5 min-w-0"
     {...(onClick ? { role: 'button', tabIndex: 0, onClick, onKeyDown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } } : {})}
-    style={{ cursor: onClick ? 'pointer' : 'default', position: 'relative', overflow: 'hidden', background: CARD, border: `1px solid ${BORDER}`, borderRadius: 16, padding: '18px 20px 16px', boxShadow: cardShadow }}>
+    style={{ cursor: onClick ? 'pointer' : 'default', position: 'relative', overflow: 'hidden', background: CARD, border: `1px solid ${BORDER}`, borderRadius: 16, boxShadow: cardShadow }}>
     <div aria-hidden="true" style={{ position: 'absolute', top: -30, right: -30, width: 120, height: 120, borderRadius: '50%', background: `${accent}0f` }} />
     <div aria-hidden="true" style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 3, background: `${accent}40` }} />
-    <div className="flex items-center justify-center" style={{ position: 'relative', width: 42, height: 42, borderRadius: 12, background: `${accent}14`, border: `1px solid ${accent}26` }}>
-      <Icon size={18} style={{ color: accent }} />
+    <div className="flex items-center justify-center w-9 h-9 sm:w-[42px] sm:h-[42px]" style={{ position: 'relative', borderRadius: 12, background: `${accent}14`, border: `1px solid ${accent}26` }}>
+      <Icon size={17} style={{ color: accent }} />
     </div>
-    <p style={{ ...display, position: 'relative', fontSize: '2.1rem', lineHeight: 1.1, fontWeight: 700, color: INK, marginTop: 14 }}>{value}</p>
-    <p style={{ ...body, position: 'relative', fontSize: '0.66rem', color: INK, marginTop: 6, letterSpacing: '0.06em', fontWeight: 700, textTransform: 'uppercase' }}>{label}</p>
-    <p style={{ ...body, position: 'relative', fontSize: '0.76rem', color: MUTED, marginTop: 3 }}>{caption}</p>
+    <p className="text-[1.7rem] sm:text-[2.1rem]" style={{ ...display, position: 'relative', lineHeight: 1.1, fontWeight: 700, color: INK, marginTop: 12 }}>{value}</p>
+    <p style={{ ...body, position: 'relative', fontSize: '0.64rem', color: INK, marginTop: 5, letterSpacing: '0.06em', fontWeight: 700, textTransform: 'uppercase', lineHeight: 1.3 }}>{label}</p>
+    <p className="hidden sm:block" style={{ ...body, position: 'relative', fontSize: '0.76rem', color: MUTED, marginTop: 3 }}>{caption}</p>
     {footer && (
-      <div className="flex items-center gap-2" style={{ position: 'relative', marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BORDER}` }}>
+      <div className="flex items-center gap-2" style={{ position: 'relative', marginTop: 10, paddingTop: 9, borderTop: `1px solid ${BORDER}` }}>
         <span style={{ width: 6, height: 6, borderRadius: '50%', background: accent, flexShrink: 0 }} />
         <span style={{ ...body, fontSize: '0.72rem', fontWeight: 600, color: INK }}>{footer}</span>
       </div>
@@ -142,7 +149,7 @@ const STATUS_STYLES = {
 const StatusBadge = ({ status }) => {
   const cfg = STATUS_STYLES[status] || STATUS_STYLES.unknown;
   return (
-    <span className="inline-flex items-center gap-1.5" style={{ ...body, fontSize: '0.72rem', fontWeight: 600, padding: '4px 9px', borderRadius: 7, background: cfg.bg, color: cfg.color }}>
+    <span className="inline-flex items-center gap-1.5" style={{ ...body, fontSize: '0.72rem', fontWeight: 600, padding: '4px 9px', borderRadius: 7, background: cfg.bg, color: cfg.color, whiteSpace: 'nowrap' }}>
       <span style={{ width: 6, height: 6, borderRadius: '50%', background: cfg.color, flexShrink: 0 }} />
       {cfg.label}
     </span>
@@ -198,13 +205,13 @@ const GroupChips = ({ names }) => {
 
 // Compact "label + select" control used in the filter toolbar.
 const ChipSelect = ({ label, value, onChange, options, fill = false }) => (
-  <label className="ad-field flex items-center gap-2" style={{ ...(fill ? { flex: 1, minWidth: 0 } : {}), height: 40, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '0 8px 0 12px', boxShadow: '0 1px 2px rgba(36,21,18,0.06)', cursor: 'pointer' }}>
+  <label className="ad-field flex items-center gap-2" style={{ ...(fill ? { flex: '1 1 180px', minWidth: 0 } : {}), height: 44, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '0 8px 0 12px', boxShadow: '0 1px 2px rgba(36,21,18,0.06)', cursor: 'pointer' }}>
     <span style={{ ...body, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED }}>{label}</span>
     <select
       aria-label={label}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      style={{ border: 'none', outline: 'none', background: 'transparent', color: INK, ...body, fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', paddingRight: 2, ...(fill ? { flex: 1, minWidth: 0, width: '100%' } : { maxWidth: 160 }) }}
+      style={{ border: 'none', outline: 'none', background: 'transparent', color: INK, ...body, fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer', paddingRight: 2, height: '100%', ...(fill ? { flex: 1, minWidth: 0, width: '100%' } : { maxWidth: 160 }) }}
     >
       {options.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
     </select>
@@ -213,7 +220,7 @@ const ChipSelect = ({ label, value, onChange, options, fill = false }) => (
 
 // Segmented status filter with live counts.
 const SegmentedFilter = ({ label, value, onChange, options }) => (
-  <div role="group" aria-label={label} className="inline-flex items-center" style={{ height: 40, padding: 3, gap: 2, background: '#EFE9DF', border: `1px solid ${BORDER}`, borderRadius: 10 }}>
+  <div role="group" aria-label={label} className="inline-flex items-center ad-noscroll" style={{ height: 44, padding: 3, gap: 2, background: '#EFE9DF', border: `1px solid ${BORDER}`, borderRadius: 10, maxWidth: '100%', overflowX: 'auto' }}>
     {options.map((opt) => {
       const active = opt.value === value;
       return (
@@ -222,8 +229,8 @@ const SegmentedFilter = ({ label, value, onChange, options }) => (
           type="button"
           aria-pressed={active}
           onClick={() => onChange(opt.value)}
-          className="flex items-center gap-1.5"
-          style={{ height: 32, padding: '0 11px', border: 0, borderRadius: 8, background: active ? CARD : 'transparent', color: active ? PRIMARY : MUTED, boxShadow: active ? '0 1px 3px rgba(36,21,18,0.14)' : 'none', ...body, fontSize: '0.78rem', fontWeight: active ? 700 : 600, cursor: 'pointer', transition: 'background .15s ease, color .15s ease' }}
+          className="flex items-center gap-1.5 flex-shrink-0"
+          style={{ height: 36, padding: '0 11px', border: 0, borderRadius: 8, background: active ? CARD : 'transparent', color: active ? PRIMARY : MUTED, boxShadow: active ? '0 1px 3px rgba(36,21,18,0.14)' : 'none', ...body, fontSize: '0.78rem', fontWeight: active ? 700 : 600, cursor: 'pointer', transition: 'background .15s ease, color .15s ease', whiteSpace: 'nowrap' }}
         >
           {opt.label}
           <span style={{ fontSize: '0.66rem', fontWeight: 700, padding: '1px 6px', borderRadius: 999, background: active ? `${PRIMARY}14` : 'rgba(36,21,18,0.06)', color: active ? PRIMARY : MUTED }}>{opt.count}</span>
@@ -234,15 +241,15 @@ const SegmentedFilter = ({ label, value, onChange, options }) => (
 );
 
 const PanelHeader = ({ icon: Icon, eyebrow, title, subtitle, right, accent = PRIMARY, titleId }) => (
-  <div className="flex items-start justify-between gap-3" style={{ padding: '16px 20px', borderBottom: `1px solid ${BORDER}`, background: `${accent}0a` }}>
-    <div className="flex items-start gap-3">
+  <div className="flex items-start justify-between gap-3 px-4 py-4 sm:px-5" style={{ borderBottom: `1px solid ${BORDER}`, background: `${accent}0a` }}>
+    <div className="flex items-start gap-3 min-w-0">
       <div className="flex items-center justify-center" style={{ width: 40, height: 40, borderRadius: 12, background: `${accent}18`, border: `1px solid ${accent}2b`, flexShrink: 0 }}>
         <Icon size={18} style={{ color: accent }} />
       </div>
-      <div>
+      <div className="min-w-0">
         {eyebrow && <p style={{ ...body, fontSize: '0.62rem', fontWeight: 700, letterSpacing: '0.08em', color: GOLD }}>{eyebrow}</p>}
-        <h2 id={titleId} style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: INK }}>{title}</h2>
-        {subtitle && <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 2 }}>{subtitle}</p>}
+        <h2 id={titleId} style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: INK, lineHeight: 1.25 }}>{title}</h2>
+        {subtitle && <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 2, lineHeight: 1.45 }}>{subtitle}</p>}
       </div>
     </div>
     {right}
@@ -257,20 +264,20 @@ const Notice = ({ tone, icon: Icon, children }) => {
   };
   const cfg = tones[tone];
   return (
-    <p className="flex items-center gap-2" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: cfg.color, background: cfg.bg, borderRadius: 10, padding: '9px 12px', marginTop: 12 }}>
-      {Icon && <Icon size={14} style={{ flexShrink: 0 }} />}{children}
+    <p className="flex items-start gap-2" style={{ ...body, fontSize: '0.78rem', fontWeight: 600, color: cfg.color, background: cfg.bg, borderRadius: 10, padding: '9px 12px', marginTop: 12, lineHeight: 1.45 }}>
+      {Icon && <Icon size={14} style={{ flexShrink: 0, marginTop: 2 }} />}{children}
     </p>
   );
 };
 
 const EmptyState = ({ onCreate }) => (
-  <div className="flex flex-col items-center justify-center text-center" style={{ padding: '56px 20px' }}>
+  <div className="flex flex-col items-center justify-center text-center" style={{ padding: '48px 20px' }}>
     <div className="flex items-center justify-center" style={{ width: 60, height: 60, borderRadius: '50%', background: `${PRIMARY}12`, border: `1px solid ${PRIMARY}20`, marginBottom: 16 }}>
       <CalendarDays size={24} style={{ color: PRIMARY }} />
     </div>
     <p style={{ ...display, fontSize: '1.1rem', fontWeight: 700, color: INK }}>No duty assignments yet</p>
     <p style={{ ...body, fontSize: '0.82rem', color: MUTED, marginTop: 6, maxWidth: 360 }}>Create a duty assignment to begin scheduling scholar service activities.</p>
-    <button type="button" onClick={onCreate} className="ad-primary flex items-center gap-2" style={{ marginTop: 18, border: 0, background: PRIMARY, color: '#fff', borderRadius: 10, padding: '10px 18px', ...body, fontSize: '0.8rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 18px -10px rgba(109,33,64,0.6)' }}>
+    <button type="button" onClick={onCreate} className="ad-primary flex items-center gap-2" style={{ marginTop: 18, border: 0, background: PRIMARY, color: '#fff', borderRadius: 10, padding: '12px 20px', minHeight: 44, ...body, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 18px -10px rgba(109,33,64,0.6)' }}>
       <Plus size={14} /> Create Duty
     </button>
   </div>
@@ -290,6 +297,14 @@ const SkeletonRows = () => (
   </>
 );
 
+const SkeletonCards = () => (
+  <ul className="flex flex-col gap-2.5 p-3" style={{ listStyle: 'none', margin: 0 }}>
+    {Array.from({ length: 4 }).map((_, i) => (
+      <li key={i} className="animate-pulse" style={{ height: 118, borderRadius: 14, background: `${BORDER}66` }} />
+    ))}
+  </ul>
+);
+
 const SectionLabel = ({ children }) => (
   <div className="flex items-center gap-2" style={{ marginBottom: 12 }}>
     <span aria-hidden="true" style={{ width: 3, height: 13, borderRadius: 2, background: PRIMARY }} />
@@ -298,21 +313,22 @@ const SectionLabel = ({ children }) => (
 );
 
 const GroupOption = ({ group, checked, onToggle }) => (
-  <label className="flex items-center gap-2" style={{ ...body, fontSize: '0.78rem', fontWeight: checked ? 600 : 500, color: checked ? PRIMARY : MUTED, border: `1px solid ${checked ? PRIMARY : BORDER}`, background: checked ? 'rgba(109,33,64,0.08)' : CARD, borderRadius: 9, padding: '9px 10px', cursor: 'pointer', transition: 'background .15s ease, border-color .15s ease' }}>
-    <input type="checkbox" checked={checked} onChange={() => onToggle(group.id)} style={{ accentColor: PRIMARY }} />
+  <label className="flex items-center gap-2" style={{ ...body, fontSize: '0.78rem', fontWeight: checked ? 600 : 500, color: checked ? PRIMARY : MUTED, border: `1px solid ${checked ? PRIMARY : BORDER}`, background: checked ? 'rgba(109,33,64,0.08)' : CARD, borderRadius: 9, padding: '11px 10px', minHeight: 44, cursor: 'pointer', transition: 'background .15s ease, border-color .15s ease', wordBreak: 'break-word' }}>
+    <input type="checkbox" checked={checked} onChange={() => onToggle(group.id)} style={{ accentColor: PRIMARY, width: 16, height: 16, flexShrink: 0 }} />
     {group.group_name}
   </label>
 );
 
+// Bottom sheet on phones, centered dialog from sm.
 const Dialog = ({ onClose, labelledBy, accent = PRIMARY, maxWidth = 560, children }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4" style={{ background: 'rgba(36,21,18,0.45)' }} onClick={onClose}>
+  <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4" style={{ background: 'rgba(36,21,18,0.45)' }} onClick={onClose}>
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby={labelledBy}
       onClick={(e) => e.stopPropagation()}
-      className="w-full overflow-y-auto"
-      style={{ maxWidth, maxHeight: '90vh', background: CARD, border: `1px solid ${BORDER}`, borderTop: `3px solid ${accent}`, borderRadius: 18, boxShadow: '0 24px 60px -20px rgba(36,21,18,0.45)' }}
+      className="w-full overflow-y-auto rounded-t-[18px] sm:rounded-[18px]"
+      style={{ maxWidth, maxHeight: '92vh', background: CARD, border: `1px solid ${BORDER}`, borderTop: `3px solid ${accent}`, boxShadow: '0 24px 60px -20px rgba(36,21,18,0.45)', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
     >
       {children}
     </div>
@@ -320,7 +336,7 @@ const Dialog = ({ onClose, labelledBy, accent = PRIMARY, maxWidth = 560, childre
 );
 
 const CloseButton = ({ onClick }) => (
-  <button type="button" onClick={onClick} aria-label="Close" className="ad-action" style={{ border: `1px solid ${BORDER}`, background: CARD, color: MUTED, borderRadius: 9, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+  <button type="button" onClick={onClick} aria-label="Close" className="ad-action" style={{ border: `1px solid ${BORDER}`, background: CARD, color: MUTED, borderRadius: 9, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
     <X size={16} />
   </button>
 );
@@ -594,8 +610,30 @@ const AdminDutyAssignment = () => {
 
   const columns = ['#', 'Duty', 'Date & Time', 'Location', 'Assigned Groups', 'Status', 'Actions'];
 
+  // Row-actions button (shared by the desktop table and the phone cards).
+  const renderMenuButton = (duty, size = 32) => (
+    <button
+      type="button"
+      className="ad-action"
+      aria-label={`Actions for ${duty.title}`}
+      aria-haspopup="menu"
+      aria-expanded={menu?.duty.id === duty.id}
+      title="Duty actions"
+      onClick={(e) => {
+        if (menu?.duty.id === duty.id) { setMenu(null); return; }
+        const rect = e.currentTarget.getBoundingClientRect();
+        setMenu({ duty, top: rect.bottom + 6, right: window.innerWidth - rect.right });
+      }}
+      style={{ border: `1px solid ${BORDER}`, background: CARD, color: INK, borderRadius: 9, width: size, height: size, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, transition: 'background .15s ease, border-color .15s ease' }}
+    >
+      <MoreHorizontal size={16} />
+    </button>
+  );
+
+  const dialogFooter = 'flex gap-2 sm:justify-end';
+
   return (
-    <div className="min-h-screen px-4 sm:px-6 lg:px-8" style={{ background: BG, ...body }}>
+    <div className="ad-root min-h-screen w-full max-w-full px-3 sm:px-6 lg:px-8 pb-8" style={{ background: BG, ...body, overflowX: 'hidden' }}>
       <style>{INTERACTIVE_CSS}</style>
 
         <AdminPageHeader
@@ -605,7 +643,7 @@ const AdminDutyAssignment = () => {
             <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2.5 flex-wrap">
               <button type="button" onClick={() => setShowCreate(true)} className="ad-primary flex items-center gap-2"
-                style={{ border: 0, background: PRIMARY, color: '#fff', borderRadius: 10, padding: '10px 18px', ...body, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
+                style={{ border: 0, background: PRIMARY, color: '#fff', borderRadius: 10, padding: '10px 18px', minHeight: 44, ...body, fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
                 <Plus size={15} /> Create Duty
               </button>
               </div>
@@ -614,13 +652,13 @@ const AdminDutyAssignment = () => {
           />
 
         {error && !showCreate && (
-          <div className="flex items-center gap-2" role="alert" style={{ marginBottom: 16, padding: '11px 14px', borderRadius: 10, background: '#FBEFEE', border: `1px solid ${DANGER}33`, color: DANGER, ...body, fontSize: '0.82rem', fontWeight: 600 }}>
-            <AlertCircle size={15} style={{ flexShrink: 0 }} /> {error}
+          <div className="flex items-start gap-2" role="alert" style={{ marginBottom: 16, padding: '11px 14px', borderRadius: 10, background: '#FBEFEE', border: `1px solid ${DANGER}33`, color: DANGER, ...body, fontSize: '0.82rem', fontWeight: 600, lineHeight: 1.45 }}>
+            <AlertCircle size={15} style={{ flexShrink: 0, marginTop: 2 }} /> {error}
           </div>
         )}
 
         {/* ── KPI cards ── */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" style={{ marginBottom: 16 }}>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4" style={{ marginBottom: 16 }}>
           <KpiCard icon={CalendarDays} label="Total Duties" value={duties.length} accent={PRIMARY}
             caption="All created duty assignments" footer={pluralize(duties.length, 'duty', 'duties')} />
           <KpiCard icon={Clock} label="Upcoming Duties" value={upcomingCount} accent={WARNING}
@@ -633,11 +671,11 @@ const AdminDutyAssignment = () => {
 
         {/* ── Filter toolbar ── */}
         <div style={{ ...bentoCard, borderRadius: 16, overflow: 'hidden', marginBottom: 16 }}>
-          <div style={{ padding: '14px 16px' }}>
+          <div className="p-3 sm:p-4">
             <div className="ad-toolbar-grid">
 
-              {/* Row 1, col 1: search */}
-              <div className="ad-full ad-field flex items-center gap-2" style={{ height: 40, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '0 12px', boxShadow: '0 1px 2px rgba(36,21,18,0.06)' }}>
+              {/* Search */}
+              <div className="ad-full ad-field flex items-center gap-2" style={{ height: 44, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '0 12px', boxShadow: '0 1px 2px rgba(36,21,18,0.06)' }}>
                 <Search size={15} style={{ color: MUTED, flexShrink: 0 }} />
                 <input
                   type="text"
@@ -648,27 +686,29 @@ const AdminDutyAssignment = () => {
                   style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.84rem', color: INK }}
                 />
                 {search && (
-                  <button type="button" aria-label="Clear search" onClick={() => setSearch('')} style={{ border: 0, background: 'none', color: MUTED, cursor: 'pointer', display: 'flex', padding: 2 }}>
-                    <X size={14} />
+                  <button type="button" aria-label="Clear search" onClick={() => setSearch('')} style={{ border: 0, background: 'none', color: MUTED, cursor: 'pointer', display: 'flex', padding: 6 }}>
+                    <X size={15} />
                   </button>
                 )}
               </div>
 
-              {/* Row 1, col 2: notify */}
+              {/* Notify */}
               <button type="button" onClick={() => openDialog('notify')} className="ad-ghost flex items-center justify-center gap-2"
-                style={{ height: 40, width: '100%', border: `1px solid ${BORDER}`, background: CARD, color: INK, borderRadius: 10, padding: '0 12px', ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(36,21,18,0.06)', whiteSpace: 'nowrap' }}>
-                <Bell size={14} style={{ color: PRIMARY }} /> Notify Scholars
+                style={{ height: 44, width: '100%', border: `1px solid ${BORDER}`, background: CARD, color: INK, borderRadius: 10, padding: '0 12px', ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(36,21,18,0.06)', whiteSpace: 'nowrap' }}>
+                <Bell size={14} style={{ color: PRIMARY }} />
+                <span className="sm:hidden">Notify</span><span className="hidden sm:inline">Notify Scholars</span>
               </button>
 
-              {/* Row 1, col 3: makeup */}
+              {/* Makeup */}
               <button type="button" onClick={() => openDialog('makeup')} className="ad-ghost flex items-center justify-center gap-2"
-                style={{ height: 40, width: '100%', border: `1px solid ${hasPendingMakeup ? `${WARNING}66` : BORDER}`, background: hasPendingMakeup ? `${WARNING}0f` : CARD, color: INK, borderRadius: 10, padding: '0 12px', ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(36,21,18,0.06)', whiteSpace: 'nowrap' }}>
-                <CheckSquare size={14} style={{ color: hasPendingMakeup ? WARNING : MUTED }} /> Makeup Approvals
+                style={{ height: 44, width: '100%', border: `1px solid ${hasPendingMakeup ? `${WARNING}66` : BORDER}`, background: hasPendingMakeup ? `${WARNING}0f` : CARD, color: INK, borderRadius: 10, padding: '0 12px', ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer', boxShadow: '0 1px 2px rgba(36,21,18,0.06)', whiteSpace: 'nowrap' }}>
+                <CheckSquare size={14} style={{ color: hasPendingMakeup ? WARNING : MUTED }} />
+                <span className="sm:hidden">Makeup</span><span className="hidden sm:inline">Makeup Approvals</span>
                 <span style={{ minWidth: 20, height: 20, padding: '0 6px', borderRadius: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', background: hasPendingMakeup ? WARNING : '#EFE9DF', color: hasPendingMakeup ? '#fff' : MUTED, fontSize: '0.68rem', fontWeight: 700 }}>{makeupCandidates.length}</span>
               </button>
 
-              {/* Row 2, col 1: status + group (group stretches so the right edge lines up with the search field) */}
-              <div className="ad-full flex flex-wrap items-center gap-3">
+              {/* Status + group */}
+              <div className="ad-full flex flex-wrap items-center gap-2.5 sm:gap-3 min-w-0">
                 <SegmentedFilter
                   label="Status"
                   value={statusFilter}
@@ -688,19 +728,19 @@ const AdminDutyAssignment = () => {
                 />
               </div>
 
-              {/* Row 2, cols 2-3: date range (spans exactly under the two buttons) */}
-              <div className="ad-full ad-date ad-field flex items-center gap-2" style={{ height: 40, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '0 12px', boxShadow: '0 1px 2px rgba(36,21,18,0.06)' }}>
+              {/* Date range */}
+              <div className="ad-full ad-date ad-field flex flex-wrap items-center gap-x-2 gap-y-1" style={{ minHeight: 44, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, padding: '4px 12px', boxShadow: '0 1px 2px rgba(36,21,18,0.06)' }}>
                 <CalendarDays size={14} style={{ color: MUTED, flexShrink: 0 }} />
                 <span style={{ ...body, fontSize: '0.64rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: MUTED }}>Date</span>
-                <input type="date" aria-label="From date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.8rem', fontWeight: 600, color: INK }} />
-                <ArrowRight size={13} style={{ color: MUTED, flexShrink: 0 }} />
-                <input type="date" aria-label="To date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ flex: 1, minWidth: 0, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.8rem', fontWeight: 600, color: INK }} />
+                <input type="date" aria-label="From date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} style={{ flex: '1 1 110px', minWidth: 0, height: 36, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.8rem', fontWeight: 600, color: INK }} />
+                <ArrowRight size={13} className="hidden min-[420px]:block" style={{ color: MUTED, flexShrink: 0 }} />
+                <input type="date" aria-label="To date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} style={{ flex: '1 1 110px', minWidth: 0, height: 36, border: 'none', outline: 'none', background: 'none', ...body, fontSize: '0.8rem', fontWeight: 600, color: INK }} />
               </div>
             </div>
           </div>
 
           {/* Footer: result count and filters */}
-          <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '9px 16px', borderTop: `1px solid ${BORDER}`, background: BG }}>
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 sm:px-4 py-2.5" style={{ borderTop: `1px solid ${BORDER}`, background: BG }}>
             <p style={{ ...body, fontSize: '0.74rem', color: MUTED }}>
               Showing{' '}
               <strong style={{ color: INK }}>
@@ -711,7 +751,7 @@ const AdminDutyAssignment = () => {
             <div className="flex items-center gap-2">
               {filtersActive && (
                 <button type="button" onClick={clearFilters} className="ad-ghost flex items-center gap-1.5"
-                  style={{ height: 30, border: `1px dashed ${MUTED}88`, background: 'none', color: PRIMARY, borderRadius: 8, padding: '0 10px', ...body, fontSize: '0.74rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                  style={{ height: 36, border: `1px dashed ${MUTED}88`, background: 'none', color: PRIMARY, borderRadius: 8, padding: '0 12px', ...body, fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}>
                   <FilterX size={12} /> Clear filters
                 </button>
               )}
@@ -719,15 +759,16 @@ const AdminDutyAssignment = () => {
           </div>
         </div>
 
-        {/* ── Duty assignments table ── */}
+        {/* ── Duty assignments ── */}
         <div style={{ ...bentoCard, overflow: 'hidden', marginBottom: 16 }}>
-          <div className="flex items-center justify-between gap-3" style={{ padding: '18px 20px', borderBottom: `1px solid ${BORDER}` }}>
-            <div>
-              <h2 style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color: INK }}>Duty Assignments</h2>
-              <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 2 }}>Manage schedules, assigned groups, and duty locations.</p>
+          <div className="flex items-center justify-between gap-3 px-4 py-4 sm:px-5 sm:py-[18px]" style={{ borderBottom: `1px solid ${BORDER}` }}>
+            <div className="min-w-0">
+              <h2 style={{ ...display, fontSize: '1.15rem', fontWeight: 700, color: INK, lineHeight: 1.25 }}>Duty Assignments</h2>
+              <p style={{ ...body, fontSize: '0.78rem', color: MUTED, marginTop: 2, lineHeight: 1.45 }}>Manage schedules, assigned groups, and duty locations.</p>
             </div>
-            <span style={{ ...body, fontSize: '0.74rem', fontWeight: 700, color: PRIMARY, background: `${PRIMARY}0f`, border: `1px solid ${PRIMARY}22`, borderRadius: 8, padding: '5px 10px', whiteSpace: 'nowrap' }}>
-              {filtersActive ? `${filteredDuties.length} of ${duties.length} duties` : pluralize(duties.length, 'duty', 'duties')}
+            <span className="flex-shrink-0" style={{ ...body, fontSize: '0.74rem', fontWeight: 700, color: PRIMARY, background: `${PRIMARY}0f`, border: `1px solid ${PRIMARY}22`, borderRadius: 8, padding: '5px 10px', whiteSpace: 'nowrap' }}>
+              {filtersActive ? `${filteredDuties.length} of ${duties.length}` : duties.length}
+              <span className="hidden sm:inline">{filtersActive ? ' duties' : ` ${duties.length === 1 ? 'duty' : 'duties'}`}</span>
             </span>
           </div>
 
@@ -737,87 +778,112 @@ const AdminDutyAssignment = () => {
               : (
                 <div className="flex flex-col items-center justify-center text-center" style={{ padding: '48px 20px' }}>
                   <p style={{ ...body, fontSize: '0.86rem', fontWeight: 600, color: INK }}>No duties match your filters</p>
-                  <button type="button" onClick={clearFilters} style={{ marginTop: 10, border: 'none', background: 'none', color: PRIMARY, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline' }}>Clear filters</button>
+                  <button type="button" onClick={clearFilters} style={{ marginTop: 10, border: 'none', background: 'none', color: PRIMARY, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', textDecoration: 'underline', padding: 8 }}>Clear filters</button>
                 </div>
               )
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full" style={{ borderCollapse: 'collapse', minWidth: 940 }}>
-                <thead>
-                  <tr style={{ background: BG }}>
-                    {columns.map((col) => (
-                      <th key={col} style={{ textAlign: 'left', padding: '11px 16px', ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', color: MUTED, textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1px solid ${BORDER}` }}>
-                        {col}
-                      </th>
+            <>
+              {/* Phones & tablets: card list */}
+              <div className="lg:hidden">
+                {loading ? <SkeletonCards /> : (
+                  <ul className="flex flex-col gap-2.5 p-3 sm:p-4" style={{ listStyle: 'none', margin: 0 }}>
+                    {paginatedDuties.map((duty) => (
+                      <li key={duty.id} className="p-3.5" style={{ background: '#fff', border: `1px solid ${BORDER}`, borderRadius: 14 }}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p style={{ ...body, fontSize: '0.92rem', fontWeight: 700, color: INK, lineHeight: 1.3, wordBreak: 'break-word' }}>{duty.title}</p>
+                            {duty.description && (
+                              <p style={{ ...body, fontSize: '0.76rem', color: MUTED, marginTop: 3, lineHeight: 1.45, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{duty.description}</p>
+                            )}
+                          </div>
+                          {renderMenuButton(duty, 40)}
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2.5 mt-3">
+                          <DateTimeCell duty={duty} />
+                          <StatusBadge status={getDutyStatus(duty)} />
+                        </div>
+
+                        <div className="mt-3 pt-3 flex flex-col gap-2.5" style={{ borderTop: `1px solid ${BORDER}88` }}>
+                          <LocationCell location={duty.location} />
+                          <GroupChips names={getGroupNames(duty)} />
+                        </div>
+                      </li>
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? <SkeletonRows /> : paginatedDuties.map((duty, idx) => {
-                    const rowNumber = (currentPage - 1) * pageSize + idx + 1;
-                    const cell = { padding: '16px', verticalAlign: 'middle', borderTop: idx === 0 ? 'none' : `1px solid ${BORDER}`, transition: 'background .15s ease' };
-                    return (
-                      <tr key={duty.id} className="ad-row">
-                        <td style={{ ...cell, ...body, fontSize: '0.78rem', fontWeight: 600, color: MUTED }}>{rowNumber}</td>
-                        <td style={{ ...cell, maxWidth: 280 }}>
-                          <p style={{ ...body, fontSize: '0.88rem', fontWeight: 650, color: INK, wordBreak: 'break-word', lineHeight: 1.3 }}>{duty.title}</p>
-                          {duty.description && (
-                            <p style={{ ...body, fontSize: '0.74rem', color: MUTED, marginTop: 3, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{duty.description}</p>
-                          )}
-                        </td>
-                        <td style={cell}><DateTimeCell duty={duty} /></td>
-                        <td style={{ ...cell, maxWidth: 200 }}><LocationCell location={duty.location} /></td>
-                        <td style={{ ...cell, maxWidth: 240 }}><GroupChips names={getGroupNames(duty)} /></td>
-                        <td style={cell}><StatusBadge status={getDutyStatus(duty)} /></td>
-                        <td style={cell}>
-                          <button
-                            type="button"
-                            className="ad-action"
-                            aria-label={`Actions for ${duty.title}`}
-                            aria-haspopup="menu"
-                            aria-expanded={menu?.duty.id === duty.id}
-                            title="Duty actions"
-                            onClick={(e) => {
-                              if (menu?.duty.id === duty.id) { setMenu(null); return; }
-                              const rect = e.currentTarget.getBoundingClientRect();
-                              setMenu({ duty, top: rect.bottom + 6, right: window.innerWidth - rect.right });
-                            }}
-                            style={{ border: `1px solid ${BORDER}`, background: CARD, color: INK, borderRadius: 9, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'background .15s ease, border-color .15s ease' }}
-                          >
-                            <MoreHorizontal size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                  </ul>
+                )}
+              </div>
+
+              {/* Desktop: table */}
+              <div className="hidden lg:block overflow-x-auto">
+                <table className="w-full" style={{ borderCollapse: 'collapse', minWidth: 940 }}>
+                  <thead>
+                    <tr style={{ background: BG }}>
+                      {columns.map((col) => (
+                        <th key={col} style={{ textAlign: 'left', padding: '11px 16px', ...body, fontSize: '0.66rem', fontWeight: 700, letterSpacing: '0.06em', color: MUTED, textTransform: 'uppercase', whiteSpace: 'nowrap', borderBottom: `1px solid ${BORDER}` }}>
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? <SkeletonRows /> : paginatedDuties.map((duty, idx) => {
+                      const rowNumber = (currentPage - 1) * pageSize + idx + 1;
+                      const cell = { padding: '16px', verticalAlign: 'middle', borderTop: idx === 0 ? 'none' : `1px solid ${BORDER}`, transition: 'background .15s ease' };
+                      return (
+                        <tr key={duty.id} className="ad-row">
+                          <td style={{ ...cell, ...body, fontSize: '0.78rem', fontWeight: 600, color: MUTED }}>{rowNumber}</td>
+                          <td style={{ ...cell, maxWidth: 280 }}>
+                            <p style={{ ...body, fontSize: '0.88rem', fontWeight: 650, color: INK, wordBreak: 'break-word', lineHeight: 1.3 }}>{duty.title}</p>
+                            {duty.description && (
+                              <p style={{ ...body, fontSize: '0.74rem', color: MUTED, marginTop: 3, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{duty.description}</p>
+                            )}
+                          </td>
+                          <td style={cell}><DateTimeCell duty={duty} /></td>
+                          <td style={{ ...cell, maxWidth: 200 }}><LocationCell location={duty.location} /></td>
+                          <td style={{ ...cell, maxWidth: 240 }}><GroupChips names={getGroupNames(duty)} /></td>
+                          <td style={cell}><StatusBadge status={getDutyStatus(duty)} /></td>
+                          <td style={cell}>{renderMenuButton(duty)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
 
           {/* ── Pagination ── */}
           {!loading && filteredDuties.length > pageSize && (
-            <div className="flex items-center justify-between flex-wrap gap-3" style={{ padding: '14px 20px', borderTop: `1px solid ${BORDER}` }}>
-              <p style={{ ...body, fontSize: '0.78rem', color: MUTED }}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3.5 sm:px-5" style={{ borderTop: `1px solid ${BORDER}` }}>
+              <p className="hidden sm:block" style={{ ...body, fontSize: '0.78rem', color: MUTED }}>
                 Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filteredDuties.length)} of {filteredDuties.length} duties
               </p>
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center justify-between sm:justify-end gap-1.5">
                 <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1}
-                  className="flex items-center gap-1" style={{ border: `1px solid ${BORDER}`, background: CARD, color: INK, borderRadius: 8, padding: '6px 10px', ...body, fontSize: '0.78rem', fontWeight: 600, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1 }}>
+                  className="flex items-center justify-center gap-1" style={{ border: `1px solid ${BORDER}`, background: CARD, color: INK, borderRadius: 8, padding: '0 12px', minHeight: 40, ...body, fontSize: '0.78rem', fontWeight: 600, cursor: currentPage === 1 ? 'default' : 'pointer', opacity: currentPage === 1 ? 0.5 : 1 }}>
                   <ChevronLeft size={13} /> Previous
                 </button>
-                {Array.from({ length: totalPages }).map((_, i) => {
-                  const n = i + 1;
-                  const active = n === currentPage;
-                  return (
-                    <button key={n} type="button" onClick={() => setPage(n)}
-                      style={{ border: `1px solid ${active ? PRIMARY : BORDER}`, background: active ? PRIMARY : CARD, color: active ? '#fff' : INK, borderRadius: 8, width: 30, height: 30, ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}>
-                      {n}
-                    </button>
-                  );
-                })}
+
+                {/* Phones: compact "Page x of y" */}
+                <span className="sm:hidden" style={{ ...body, fontSize: '0.82rem', fontWeight: 600, color: INK }}>Page {currentPage} of {totalPages}</span>
+
+                {/* Larger screens: numbered pages */}
+                <div className="hidden sm:flex items-center gap-1.5 flex-wrap">
+                  {Array.from({ length: totalPages }).map((_, i) => {
+                    const n = i + 1;
+                    const active = n === currentPage;
+                    return (
+                      <button key={n} type="button" onClick={() => setPage(n)}
+                        style={{ border: `1px solid ${active ? PRIMARY : BORDER}`, background: active ? PRIMARY : CARD, color: active ? '#fff' : INK, borderRadius: 8, width: 32, height: 32, ...body, fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer' }}>
+                        {n}
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <button type="button" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}
-                  className="flex items-center gap-1" style={{ border: `1px solid ${BORDER}`, background: CARD, color: INK, borderRadius: 8, padding: '6px 10px', ...body, fontSize: '0.78rem', fontWeight: 600, cursor: currentPage === totalPages ? 'default' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1 }}>
+                  className="flex items-center justify-center gap-1" style={{ border: `1px solid ${BORDER}`, background: CARD, color: INK, borderRadius: 8, padding: '0 12px', minHeight: 40, ...body, fontSize: '0.78rem', fontWeight: 600, cursor: currentPage === totalPages ? 'default' : 'pointer', opacity: currentPage === totalPages ? 0.5 : 1 }}>
                   Next <ChevronRight size={13} />
                 </button>
               </div>
@@ -828,13 +894,13 @@ const AdminDutyAssignment = () => {
       {menu && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setMenu(null)} />
-          <div role="menu" className="fixed z-20" style={{ top: menu.top, right: menu.right, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, boxShadow: '0 12px 28px -14px rgba(36,21,18,0.4)', minWidth: 150, overflow: 'hidden' }}>
+          <div role="menu" className="fixed z-20" style={{ top: menu.top, right: Math.max(8, menu.right), background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, boxShadow: '0 12px 28px -14px rgba(36,21,18,0.4)', minWidth: 160, overflow: 'hidden' }}>
             <button
               type="button"
               role="menuitem"
               onClick={() => { const target = menu.duty; setMenu(null); deleteDuty(target); }}
               className="ad-ghost flex items-center gap-2 w-full text-left"
-              style={{ padding: '10px 14px', border: 'none', background: 'none', color: DANGER, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}
+              style={{ padding: '12px 14px', minHeight: 44, border: 'none', background: 'none', color: DANGER, ...body, fontSize: '0.84rem', fontWeight: 600, cursor: 'pointer' }}
             >
               <Trash2 size={14} /> Delete Duty
             </button>
@@ -854,9 +920,9 @@ const AdminDutyAssignment = () => {
             subtitle="Send a duty reminder to scholars assigned to the selected duty."
             right={<CloseButton onClick={closeDialog} />}
           />
-          <div style={{ padding: '16px 20px 20px' }}>
+          <div className="px-4 pt-4 pb-5 sm:px-5">
             <label htmlFor="notify-duty" style={fieldLabel}>SELECT DUTY *</label>
-            <select id="notify-duty" className="ad-field" value={notifyDutyId} onChange={(event) => setNotifyDutyId(event.target.value)} style={{ ...input, cursor: 'pointer', background: CARD }}>
+            <select id="notify-duty" className="ad-field" value={notifyDutyId} onChange={(event) => setNotifyDutyId(event.target.value)} style={{ ...input, cursor: 'pointer', background: CARD, minHeight: 44 }}>
               <option value="">Select a duty...</option>
               {duties.map((duty) => <option key={`notify-${duty.id}`} value={duty.id}>{duty.title} - {formatAdminDate(duty.duty_date, { month: 'short' })}</option>)}
             </select>
@@ -885,10 +951,10 @@ const AdminDutyAssignment = () => {
             {notifyMessage && <Notice tone="success" icon={CheckCircle2}>{notifyMessage}</Notice>}
             {notifyError && <Notice tone="danger" icon={AlertCircle}>{notifyError}</Notice>}
 
-            <div className="flex justify-end gap-2" style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
-              <button type="button" onClick={closeDialog} className="ad-ghost" style={{ padding: '10px 16px', border: `1px solid ${BORDER}`, borderRadius: 10, background: CARD, color: PRIMARY, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Close</button>
-              <button type="button" onClick={handleNotifyDuty} disabled={notifying} className="ad-primary flex items-center justify-center gap-2"
-                style={{ padding: '10px 18px', border: 0, borderRadius: 10, background: PRIMARY, color: '#fff', ...body, fontSize: '0.8rem', fontWeight: 700, cursor: notifying ? 'default' : 'pointer', opacity: notifying ? 0.75 : 1, boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
+            <div className={dialogFooter} style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
+              <button type="button" onClick={closeDialog} className="ad-ghost flex-1 sm:flex-none" style={{ padding: '10px 16px', minHeight: 44, border: `1px solid ${BORDER}`, borderRadius: 10, background: CARD, color: PRIMARY, ...body, fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>Close</button>
+              <button type="button" onClick={handleNotifyDuty} disabled={notifying} className="ad-primary flex flex-[1.5] sm:flex-none items-center justify-center gap-2"
+                style={{ padding: '10px 18px', minHeight: 44, border: 0, borderRadius: 10, background: PRIMARY, color: '#fff', ...body, fontSize: '0.82rem', fontWeight: 700, cursor: notifying ? 'default' : 'pointer', opacity: notifying ? 0.75 : 1, boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
                 {notifying ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                 {notifying ? 'Sending...' : 'Send Notification'}
               </button>
@@ -908,7 +974,7 @@ const AdminDutyAssignment = () => {
             title="Makeup Duty Assignment"
             subtitle="Choose the next duty for each absent scholar."
             right={
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col-reverse sm:flex-row items-end sm:items-center gap-2 flex-shrink-0">
                 <span className="inline-flex items-center gap-1.5" style={{ ...body, fontSize: '0.72rem', fontWeight: 700, color: hasPendingMakeup ? WARNING : SUCCESS, background: hasPendingMakeup ? `${WARNING}16` : `${SUCCESS}14`, border: `1px solid ${hasPendingMakeup ? WARNING : SUCCESS}33`, borderRadius: 8, padding: '4px 10px', whiteSpace: 'nowrap' }}>
                   <span style={{ width: 6, height: 6, borderRadius: '50%', background: hasPendingMakeup ? WARNING : SUCCESS }} />
                   {makeupCandidates.length} awaiting
@@ -917,7 +983,7 @@ const AdminDutyAssignment = () => {
               </div>
             }
           />
-          <div style={{ padding: '16px 20px 20px' }}>
+          <div className="px-4 pt-4 pb-5 sm:px-5">
             {hasPendingMakeup ? (
               <div>
                 <label htmlFor="makeup-candidate" style={fieldLabel}>ABSENT SCHOLAR *</label>
@@ -926,7 +992,7 @@ const AdminDutyAssignment = () => {
                   setSelectedMakeup(nextIndex);
                   setMakeupDutyId('');
                   setMakeupError('');
-                }} style={{ ...input, cursor: 'pointer', background: CARD }}>
+                }} style={{ ...input, cursor: 'pointer', background: CARD, minHeight: 44 }}>
                   <option value="">Select a candidate...</option>
                   {makeupCandidates.map((candidate, index) => (
                     <option key={`${candidate.scholar_id}-${candidate.source_duty_id}`} value={index}>
@@ -946,15 +1012,16 @@ const AdminDutyAssignment = () => {
                         <span style={{ ...body, fontSize: '0.7rem', fontWeight: 600, color: DANGER, background: '#F7E6E4', borderRadius: 6, padding: '3px 8px', textTransform: 'capitalize', whiteSpace: 'nowrap' }}>{selectedCandidate.source_status}</span>
                       )}
                     </div>
-                    <div className="flex items-stretch gap-2" style={{ marginTop: 12 }}>
+                    {/* Stacks on phones, side by side from sm */}
+                    <div className="flex flex-col sm:flex-row sm:items-stretch gap-2.5 sm:gap-2" style={{ marginTop: 12 }}>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ ...body, fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.08em', color: MUTED }}>MISSED DUTY</p>
                         <p style={{ ...body, fontSize: '0.8rem', fontWeight: 600, color: INK, marginTop: 2, wordBreak: 'break-word' }}>{selectedCandidate.source_duty_title}</p>
                       </div>
-                      <ArrowRight size={16} style={{ color: GOLD, alignSelf: 'center', flexShrink: 0 }} />
+                      <ArrowRight size={16} className="rotate-90 sm:rotate-0 self-start sm:self-center" style={{ color: GOLD, flexShrink: 0 }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <label htmlFor="makeup-target-duty" style={{ ...body, display: 'block', fontSize: '0.58rem', fontWeight: 700, letterSpacing: '0.08em', color: MUTED }}>ASSIGN NEXT DUTY *</label>
-                        <select id="makeup-target-duty" className="ad-field" value={makeupDutyId} onChange={(event) => setMakeupDutyId(event.target.value)} style={{ ...input, marginTop: 5, cursor: 'pointer', background: CARD, fontSize: '0.76rem' }}>
+                        <select id="makeup-target-duty" className="ad-field" value={makeupDutyId} onChange={(event) => setMakeupDutyId(event.target.value)} style={{ ...input, marginTop: 5, cursor: 'pointer', background: CARD, fontSize: '0.76rem', minHeight: 44 }}>
                           <option value="">Select next duty...</option>
                           {availableMakeupDuties.map((duty) => (
                             <option key={duty.id} value={duty.id}>
@@ -963,7 +1030,7 @@ const AdminDutyAssignment = () => {
                           ))}
                         </select>
                         {availableMakeupDuties.length === 0 && (
-                          <p style={{ ...body, fontSize: '0.68rem', color: DANGER, marginTop: 4 }}>No non-cancelled duty is scheduled within 14 days after this missed duty.</p>
+                          <p style={{ ...body, fontSize: '0.68rem', color: DANGER, marginTop: 4, lineHeight: 1.4 }}>No non-cancelled duty is scheduled within 14 days after this missed duty.</p>
                         )}
                       </div>
                     </div>
@@ -989,11 +1056,11 @@ const AdminDutyAssignment = () => {
             {makeupMessage && <Notice tone="success" icon={CheckCircle2}>{makeupMessage}</Notice>}
             {makeupError && <Notice tone="danger" icon={AlertCircle}>{makeupError}</Notice>}
 
-            <div className="flex justify-end gap-2" style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
-              <button type="button" onClick={closeDialog} className="ad-ghost" style={{ padding: '10px 16px', border: `1px solid ${BORDER}`, borderRadius: 10, background: CARD, color: PRIMARY, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Close</button>
+            <div className={dialogFooter} style={{ marginTop: 18, paddingTop: 16, borderTop: `1px solid ${BORDER}` }}>
+              <button type="button" onClick={closeDialog} className="ad-ghost flex-1 sm:flex-none" style={{ padding: '10px 16px', minHeight: 44, border: `1px solid ${BORDER}`, borderRadius: 10, background: CARD, color: PRIMARY, ...body, fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>Close</button>
               {hasPendingMakeup && (
-                <button type="button" onClick={handleApproveMakeup} disabled={approvingMakeup || !selectedCandidate || !makeupDutyId} className="ad-primary flex items-center justify-center gap-2"
-                style={{ padding: '10px 18px', border: 0, borderRadius: 10, background: PRIMARY, color: '#fff', ...body, fontSize: '0.8rem', fontWeight: 700, cursor: approvingMakeup || !selectedCandidate || !makeupDutyId ? 'not-allowed' : 'pointer', opacity: approvingMakeup || !selectedCandidate || !makeupDutyId ? 0.55 : 1, boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
+                <button type="button" onClick={handleApproveMakeup} disabled={approvingMakeup || !selectedCandidate || !makeupDutyId} className="ad-primary flex flex-[1.5] sm:flex-none items-center justify-center gap-2"
+                style={{ padding: '10px 18px', minHeight: 44, border: 0, borderRadius: 10, background: PRIMARY, color: '#fff', ...body, fontSize: '0.82rem', fontWeight: 700, cursor: approvingMakeup || !selectedCandidate || !makeupDutyId ? 'not-allowed' : 'pointer', opacity: approvingMakeup || !selectedCandidate || !makeupDutyId ? 0.55 : 1, boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
                 {approvingMakeup ? <Loader2 size={14} className="animate-spin" /> : <CheckSquare size={14} />} Assign Makeup Duty
                 </button>
               )}
@@ -1002,10 +1069,10 @@ const AdminDutyAssignment = () => {
         </Dialog>
       )}
 
-      {/* ── Create Duty modal (centered) ── */}
+      {/* ── Create Duty modal (bottom sheet on phones) ── */}
       {showCreate && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4"
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4"
           style={{ background: 'rgba(36,21,18,0.45)' }}
           onClick={() => setShowCreate(false)}
         >
@@ -1015,23 +1082,23 @@ const AdminDutyAssignment = () => {
             role="dialog"
             aria-modal="true"
             aria-labelledby="create-duty-title"
-            className="w-full overflow-y-auto"
-            style={{ maxWidth: 620, maxHeight: '90vh', background: CARD, border: `1px solid ${BORDER}`, borderRadius: 18, boxShadow: '0 24px 60px -20px rgba(36,21,18,0.45)', padding: 0, display: 'flex', flexDirection: 'column' }}
+            className="w-full overflow-y-auto rounded-t-[18px] sm:rounded-[18px]"
+            style={{ maxWidth: 620, maxHeight: '92vh', background: CARD, border: `1px solid ${BORDER}`, boxShadow: '0 24px 60px -20px rgba(36,21,18,0.45)', padding: 0, display: 'flex', flexDirection: 'column' }}
           >
-            <div className="flex items-start justify-between gap-4" style={{ padding: '22px 26px 18px', borderBottom: `1px solid ${BORDER}`, borderTop: `3px solid ${PRIMARY}`, borderRadius: '18px 18px 0 0' }}>
-              <div>
-                <h2 id="create-duty-title" style={{ ...display, fontSize: '1.35rem', fontWeight: 700, color: INK }}>Create Duty Assignment</h2>
-                <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 4 }}>Set up a duty schedule and assign it to one or more groups.</p>
+            <div className="flex items-start justify-between gap-4 px-4 pt-5 pb-4 sm:px-[26px] sm:pt-[22px] sm:pb-[18px]" style={{ borderBottom: `1px solid ${BORDER}`, borderTop: `3px solid ${PRIMARY}` }}>
+              <div className="min-w-0">
+                <h2 id="create-duty-title" style={{ ...display, fontSize: '1.3rem', fontWeight: 700, color: INK, lineHeight: 1.25 }}>Create Duty Assignment</h2>
+                <p style={{ ...body, fontSize: '0.8rem', color: MUTED, marginTop: 4, lineHeight: 1.45 }}>Set up a duty schedule and assign it to one or more groups.</p>
               </div>
-              <button type="button" onClick={() => setShowCreate(false)} aria-label="Close" className="ad-action" style={{ border: `1px solid ${BORDER}`, background: CARD, color: MUTED, borderRadius: 9, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
+              <button type="button" onClick={() => setShowCreate(false)} aria-label="Close" className="ad-action" style={{ border: `1px solid ${BORDER}`, background: CARD, color: MUTED, borderRadius: 9, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}>
                 <X size={16} />
               </button>
             </div>
 
-            <div style={{ padding: '20px 26px', flex: 1 }}>
+            <div className="px-4 py-5 sm:px-[26px]" style={{ flex: 1 }}>
               {error && (
-                <div className="flex items-center gap-2" role="alert" style={{ marginBottom: 16, padding: '10px 13px', borderRadius: 9, background: '#FBEFEE', border: `1px solid ${DANGER}33`, color: DANGER, ...body, fontSize: '0.78rem', fontWeight: 600 }}>
-                  <AlertCircle size={13} style={{ flexShrink: 0 }} /> {error}
+                <div className="flex items-start gap-2" role="alert" style={{ marginBottom: 16, padding: '10px 13px', borderRadius: 9, background: '#FBEFEE', border: `1px solid ${DANGER}33`, color: DANGER, ...body, fontSize: '0.78rem', fontWeight: 600, lineHeight: 1.45 }}>
+                  <AlertCircle size={13} style={{ flexShrink: 0, marginTop: 2 }} /> {error}
                 </div>
               )}
 
@@ -1040,7 +1107,7 @@ const AdminDutyAssignment = () => {
               <div className="space-y-4">
                 <div>
                   <label htmlFor="duty-title" style={fieldLabel}>DUTY TITLE *</label>
-                  <input id="duty-title" className="ad-field" required placeholder="Enter duty title" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} style={input} />
+                  <input id="duty-title" className="ad-field" required placeholder="Enter duty title" value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} style={{ ...input, minHeight: 44 }} />
                 </div>
                 <div>
                   <label htmlFor="duty-description" style={fieldLabel}>DESCRIPTION</label>
@@ -1048,35 +1115,35 @@ const AdminDutyAssignment = () => {
                 </div>
               </div>
 
-              <div style={{ height: 1, background: BORDER, margin: '22px 0' }} />
+              <div style={{ height: 1, background: BORDER, margin: '20px 0' }} />
 
               {/* SCHEDULE */}
               <SectionLabel>Schedule</SectionLabel>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="col-span-2 sm:col-span-1">
                   <label htmlFor="duty-date" style={fieldLabel}>DUTY DATE *</label>
-                  <input id="duty-date" className="ad-field" required type="date" value={form.duty_date} onChange={(event) => setForm({ ...form, duty_date: event.target.value })} style={input} />
+                  <input id="duty-date" className="ad-field" required type="date" value={form.duty_date} onChange={(event) => setForm({ ...form, duty_date: event.target.value })} style={{ ...input, minHeight: 44 }} />
                 </div>
                 <div>
                   <label htmlFor="duty-start" style={fieldLabel}>START TIME</label>
-                  <input id="duty-start" className="ad-field" type="time" value={form.time_start} onChange={(event) => setForm({ ...form, time_start: event.target.value })} style={input} />
+                  <input id="duty-start" className="ad-field" type="time" value={form.time_start} onChange={(event) => setForm({ ...form, time_start: event.target.value })} style={{ ...input, minHeight: 44 }} />
                 </div>
                 <div>
                   <label htmlFor="duty-end" style={fieldLabel}>END TIME</label>
-                  <input id="duty-end" className="ad-field" type="time" value={form.time_end} onChange={(event) => setForm({ ...form, time_end: event.target.value })} style={input} />
+                  <input id="duty-end" className="ad-field" type="time" value={form.time_end} onChange={(event) => setForm({ ...form, time_end: event.target.value })} style={{ ...input, minHeight: 44 }} />
                 </div>
               </div>
 
-              <div style={{ height: 1, background: BORDER, margin: '22px 0' }} />
+              <div style={{ height: 1, background: BORDER, margin: '20px 0' }} />
 
               {/* LOCATION */}
               <SectionLabel>Location</SectionLabel>
               <div>
                 <label htmlFor="duty-location" style={fieldLabel}>LOCATION</label>
-                <input id="duty-location" className="ad-field" placeholder="Enter duty location (optional)" value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} style={input} />
+                <input id="duty-location" className="ad-field" placeholder="Enter duty location (optional)" value={form.location} onChange={(event) => setForm({ ...form, location: event.target.value })} style={{ ...input, minHeight: 44 }} />
               </div>
 
-              <div style={{ height: 1, background: BORDER, margin: '22px 0' }} />
+              <div style={{ height: 1, background: BORDER, margin: '20px 0' }} />
 
               {/* ASSIGNMENT */}
               <SectionLabel>Assignment</SectionLabel>
@@ -1084,7 +1151,7 @@ const AdminDutyAssignment = () => {
               {groups.length === 0 ? (
                 <p style={{ ...body, fontSize: '0.78rem', color: MUTED, fontStyle: 'italic' }}>No groups available yet. Create groups in Team Assignments first.</p>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 min-[420px]:grid-cols-2 sm:grid-cols-3 gap-2">
                   {groups.map((group) => (
                     <GroupOption key={group.id} group={group} checked={form.group_ids.includes(group.id)} onToggle={toggleGroup} />
                   ))}
@@ -1097,9 +1164,9 @@ const AdminDutyAssignment = () => {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2" style={{ padding: '16px 26px', borderTop: `1px solid ${BORDER}`, background: BG, borderRadius: '0 0 18px 18px', position: 'sticky', bottom: 0 }}>
-              <button type="button" onClick={() => setShowCreate(false)} className="ad-ghost" style={{ padding: '10px 16px', border: `1px solid ${BORDER}`, borderRadius: 10, background: CARD, color: PRIMARY, ...body, fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-              <button type="submit" disabled={saving} className="ad-primary" style={{ padding: '10px 20px', border: 0, borderRadius: 10, background: PRIMARY, color: '#fff', ...body, fontSize: '0.8rem', fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.75 : 1, boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
+            <div className="flex gap-2 sm:justify-end px-4 py-3.5 sm:px-[26px] sm:py-4" style={{ borderTop: `1px solid ${BORDER}`, background: BG, position: 'sticky', bottom: 0, paddingBottom: 'max(0.875rem, env(safe-area-inset-bottom))' }}>
+              <button type="button" onClick={() => setShowCreate(false)} className="ad-ghost flex-1 sm:flex-none" style={{ padding: '10px 16px', minHeight: 44, border: `1px solid ${BORDER}`, borderRadius: 10, background: CARD, color: PRIMARY, ...body, fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+              <button type="submit" disabled={saving} className="ad-primary flex-[1.5] sm:flex-none" style={{ padding: '10px 20px', minHeight: 44, border: 0, borderRadius: 10, background: PRIMARY, color: '#fff', ...body, fontSize: '0.82rem', fontWeight: 700, cursor: saving ? 'default' : 'pointer', opacity: saving ? 0.75 : 1, boxShadow: '0 8px 18px -10px rgba(109,33,64,0.65)' }}>
                 {saving ? 'Creating...' : 'Create Duty'}
               </button>
             </div>

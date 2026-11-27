@@ -85,6 +85,8 @@ const Login = () => {
         } catch (err) {
             if (err.response?.status === 401) {
                 setError('User ID, email, or password is incorrect.');
+            } else if (err.response?.status === 429) {
+                setError(err.response.data?.message || 'Too many failed login attempts. Please try again later.');
             } else if (err.response?.status === 404) {
                 setError('Account not found.');
             } else {

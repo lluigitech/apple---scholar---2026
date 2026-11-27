@@ -11,7 +11,7 @@ const http = require('http');
 const https = require('https');
 const { URL } = require('url');
 const { normalizeSubmissionValue } = require('../utils/submissionPayload');
-const { logComplianceIncident, clampCompliance, getComplianceSettings, calculateCurrentCompliance, resolveGradeScale, isGradeWithinScale } = require('../utils/complianceLogger');
+const { logComplianceIncident, clampCompliance, getComplianceSettings, calculateCurrentCompliance, resolveGradeScale, isGradeWithinScale, calculateGradeAverage } = require('../utils/complianceLogger');
 const { logAuditEvent } = require('../utils/auditLogger');
 const { canAccessScholar, logPrivacyAccess } = require('../middleware/privacyAccess');
 const { consumeCompleted, removeSession } = require('../services/resumableUploadService');
@@ -1653,7 +1653,7 @@ exports.getGrades = (req, res) => {
     }
 
     const sql = `
-        SELECT id, semester, academic_year, subject_name, units, grade, proof_path, created_at,
+        SELECT id, semester, academic_year, subject_name, units, grade, grade_scale, proof_path, created_at,
                verification_status AS status, officer_comment AS staff_comment
         FROM grades
         WHERE scholar_id = ?
@@ -1670,6 +1670,7 @@ exports.getGrades = (req, res) => {
                 semMap[key] = {
                     semester: row.semester,
                     academic_year: row.academic_year,
+                    grade_scale: row.grade_scale || 'k12',
                     subjects: [],
                     total_units: 0,
                     weighted_sum: 0,
@@ -1687,7 +1688,7 @@ exports.getGrades = (req, res) => {
                 units: row.units,
                 grade: parseFloat(row.grade),
             });
-            const units = Number(row.units) || 0;
+            const units = semMap[key].grade_scale === 'college' ? Number(row.units) || 0 : 1;
             const grade = Number(row.grade);
             semMap[key].total_units += units;
             semMap[key].weighted_sum += units * grade;
@@ -1699,7 +1700,9 @@ exports.getGrades = (req, res) => {
             // `status` here stays the ACADEMIC status (passed/failed based on GWA) -
             // unchanged meaning from before, kept for backward compatibility with the UI.
             status: sem.total_units > 0
-                ? (sem.weighted_sum / sem.total_units) <= 3.00 ? 'passed' : 'failed'
+                ? ((sem.grade_scale === 'college'
+                    ? (sem.weighted_sum / sem.total_units) <= 3.00
+                    : (sem.weighted_sum / sem.total_units) >= 75) ? 'passed' : 'failed')
                 : 'pending',
             // Only a REJECTED semester unlocks for resubmission. Pending/approved stay locked.
             locked: sem.review_status !== 'rejected',
@@ -1769,11 +1772,8 @@ exports.submitGrades = (req, res) => {
     }
 
     for (const subject of subjects) {
-        if (!subject.subject_name || !subject.units || subject.grade === undefined) {
-            return res.status(400).json({ error: 'Each subject needs subject_name, units, and grade' });
-        }
-        if (!Number.isFinite(Number(subject.units)) || Number(subject.units) <= 0) {
-            return res.status(400).json({ error: `Invalid units for ${subject.subject_name}` });
+        if (!subject.subject_name || subject.grade === undefined) {
+            return res.status(400).json({ error: 'Each subject needs a subject name and grade' });
         }
         if (!Number.isFinite(Number(subject.grade))) {
             return res.status(400).json({ error: `Invalid grade for ${subject.subject_name}` });
@@ -1817,8 +1817,8 @@ const saveGradesWithProofPath = (req, res, scholar_id, semester, academic_year, 
             const gradeScale = resolveGradeScale(yearLevel);
 
             for (const subj of subjects) {
-                if (!subj.subject_name || !subj.units || subj.grade === undefined) {
-                    return res.status(400).json({ error: 'Each subject needs subject_name, units, and grade' });
+                if (!subj.subject_name || subj.grade === undefined) {
+                    return res.status(400).json({ error: 'Each subject needs a subject name and grade' });
                 }
                 const g = parseFloat(subj.grade);
                 const validForScale = isGradeWithinScale(gradeScale, g);
@@ -1829,6 +1829,9 @@ const saveGradesWithProofPath = (req, res, scholar_id, semester, academic_year, 
                             ? `Invalid grade for ${subj.subject_name}. Must be 1.00-5.00.`
                             : `Invalid grade for ${subj.subject_name}. Must be 0-100 for K-12.`,
                     });
+                }
+                if (gradeScale === 'college' && (!Number.isFinite(Number(subj.units)) || Number(subj.units) <= 0)) {
+                    return res.status(400).json({ error: `Invalid units for ${subj.subject_name}` });
                 }
             }
 
@@ -1845,7 +1848,8 @@ const saveGradesWithProofPath = (req, res, scholar_id, semester, academic_year, 
             const insertRows = () => {
                 const values = subjects.map(s => [
                     scholar_id, semester, academic_year, s.subject_name,
-                    parseInt(s.units), parseFloat(s.grade), gradeScale, proofPath, 'pending',
+                    gradeScale === 'college' ? parseFloat(s.units) : 1,
+                    parseFloat(s.grade), gradeScale, proofPath, 'pending',
                 ]);
 
                 const insertSql = `
@@ -1886,9 +1890,8 @@ const saveGradesWithProofPath = (req, res, scholar_id, semester, academic_year, 
                         }
                     });
 
-                    const totalUnits = subjects.reduce((sum, s) => sum + parseInt(s.units), 0);
-                    const weightedSum = subjects.reduce((sum, s) => sum + parseInt(s.units) * parseFloat(s.grade), 0);
-                    const gwa = totalUnits > 0 ? parseFloat((weightedSum / totalUnits).toFixed(2)) : null;
+                    const calculatedAverage = calculateGradeAverage(subjects, gradeScale);
+                    const gwa = calculatedAverage === null ? null : parseFloat(calculatedAverage.toFixed(2));
 
                     res.status(201).json({
                         message: 'Grades submitted successfully and locked for this semester.',

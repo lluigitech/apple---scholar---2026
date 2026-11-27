@@ -16,7 +16,6 @@ const API = API_BASE.endsWith('/api') ? API_BASE : `${API_BASE}/api`;
 const DEFAULT_SETTINGS = {
   displayName: 'System Administrator',
   email: 'admin@applescholar.org',
-  timezone: '(GMT+8) Manila, Philippines',
   dateFormat: 'MMMM DD, YYYY',
   paginationPageSize: 10,
   tableDensity: 'comfortable',
@@ -51,7 +50,6 @@ const DENSITIES = [
   ['compact', 'Compact', 'Tighter spacing', Rows4],
   ['condensed', 'Condensed', 'Minimal spacing', StretchHorizontal],
 ];
-const TIMEZONES = ['(GMT+8) Manila, Philippines', '(GMT+0) UTC', '(GMT+9) Tokyo, Japan', '(GMT-5) New York, USA'];
 const DATE_FORMATS = [['MMMM DD, YYYY', 'October 28, 2026 (MMMM DD, YYYY)'], ['DD/MM/YYYY', '28/10/2026 (DD/MM/YYYY)'], ['YYYY-MM-DD', '2026-10-28 (YYYY-MM-DD)']];
 const TIMEOUTS = [['3', '3 minutes'], ['5', '5 minutes'], ['10', '10 minutes'], ['15', '15 minutes'], ['20', '20 minutes']];
 
@@ -269,6 +267,7 @@ const AdminSettings = () => {
         email: localStorage.getItem('email') || DEFAULT_SETTINGS.email,
       };
       delete settings.language;
+      delete settings.timezone;
       if (!TIMEOUTS.some(([value]) => value === String(settings.sessionTimeout))) {
         settings.sessionTimeout = DEFAULT_SETTINGS.sessionTimeout;
       }
@@ -307,9 +306,11 @@ const AdminSettings = () => {
         headers: { Authorization: `Bearer ${token}` },
       }).then(({ data }) => {
         if (!mounted) return;
-        setSettings((current) => ({ ...current, ...data }));
-        setSavedSettings((current) => ({ ...current, ...data }));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+        const preferences = { ...data };
+        delete preferences.timezone;
+        setSettings((current) => ({ ...current, ...preferences }));
+        setSavedSettings((current) => ({ ...current, ...preferences }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
         localStorage.setItem('name', data.displayName);
         localStorage.setItem('email', data.email);
         window.dispatchEvent(new Event('admin-settings-updated'));
@@ -344,7 +345,6 @@ const AdminSettings = () => {
     displayName: values.displayName,
     email: values.email,
     preferences: {
-      timezone: values.timezone,
       dateFormat: values.dateFormat,
       paginationPageSize: values.paginationPageSize,
       tableDensity: values.tableDensity,
@@ -519,7 +519,6 @@ const AdminSettings = () => {
               <section style={card}>
                 <CardHeader icon={Monitor} title="Appearance & Workspace" subtitle="Customize your workspace display and regional preferences." />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <SelectInput icon={Clock} label="Timezone" value={settings.timezone} onChange={(v) => update('timezone', v)} options={TIMEZONES} />
                   <SelectInput icon={Calendar} label="Date Format" value={settings.dateFormat} onChange={(v) => update('dateFormat', v)} options={DATE_FORMATS} />
                 </div>
                 <p style={{ fontSize: '0.74rem', fontWeight: 600, color: c.ink, margin: '14px 0 6px' }}>Table Density</p>

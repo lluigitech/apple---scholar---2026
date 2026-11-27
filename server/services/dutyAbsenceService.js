@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const nodemailer = require('nodemailer');
+const { forEachConcurrent } = require('../utils/forEachConcurrent');
 const {
     buildDutyAbsenceEmail,
     buildDutyAttendanceStatusEmail,
@@ -119,7 +120,7 @@ const notifyDutyAbsences = async (connection, sweepStartedAt) => {
     let sentCount = 0;
     let failedCount = 0;
     for (const [dutyId, group] of dutyGroups) {
-        for (const recipient of group.recipients.values()) {
+        await forEachConcurrent([...group.recipients.values()], async (recipient) => {
             const isScholar = recipient.role === 'scholar';
             const detail = isScholar
                 ? `duty:${dutyId}:scholar:${recipient.scholar_id}:status:absent:system`
@@ -131,7 +132,7 @@ const notifyDutyAbsences = async (connection, sweepStartedAt) => {
                  LIMIT 1`,
                 [recipient.email, notificationType, detail]
             );
-            if (existing.length) continue;
+            if (existing.length) return;
 
             try {
                 const scholars = [...recipient.scholars.values()];
@@ -181,7 +182,7 @@ const notifyDutyAbsences = async (connection, sweepStartedAt) => {
                     console.error('[duty-absence] Failed to record notification failure:', logError.message || logError);
                 }
             }
-        }
+        });
     }
     return { sentCount, failedCount };
 };

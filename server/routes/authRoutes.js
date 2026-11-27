@@ -5,6 +5,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { logAuditEvent } = require('../utils/auditLogger');
 const { verifyToken } = require('../middleware/authMiddleware');
+const { failedLoginLimit } = require('../middleware/failedLoginLimit');
 const { sendPasswordResetEmail } = require('../utils/notifyHelpers');
 const { isValidPassword, PASSWORD_REQUIREMENTS_ERROR } = require('../utils/passwordPolicy');
 const authController = require('../controllers/authController');
@@ -67,7 +68,7 @@ router.post('/reset-password', async (req, res) => {
 });
 
 // ─── LOGIN ───────────────────────────────────────────────────
-router.post('/login', (req, res) => {
+router.post('/login', failedLoginLimit({ windowMs: 15 * 60 * 1000, max: 10 }), (req, res) => {
     const loginId = String(req.body?.loginId || '').trim();
     const email = String(req.body?.email || '').trim();
     const password = req.body?.password;
@@ -85,6 +86,7 @@ router.post('/login', (req, res) => {
             }
 
             if (!Array.isArray(data) || data.length === 0) {
+                req.recordFailedLoginAttempt?.();
                 return res.status(401).json({ message: 'Invalid Login ID, email, or password' });
             }
 
@@ -99,6 +101,7 @@ router.post('/login', (req, res) => {
 
             let match = false;
             if (!user.password) {
+                req.recordFailedLoginAttempt?.();
                 logAuditEvent({
                     req,
                     userId: user.id,
@@ -118,6 +121,7 @@ router.post('/login', (req, res) => {
             }
 
             if (!match) {
+                req.recordFailedLoginAttempt?.();
                 logAuditEvent({
                     req,
                     userId: user.id,
@@ -148,6 +152,7 @@ router.post('/login', (req, res) => {
                 jwtSecret,
                 { expiresIn: '8h' }
             );
+            req.clearFailedLoginAttempts?.();
 
             // Fire audit logging in the background so login response is not delayed.
             logAuditEvent({

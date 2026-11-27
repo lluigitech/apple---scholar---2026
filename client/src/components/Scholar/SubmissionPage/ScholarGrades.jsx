@@ -263,9 +263,15 @@ const ScholarGrades = () => {
 
     // Live average preview — same weighted formula as before; only the
     // label changes depending on grading system.
-    const filledSubjects = subjects.filter(s => s.subject_name && s.units && s.grade !== '');
+    const filledSubjects = subjects.filter(s => s.subject_name && s.grade !== ''
+        && (gradingSystem !== 'gwa' || s.units));
     const previewAverage = (() => {
         if (filledSubjects.length === 0) return null;
+        if (gradingSystem === 'percentage') {
+            const average = filledSubjects.reduce((sum, subject) => sum + parseFloat(subject.grade), 0) / filledSubjects.length;
+            return average.toFixed(2);
+        }
+        if (gradingSystem !== 'gwa') return null;
         const totalUnits = filledSubjects.reduce((sum, s) => sum + parseInt(s.units), 0);
         const weighted    = filledSubjects.reduce((sum, s) => sum + parseInt(s.units) * parseFloat(s.grade), 0);
         return totalUnits > 0 ? (weighted / totalUnits).toFixed(2) : null;
@@ -274,7 +280,9 @@ const ScholarGrades = () => {
     const filledForSubmit = subjects.filter(s => s.subject_name.trim() && s.grade !== '');
     const gradesValid = Boolean(gradeBounds && filledForSubmit.length > 0 && filledForSubmit.every(s => {
         const g = parseFloat(s.grade);
-        return !isNaN(g) && g >= gradeBounds.min && g <= gradeBounds.max;
+        const validGrade = !isNaN(g) && g >= gradeBounds.min && g <= gradeBounds.max;
+        const validUnits = gradingSystem !== 'gwa' || (Number.isFinite(Number(s.units)) && Number(s.units) > 0);
+        return validGrade && validUnits;
     }));
 
     const handleSubmit = async () => {
@@ -307,6 +315,10 @@ const ScholarGrades = () => {
             const g = parseFloat(s.grade);
             if (isNaN(g) || g < gradeBounds.min || g > gradeBounds.max) {
                 setError(`Invalid grade for "${s.subject_name}". Must be between ${gradeBounds.min.toFixed(2)} and ${gradeBounds.max.toFixed(2)}.`);
+                return;
+            }
+            if (gradingSystem === 'gwa' && (!Number.isFinite(Number(s.units)) || Number(s.units) <= 0)) {
+                setError(`Enter valid units for "${s.subject_name}".`);
                 return;
             }
         }
@@ -343,7 +355,7 @@ const ScholarGrades = () => {
             formData.append('academic_year', academicYear);
             formData.append('subjects', JSON.stringify(filled.map(s => ({
                 subject_name: s.subject_name.trim(),
-                units: parseInt(s.units),
+                ...(gradingSystem === 'gwa' ? { units: parseFloat(s.units) } : {}),
                 grade: parseFloat(s.grade),
             }))));
             const uploadId = await uploadResumableFile(proofFile, 'proof');
@@ -523,15 +535,15 @@ const ScholarGrades = () => {
                             <>
                                 {/* Subject rows — single grade column per subject, per system */}
                                 <div className="mb-2" style={{ overflowX: 'auto' }}>
-                                    <div className="grid gap-2" style={{ gridTemplateColumns: '2.2fr 0.8fr 1.2fr auto', minWidth: 480 }}>
+                                    <div className="grid gap-2" style={{ gridTemplateColumns: gradingSystem === 'gwa' ? '2.2fr 0.8fr 1.2fr auto' : '2.2fr 1.2fr auto', minWidth: gradingSystem === 'gwa' ? 480 : 380 }}>
                                         <span style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: BRONZE, letterSpacing: '0.04em' }}>SUBJECT</span>
-                                        <span style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: BRONZE, letterSpacing: '0.04em' }}>UNITS</span>
+                                        {gradingSystem === 'gwa' && <span style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: BRONZE, letterSpacing: '0.04em' }}>UNITS</span>}
                                         <span style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: BRONZE, letterSpacing: '0.04em' }}>{gradeLabel.toUpperCase()}</span>
                                         <span />
                                     </div>
                                     <div className="space-y-2 mt-2">
                                         {subjects.map((s, i) => (
-                                            <div key={s.key} className="grid gap-2 items-center" style={{ gridTemplateColumns: '2.2fr 0.8fr 1.2fr auto', minWidth: 480 }}>
+                                            <div key={s.key} className="grid gap-2 items-center" style={{ gridTemplateColumns: gradingSystem === 'gwa' ? '2.2fr 0.8fr 1.2fr auto' : '2.2fr 1.2fr auto', minWidth: gradingSystem === 'gwa' ? 480 : 380 }}>
                                                 <input
                                                     className={inputCls}
                                                     style={inputStyle}
@@ -539,13 +551,16 @@ const ScholarGrades = () => {
                                                     value={s.subject_name}
                                                     onChange={e => setSubjectField(s.key, 'subject_name', e.target.value)}
                                                 />
-                                                <input
-                                                    type="number" min="1" max="6"
-                                                    className={inputCls}
-                                                    style={inputStyle}
-                                                    value={s.units}
-                                                    onChange={e => setSubjectField(s.key, 'units', e.target.value)}
-                                                />
+                                                {gradingSystem === 'gwa' && (
+                                                    <input
+                                                        type="number" min="1" max="6"
+                                                        className={inputCls}
+                                                        style={inputStyle}
+                                                        value={s.units}
+                                                        onChange={e => setSubjectField(s.key, 'units', e.target.value)}
+                                                        aria-label={`Units for subject ${i + 1}`}
+                                                    />
+                                                )}
                                                 <input
                                                     type="number" min={gradeBounds?.min} max={gradeBounds?.max} step={gradeBounds?.step}
                                                     className={inputCls}
@@ -687,12 +702,14 @@ const ScholarGrades = () => {
                                     <span style={{ ...body, fontSize: '0.82rem', color: MUTED }}>{summaryAverageLabel}</span>
                                     <span style={{ ...display, fontSize: '1.5rem', fontWeight: 700, color: PRIMARY }}>{previewAverage}</span>
                                 </div>
-                                <div className="flex items-baseline justify-between mt-2">
-                                    <span style={{ ...body, fontSize: '0.82rem', color: MUTED }}>Total Units</span>
-                                    <span style={{ ...body, fontSize: '0.9rem', fontWeight: 600, color: INK }}>
-                                        {filledSubjects.reduce((sum, s) => sum + (parseInt(s.units) || 0), 0)}
-                                    </span>
-                                </div>
+                                {gradingSystem === 'gwa' && (
+                                    <div className="flex items-baseline justify-between mt-2">
+                                        <span style={{ ...body, fontSize: '0.82rem', color: MUTED }}>Total Units</span>
+                                        <span style={{ ...body, fontSize: '0.9rem', fontWeight: 600, color: INK }}>
+                                            {filledSubjects.reduce((sum, s) => sum + (parseInt(s.units) || 0), 0)}
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="flex items-baseline justify-between mt-2">
                                     <span style={{ ...body, fontSize: '0.82rem', color: MUTED }}>Academic Standing</span>
                                     <span style={{ ...body, fontSize: '0.82rem', fontWeight: 700, color: previewPassStatus === null ? MUTED : previewPassStatus ? SUCCESS : DANGER }}>
@@ -733,7 +750,9 @@ const ScholarGrades = () => {
                                         style={{ padding: '15px 18px', background: 'none', border: 'none', cursor: 'pointer' }}>
                                         <div className="text-left min-w-0">
                                             <p style={{ ...body, fontSize: '0.85rem', fontWeight: 700, color: INK }}>{sem.semester} AY {sem.academic_year}</p>
-                                            <p style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 2 }}>{sem.total_units} total units · {sem.subjects.length} subjects</p>
+                                            <p style={{ ...body, fontSize: '0.72rem', color: MUTED, marginTop: 2 }}>
+                                                {sem.grade_scale === 'college' ? `${sem.total_units} total units · ` : ''}{sem.subjects.length} subjects
+                                            </p>
                                             <div className="flex items-center gap-2 flex-wrap mt-2">
                                                 <span style={{ ...display, fontSize: '1rem', fontWeight: 700, color: PRIMARY }}>
                                                     {sem.gwa ? sem.gwa.toFixed(2) : 'TBA'}
@@ -762,7 +781,7 @@ const ScholarGrades = () => {
                                                 <thead>
                                                     <tr style={{ background: BG }}>
                                                         <th style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: BRONZE, letterSpacing: '0.03em', padding: '10px 18px' }}>SUBJECT</th>
-                                                        <th style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: BRONZE, letterSpacing: '0.03em', padding: '10px 18px' }}>UNITS</th>
+                                                        {sem.grade_scale === 'college' && <th style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: BRONZE, letterSpacing: '0.03em', padding: '10px 18px' }}>UNITS</th>}
                                                         <th style={{ ...body, fontSize: '0.66rem', fontWeight: 700, color: BRONZE, letterSpacing: '0.03em', padding: '10px 18px' }}>GRADE</th>
                                                     </tr>
                                                 </thead>
@@ -773,7 +792,7 @@ const ScholarGrades = () => {
                                                         return (
                                                             <tr key={ji} style={{ borderTop: `1px solid ${BORDER}` }}>
                                                                 <td style={{ ...body, fontSize: '0.83rem', fontWeight: 600, color: INK, padding: '10px 18px' }}>{subj.subject_name}</td>
-                                                                <td style={{ ...body, fontSize: '0.83rem', color: MUTED, padding: '10px 18px' }}>{subj.units}</td>
+                                                                {sem.grade_scale === 'college' && <td style={{ ...body, fontSize: '0.83rem', color: MUTED, padding: '10px 18px' }}>{subj.units}</td>}
                                                                 <td style={{ padding: '10px 18px' }}>
                                                                     <span style={{ ...body, fontSize: '0.76rem', fontWeight: 700, padding: '2px 9px', borderRadius: 999, color: gradeColor, background: `${gradeColor}14` }}>
                                                                         {subj.grade.toFixed(2)}

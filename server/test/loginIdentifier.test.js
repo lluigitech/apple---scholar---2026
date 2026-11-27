@@ -8,11 +8,11 @@ let capturedQuery;
 const routes = new Map();
 const fakeRouter = {
   get(path, ...handlers) {
-    routes.set(`GET ${path}`, handlers.at(-1));
+    routes.set(`GET ${path}`, handlers);
     return this;
   },
   post(path, ...handlers) {
-    routes.set(`POST ${path}`, handlers.at(-1));
+    routes.set(`POST ${path}`, handlers);
     return this;
   },
 };
@@ -42,6 +42,9 @@ Module._load = function (request, parent, isMain) {
   if (parent?.filename === routePath && request === '../middleware/authMiddleware') {
     return { verifyToken: () => {} };
   }
+  if (parent?.filename === routePath && request === '../middleware/failedLoginLimit') {
+    return originalLoad.call(this, request, parent, isMain);
+  }
   if (parent?.filename === routePath && request === '../utils/notifyHelpers') {
     return { sendPasswordResetEmail: () => {} };
   }
@@ -68,7 +71,7 @@ const invokeLogin = (body) => new Promise((resolve) => {
       return this;
     },
   };
-  routes.get('POST /login')({ body }, response);
+  routes.get('POST /login').at(-1)({ body }, response);
 });
 
 test('all user roles sign in with their generated ID, matching email, and password', async () => {
@@ -141,4 +144,37 @@ test('archived users cannot sign in even with valid credentials', async () => {
 
   assert.equal(response.statusCode, 403);
   assert.match(response.payload.message, /account has been archived/i);
+});
+
+test('login blocks after ten failed attempts from the same IP for the rate-limit window', () => {
+  const [limitMiddleware] = routes.get('POST /login');
+  const invokeLimit = () => {
+    const req = { ip: '192.0.2.200', headers: {} };
+    const result = { next: false, headers: {}, statusCode: 200, payload: null };
+    const res = {
+      setHeader(name, value) { result.headers[name] = value; },
+      status(code) {
+        result.statusCode = code;
+        return this;
+      },
+      json(payload) {
+        result.payload = payload;
+        return this;
+      },
+    };
+    limitMiddleware(req, res, () => {
+      req.recordFailedLoginAttempt();
+      result.next = true;
+    });
+    return result;
+  };
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    assert.equal(invokeLimit().next, true);
+  }
+  const blocked = invokeLimit();
+  assert.equal(blocked.next, false);
+  assert.equal(blocked.statusCode, 429);
+  assert.match(blocked.payload.message, /too many failed login attempts/i);
+  assert.ok(Number(blocked.headers['Retry-After']) > 0);
 });

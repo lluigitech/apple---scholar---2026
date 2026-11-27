@@ -664,7 +664,7 @@ const AdminAnnouncement = () => {
                     >
                         <div className="min-w-0">
                             <p className="staff-page-eyebrow">ADMIN PORTAL</p>
-                            <h1 className="staff-page-title">Communication Center</h1>
+                            <h1 className="staff-page-title">Announcements</h1>
                             <p className="staff-page-description">
                                 Create, publish, and manage announcements across Scholars, Staff, and Officers.
                             </p>

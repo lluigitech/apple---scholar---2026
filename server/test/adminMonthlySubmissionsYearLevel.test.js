@@ -86,3 +86,51 @@ test('monthly report status includes archived submissions without returning them
   assert.match(queries[1].sql, /s\.finalized_at IS NOT NULL/);
   assert.deepEqual(queries[1].values, [2026, 9, 'college_2']);
 });
+
+test('monthly report detail uses the saved quality status and real validation checks', async () => {
+  const queries = [];
+  fakeDb.query = (sql, values, callback) => {
+    queries.push({ sql, values });
+    if (sql.includes('FROM submission_media')) {
+      callback(null, [{ submission_id: 9, url: '/photo.jpg', description: 'School activity photo' }]);
+      return;
+    }
+
+    callback(null, [{
+      id: 9,
+      scholar_id: 'S-9',
+      scholarName: 'Test Scholar',
+      year_level: 'Grade 12',
+      submittedAt: '2026-09-10',
+      status: 'approved',
+      qualityScore: 64,
+      qualityStatus: 'medium_risk',
+      body: Array(150).fill('word').join(' '),
+    }]);
+  };
+
+  const response = await new Promise(resolve => {
+    adminController.getMonthlySubmissions(
+      { query: {} },
+      {
+        status() {
+          return this;
+        },
+        json(body) {
+          resolve(body);
+        },
+      }
+    );
+  });
+
+  assert.match(queries[0].sql, /s\.quality_status AS qualityStatus/);
+  assert.match(queries[0].sql, /s\.quality_status, s\.generated_pdf_path/);
+  assert.equal(response[0].qualityStatus, 'medium_risk');
+  assert.deepEqual(response[0].checklistResults, [
+    { label: 'Minimum length (150+ words)', passed: true },
+    { label: 'At least 1 photo', passed: true },
+    { label: 'All photos have descriptions', passed: true },
+  ]);
+  assert.equal(Object.hasOwn(response[0], 'reportScore'), false);
+  assert.equal(Object.hasOwn(response[0], 'mediaScore'), false);
+});

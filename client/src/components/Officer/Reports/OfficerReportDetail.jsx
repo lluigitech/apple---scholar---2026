@@ -112,7 +112,7 @@ export default function OfficerReportDetail({ report, onClose, onAction, actionS
               </div>
               <div className="flex-1">
                 <div className="flex items-center justify-between mb-1.5">
-                  <span style={{ ...mono, fontSize: "0.6rem", fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: "0.08em" }}>AI Quality Score</span>
+                  <span style={{ ...mono, fontSize: "0.6rem", fontWeight: 700, color: MUTED, textTransform: "uppercase", letterSpacing: "0.08em" }}>Submission Quality Score</span>
                   <span style={{ ...display, fontSize: "1.05rem", fontWeight: 700, color: INK }}>{qualityScore}/100</span>
                 </div>
                 <div style={{ height: 5, background: RULE, borderRadius: 99, overflow: "hidden", marginBottom: 8 }}>

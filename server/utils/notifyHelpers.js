@@ -1,5 +1,6 @@
 const nodemailer = require('nodemailer');
 const db = require('../config/db');
+const { forEachConcurrent } = require('./forEachConcurrent');
 const {
     buildDutyReminderEmail,
     buildDutyAttendanceStatusEmail,
@@ -306,7 +307,7 @@ exports.sendTaskAssignmentEmails = (taskId, cb) => {
             : '';
         const sentRecipients = [];
         const failures = [];
-        for (const recipient of recipients) {
+        const notifyRecipient = async (recipient) => {
             const actionPath = recipient.role === 'scholar' ? '/scholar/submission' : '/officer/task-assignment';
             const text = [
                 `Hello ${recipient.full_name || (recipient.role === 'scholar' ? 'Scholar' : 'Officer')},`,
@@ -358,7 +359,8 @@ exports.sendTaskAssignmentEmails = (taskId, cb) => {
                 });
                 failures.push({ recipient: recipient.email, error: String(sendError.message || sendError) });
             }
-        }
+        };
+        await forEachConcurrent(recipients, notifyRecipient);
 
         cb(null, {
             ok: failures.length === 0,
@@ -389,7 +391,7 @@ exports.sendDutyNotifyEmails = (dutyId, cb) => {
         const timeStr = duty.time_start ? `${duty.time_start}${duty.time_end ? ' - ' + duty.time_end : ''}` : '';
         const text = `You have a new duty assigned:\n\n${duty.title}\nDate: ${dateStr}\n${timeStr ? `Time: ${timeStr}\n` : ''}Location: ${duty.location || 'TBA'}\n\n${duty.description || ''}`;
 
-        for (const recipient of recipients) {
+        await forEachConcurrent(recipients, async (recipient) => {
             try {
                 const info = await transporter.sendMail({
                     from: process.env.SMTP_FROM || process.env.SMTP_USER,
@@ -423,7 +425,7 @@ exports.sendDutyNotifyEmails = (dutyId, cb) => {
                     detail: String(sendErr),
                 });
             }
-        }
+        });
 
         cb(null, {
             ok: failures.length === 0,
@@ -466,13 +468,13 @@ exports.sendDutyAttendanceStatusEmails = (dutyId, records, cb) => {
         let sentCount = 0;
         const occurredAt = new Date().toISOString();
 
-        for (const record of attendanceRecords) {
+        await forEachConcurrent(attendanceRecords, async (record) => {
             const scholar = scholarsById.get(String(record.scholar_id));
             const status = String(record.status).toLowerCase();
             const detail = `duty:${dutyId}:scholar:${record.scholar_id}:status:${status}:at:${occurredAt}`;
             if (!scholar?.email) {
                 failures.push({ scholar_id: record.scholar_id, error: 'Active scholar email not found.' });
-                continue;
+                return;
             }
             if (!transporter) {
                 failures.push({ recipient: scholar.email, error: 'SMTP not configured' });
@@ -484,7 +486,7 @@ exports.sendDutyAttendanceStatusEmails = (dutyId, records, cb) => {
                     status: 'failed',
                     detail: `${detail}:SMTP not configured`,
                 });
-                continue;
+                return;
             }
 
             try {
@@ -522,7 +524,7 @@ exports.sendDutyAttendanceStatusEmails = (dutyId, records, cb) => {
                     detail: `${detail}:${message}`,
                 });
             }
-        }
+        });
 
         cb(null, {
             ok: failures.length === 0,
@@ -581,7 +583,7 @@ exports.sendMakeupDutyAssignmentEmails = (scholarId, sourceDutyId, makeupDutyId,
 
         let sentCount = 0;
         const failures = [];
-        for (const recipient of recipients) {
+        await forEachConcurrent(recipients, async (recipient) => {
             try {
                 const alreadySent = await queryDb(
                     `SELECT id FROM notification_logs
@@ -589,7 +591,7 @@ exports.sendMakeupDutyAssignmentEmails = (scholarId, sourceDutyId, makeupDutyId,
                      LIMIT 1`,
                     [recipient.email, detail]
                 );
-                if (alreadySent.length) continue;
+                if (alreadySent.length) return;
 
                 const text = recipient.role === 'scholar'
                     ? `Hello ${recipient.full_name || 'Scholar'},\n\nYou have been assigned to makeup duty "${duties[0].title}" on ${duties[0].duty_date}.\nPlease attend the duty to make up for the missed duty.`
@@ -628,7 +630,7 @@ exports.sendMakeupDutyAssignmentEmails = (scholarId, sourceDutyId, makeupDutyId,
                     detail: `${detail}:${String(error.message || error)}`,
                 });
             }
-        }
+        });
         cb(null, { ok: failures.length === 0, sent_count: sentCount, failed_count: failures.length, failures });
     })().catch(error => cb(error));
 };
@@ -749,7 +751,7 @@ exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
         const subject = `Kalinga Scholar — Announcement: ${announcement.title}`;
         const text = buildRecipientEmailText(announcement.title, announcement.content, 'announcement');
 
-        for (const recipient of recipients) {
+        await forEachConcurrent(recipients, async (recipient) => {
             const recipientEmail = String(recipient.email || '').trim();
             try {
                 const info = await transporter.sendMail({
@@ -803,7 +805,7 @@ exports.sendAnnouncementNotifyEmails = (announcementId, cb) => {
                     detail: `announcement:${announcementId}:failed:${message}`,
                 });
             }
-        }
+        });
 
         cb(null, {
             ok: failures.length === 0,
@@ -878,7 +880,7 @@ exports.sendTaskDeadlineReminders = async () => {
         const reminderStage = daysLeft === 0 ? 'due-today' : daysLeft === 1 ? 'due-tomorrow' : 'due-3-days';
         const dueDate = new Date(`${task.due_date}T00:00:00`).toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
 
-        for (const recipient of recipients) {
+        await forEachConcurrent(recipients, async (recipient) => {
             const detail = `task:${task.id}:due:${task.due_date}:stage:${reminderStage}`;
             const existing = await queryDb(
                 `SELECT id FROM notification_logs
@@ -886,7 +888,7 @@ exports.sendTaskDeadlineReminders = async () => {
                  LIMIT 1`,
                 [recipient.scholar_id, detail]
             );
-            if (existing.length) continue;
+            if (existing.length) return;
 
             try {
                 const info = await transporter.sendMail({
@@ -909,7 +911,7 @@ exports.sendTaskDeadlineReminders = async () => {
             } catch (sendErr) {
                 await logNotification({ scholar_id: recipient.scholar_id, recipient: recipient.email, channel: 'email', type: 'deadline_reminder', status: 'failed', detail: `${detail}:${String(sendErr)}` });
             }
-        }
+        });
     }
 
     return { ok: true, sent_count: sentCount };
@@ -1003,11 +1005,11 @@ exports.sendComplianceAlerts = async () => {
             officer.assignedLevels.add(normalizeYearLevel(assignment.year_level));
             officersById.set(assignment.id, officer);
         }
-        for (const recipient of officersById.values()) {
+        await forEachConcurrent([...officersById.values()], async (recipient) => {
             const recipientScholars = unsubmittedScholars.filter(scholar =>
                 recipient.assignedLevels.has(normalizeYearLevel(scholar.year_level))
             );
-            if (!recipientScholars.length) continue;
+            if (!recipientScholars.length) return;
             try {
                 const alreadySent = await queryDb(
                     `SELECT id FROM notification_logs
@@ -1015,7 +1017,7 @@ exports.sendComplianceAlerts = async () => {
                      LIMIT 1`,
                     [recipient.email, detail]
                 );
-                if (alreadySent.length) continue;
+                if (alreadySent.length) return;
 
                 const scholarLines = recipientScholars.map((scholar, index) =>
                     `${index + 1}. ${scholar.full_name || 'Unnamed Scholar'} (${scholar.scholar_id})${scholar.year_level ? ` — ${scholar.year_level}` : ''}`
@@ -1039,13 +1041,13 @@ exports.sendComplianceAlerts = async () => {
             } catch (sendErr) {
                 await logNotification({ recipient: recipient.email, channel: 'email', type: 'unsubmitted_task_summary', status: 'failed', detail: `${detail}:${String(sendErr)}` });
             }
-        }
+        });
     }
 
-    for (const task of expiredTasks) {
+    await forEachConcurrent(expiredTasks, async (task) => {
         try {
             const preferences = task.creator_preferences ? JSON.parse(task.creator_preferences) : {};
-            if (preferences.emailNotifications === false || preferences.securityAlerts === false) continue;
+            if (preferences.emailNotifications === false || preferences.securityAlerts === false) return;
         } catch (error) {
             console.error('Invalid administrator notification preferences:', error);
         }
@@ -1057,7 +1059,7 @@ exports.sendComplianceAlerts = async () => {
                  LIMIT 1`,
                 [task.creator_email, detail]
             );
-            if (alreadySent.length) continue;
+            if (alreadySent.length) return;
 
             await transporter.sendMail({
                 from: process.env.SMTP_FROM || process.env.SMTP_USER,
@@ -1077,7 +1079,7 @@ exports.sendComplianceAlerts = async () => {
         } catch (sendErr) {
             await logNotification({ recipient: task.creator_email, channel: 'email', type: 'task_deadline_summary', status: 'failed', detail: `${detail}:${String(sendErr)}` });
         }
-    }
+    });
 
     const risks = await queryDb(`
         SELECT u.scholar_id, u.full_name, COUNT(s.id) AS negative_letters
@@ -1090,7 +1092,7 @@ exports.sendComplianceAlerts = async () => {
         const detail = `repeated-risk:${risk.scholar_id}:date:${today}`;
         const text = `${risk.full_name || risk.scholar_id} has ${risk.negative_letters} negative correspondence flags in the last 90 days and needs follow-up.`;
         const adminRecipients = staffRecipients.filter(recipient => recipient.role === 'admin');
-        for (const recipient of adminRecipients) {
+        await forEachConcurrent(adminRecipients, async (recipient) => {
             try {
                 const existing = await queryDb(
                     `SELECT id FROM notification_logs
@@ -1098,7 +1100,7 @@ exports.sendComplianceAlerts = async () => {
                      LIMIT 1`,
                     [recipient.email, detail]
                 );
-                if (existing.length) continue;
+                if (existing.length) return;
 
                 await transporter.sendMail({
                     from: process.env.SMTP_FROM || process.env.SMTP_USER,
@@ -1118,7 +1120,7 @@ exports.sendComplianceAlerts = async () => {
             } catch (sendErr) {
                 await logNotification({ scholar_id: risk.scholar_id, recipient: recipient.email, channel: 'email', type: 'repeated_risk_flag', status: 'failed', detail: `${detail}:${String(sendErr)}` });
             }
-        }
+        });
     }
 
     return { ok: true, sent_count: sentCount };

@@ -25,6 +25,9 @@ let sendError = null;
 let recipientQuery;
 const sentMessages = [];
 const notificationLogs = [];
+let delaySends = false;
+let activeSends = 0;
+let maxConcurrentSends = 0;
 
 const fakeDb = {
   query(sql, values, callback) {
@@ -57,9 +60,16 @@ installMock(nodemailerPath, {
   createTransport() {
     return {
       async sendMail(message) {
-        if (sendError) throw sendError;
-        sentMessages.push(message);
-        return { messageId: `announcement-${sentMessages.length}` };
+        activeSends += 1;
+        maxConcurrentSends = Math.max(maxConcurrentSends, activeSends);
+        try {
+          if (sendError) throw sendError;
+          if (delaySends) await new Promise(resolve => setTimeout(resolve, 10));
+          sentMessages.push(message);
+          return { messageId: `announcement-${sentMessages.length}` };
+        } finally {
+          activeSends -= 1;
+        }
       },
     };
   },
@@ -138,7 +148,7 @@ test('each explicit announcement notify click sends to the target audience', asy
     role: 'admin',
     preferences: JSON.stringify({ emailNotifications: true }),
   };
-  announcement = { ...announcement, created_by: 99 };
+  announcement = { ...announcement, created_by: 99, created_by_role: 'admin' };
   sendError = null;
   sentMessages.length = 0;
   notificationLogs.length = 0;
@@ -181,6 +191,36 @@ test('announcement author is not duplicated when already in the selected audienc
   assert.equal(sentMessages.filter(message => message.to === 'admin@example.com').length, 1);
 });
 
+test('bulk announcement email sends use the shared five-recipient concurrency limit', async () => {
+  announcement = {
+    ...announcement,
+    target_roles: JSON.stringify(['scholar']),
+    target_levels: JSON.stringify([]),
+    created_by: null,
+    created_by_role: null,
+  };
+  adminAuthor = null;
+  recipients = Array.from({ length: 8 }, (_, index) => ({
+    scholar_id: `S-${index + 1}`,
+    full_name: `Scholar ${index + 1}`,
+    email: `scholar-${index + 1}@example.com`,
+    role: 'scholar',
+  }));
+  sendError = null;
+  delaySends = true;
+  activeSends = 0;
+  maxConcurrentSends = 0;
+  sentMessages.length = 0;
+  notificationLogs.length = 0;
+
+  const result = await sendAnnouncement();
+
+  delaySends = false;
+  assert.equal(result.sent_count, 8);
+  assert.equal(maxConcurrentSends, 5);
+  assert.equal(notificationLogs.length, 8);
+});
+
 test('announcement notify returns SMTP failures instead of counting them as sent', async () => {
   recipients = [{ scholar_id: 'S-7', email: 'scholar@example.com', role: 'scholar' }];
   adminAuthor = {
@@ -190,7 +230,7 @@ test('announcement notify returns SMTP failures instead of counting them as sent
     role: 'admin',
     preferences: JSON.stringify({ emailNotifications: true }),
   };
-  announcement = { ...announcement, created_by: 99 };
+  announcement = { ...announcement, created_by: 99, created_by_role: 'admin' };
   sendError = new Error('SMTP rejected the message');
   notificationLogs.length = 0;
 

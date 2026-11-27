@@ -83,7 +83,6 @@ exports.updateAdminProfile = (req, res) => {
 };
 
 const DEFAULT_ADMIN_PREFERENCES = {
-    timezone: '(GMT+8) Manila, Philippines',
     dateFormat: 'MMMM DD, YYYY',
     paginationPageSize: 10,
     tableDensity: 'comfortable',
@@ -128,6 +127,7 @@ exports.getAdminSettings = (req, res) => {
             }
             const savedPreferences = { ...DEFAULT_ADMIN_PREFERENCES, ...preferences };
             delete savedPreferences.language;
+            delete savedPreferences.timezone;
             if (!SESSION_TIMEOUT_OPTIONS.includes(String(savedPreferences.sessionTimeout))) {
                 savedPreferences.sessionTimeout = DEFAULT_ADMIN_PREFERENCES.sessionTimeout;
             } else {
@@ -177,7 +177,6 @@ exports.updateAdminSettings = (req, res) => {
     }
 
     const validOptions = {
-        timezone: ['(GMT+8) Manila, Philippines', '(GMT+0) UTC', '(GMT+9) Tokyo, Japan', '(GMT-5) New York, USA'],
         dateFormat: ['MMMM DD, YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'],
         paginationPageSize: [10, 20, 50],
         tableDensity: ['comfortable', 'compact', 'condensed'],
@@ -1744,6 +1743,7 @@ exports.getMonthlySubmissions = (req, res) => {
             s.submitted_at AS submittedAt,
             s.status,
             s.quality_score AS qualityScore,
+            s.quality_status AS qualityStatus,
             s.generated_pdf_path AS generatedPdfPath,
             u.email,
             s.letter_content AS body,
@@ -1773,7 +1773,7 @@ exports.getMonthlySubmissions = (req, res) => {
         values.push(normalizeYearLevel(year_level));
     }
 
-    sql += ` GROUP BY s.id, s.submission_type, s.scholar_id, u.full_name, u.year_level, s.submitted_at, s.status, s.quality_score, s.generated_pdf_path, u.email, s.letter_content, s.service_activity, s.service_hours, s.sentiment_label ORDER BY s.submitted_at DESC LIMIT 500`;
+    sql += ` GROUP BY s.id, s.submission_type, s.scholar_id, u.full_name, u.year_level, s.submitted_at, s.status, s.quality_score, s.quality_status, s.generated_pdf_path, u.email, s.letter_content, s.service_activity, s.service_hours, s.sentiment_label ORDER BY s.submitted_at DESC LIMIT 500`;
 
     db.query(sql, values, (err, submissions) => {
         if (err) {
@@ -1814,12 +1814,14 @@ exports.getMonthlySubmissions = (req, res) => {
                 photos: photoMap[s.id] || [],
                 staffAction: null,
                 staffFeedback: '',
-                reportScore: Math.round(s.qualityScore * 0.6) || 0,
-                mediaScore: (photoMap[s.id]?.length || 0) > 0 ? 85 : 60,
                 checklistResults: [
-                    { label: 'Contains narrative', passed: !!s.body },
-                    { label: 'Has documentation photos', passed: (photoMap[s.id]?.length || 0) > 0 },
-                    { label: 'Quality score ≥ 60', passed: s.qualityScore >= 60 },
+                    { label: 'Minimum length (150+ words)', passed: (s.body || '').trim().split(/\s+/).filter(Boolean).length >= 150 },
+                    { label: 'At least 1 photo', passed: (photoMap[s.id]?.length || 0) > 0 },
+                    {
+                        label: 'All photos have descriptions',
+                        passed: (photoMap[s.id]?.length || 0) > 0
+                            && photoMap[s.id].every(photo => (photo.description || '').trim().length > 3),
+                    },
                 ],
             }));
 

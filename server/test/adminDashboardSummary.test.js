@@ -51,7 +51,7 @@ const configureQueries = (fixtures, failure) => {
 
 test('dashboard summary returns zero counts for successful empty aggregates', async () => {
   const captured = configureQueries({
-    'COUNT(*) AS total,\n      COALESCE(SUM(CASE WHEN role': [{ total: 0, scholars: 0 }],
+    'COUNT(*) AS total,\n      COALESCE(SUM(CASE WHEN role': [{ total: 0, scholars: 0, active_scholars: 0 }],
     'SELECT id, full_name, email, role, created_at': [],
     'DATE_FORMAT(created_at': [],
     'FROM announcements': [{ total: 0, active: 0, withdrawn: 0 }],
@@ -74,7 +74,7 @@ test('dashboard summary returns zero counts for successful empty aggregates', as
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.body, {
-    users: { total: 0, scholars: 0 },
+    users: { total: 0, scholars: 0, activeScholars: 0 },
     recentUsers: [],
     scholarGrowth: [],
     announcements: { total: 0, active: 0, withdrawn: 0 },
@@ -102,7 +102,7 @@ test('dashboard summary returns zero counts for successful empty aggregates', as
 
 test('dashboard summary preserves actual aggregate counts and distinct assignment counts', async () => {
   const captured = configureQueries({
-    'COUNT(*) AS total,\n      COALESCE(SUM(CASE WHEN role': [{ total: '12', scholars: '7' }],
+    'COUNT(*) AS total,\n      COALESCE(SUM(CASE WHEN role': [{ total: '12', scholars: '7', active_scholars: '5' }],
     'SELECT id, full_name, email, role, created_at': [{ id: 4, full_name: 'Recent Admin', role: 'admin' }],
     'DATE_FORMAT(created_at': [{ month: '2026-10', total: '3' }],
     'FROM announcements': [{ total: '7', active: '4', withdrawn: '3' }],
@@ -168,6 +168,7 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
   ]);
   assert.equal(response.body.users.total, 12);
   assert.equal(response.body.users.scholars, 7);
+  assert.equal(response.body.users.activeScholars, 5);
   assert.deepEqual(response.body.recentUsers, [{ id: 4, full_name: 'Recent Admin', role: 'admin' }]);
   assert.deepEqual(response.body.scholarGrowth, [{ month: '2026-10', total: 3 }]);
   assert.deepEqual(response.body.recentActivity, [
@@ -175,6 +176,7 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
   ]);
   const userSummaryQuery = captured.find((query) => query.sql.includes('COUNT(*) AS total,\n      COALESCE(SUM(CASE WHEN role'));
   assert.match(userSummaryQuery.sql, /WHERE COALESCE\(status, ''\) <> 'archived'/);
+  assert.match(userSummaryQuery.sql, /LOWER\(COALESCE\(status, ''\)\) = 'active'/);
   const recentUsersQuery = captured.find((query) => query.sql.includes('SELECT id, full_name, email, role, created_at'));
   assert.deepEqual(recentUsersQuery.values, [5]);
   const activityQuery = captured.find((query) => query.sql.includes('FROM audit_logs'));
@@ -198,7 +200,7 @@ test('dashboard summary preserves actual aggregate counts and distinct assignmen
 
 test('dashboard summary returns an error when an aggregate query fails', async () => {
   configureQueries({
-    'COUNT(*) AS total,\n      COALESCE(SUM(CASE WHEN role': [{ total: 0, scholars: 0 }],
+    'COUNT(*) AS total,\n      COALESCE(SUM(CASE WHEN role': [{ total: 0, scholars: 0, active_scholars: 0 }],
     'SELECT id, full_name, email, role, created_at': [],
     'DATE_FORMAT(created_at': [],
     'FROM announcements': [{ total: 0, active: 0, withdrawn: 0 }],

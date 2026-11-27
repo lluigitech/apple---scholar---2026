@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const nodemailer = require('nodemailer');
+const { forEachConcurrent } = require('../utils/forEachConcurrent');
 const { calculateCurrentCompliance } = require('../utils/complianceLogger');
 const { buildComplianceThresholdEmail } = require('../utils/emailTemplates');
 
@@ -55,18 +56,18 @@ exports.sendComplianceThresholdNotifications = async () => {
         let emailCount = 0;
         let failedEmailCount = 0;
 
-        for (const scholar of scholars) {
+        await forEachConcurrent(scholars, async (scholar) => {
             let compliance;
             try {
                 compliance = await calculateScore(scholar.scholar_id);
             } catch (error) {
                 console.error(`[compliance-threshold] Could not calculate score for ${scholar.scholar_id}:`, error.message || error);
-                continue;
+                return;
             }
 
             if (!Number.isFinite(compliance.score) || !Number.isFinite(compliance.minimumScore)) {
                 console.error(`[compliance-threshold] Invalid compliance score for ${scholar.scholar_id}.`);
-                continue;
+                return;
             }
 
             const warningScore = compliance.minimumScore + 5;
@@ -90,10 +91,10 @@ exports.sendComplianceThresholdNotifications = async () => {
                         [scholar.scholar_id]
                     );
                 }
-                continue;
+                return;
             }
 
-            if (lastStage === 'critical' && stage === 'warning') continue;
+            if (lastStage === 'critical' && stage === 'warning') return;
             const isNewStage = lastStage !== stage;
             let eventId = stateRows[0]?.id;
             if (isNewStage) {
@@ -122,7 +123,7 @@ exports.sendComplianceThresholdNotifications = async () => {
                 notifiedCount += 1;
             }
 
-            if (!scholar.email || !eventId) continue;
+            if (!scholar.email || !eventId) return;
             const emailDetail = `event:${eventId}`;
             const [sentEmails] = await connection.query(
                 `SELECT id FROM notification_logs
@@ -130,7 +131,7 @@ exports.sendComplianceThresholdNotifications = async () => {
                  LIMIT 1`,
                 [scholar.email, alertType, emailDetail]
             );
-            if (sentEmails.length) continue;
+            if (sentEmails.length) return;
 
             if (!transporter) {
                 failedEmailCount += 1;
@@ -142,7 +143,7 @@ exports.sendComplianceThresholdNotifications = async () => {
                     status: 'failed',
                     detail: emailDetail,
                 });
-                continue;
+                return;
             }
 
             try {
@@ -180,7 +181,7 @@ exports.sendComplianceThresholdNotifications = async () => {
                     detail: emailDetail,
                 });
             }
-        }
+        });
 
         return {
             skipped: false,

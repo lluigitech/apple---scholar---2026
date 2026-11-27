@@ -18,6 +18,7 @@ const {
   getComplianceRiskThresholds,
   resolveGradeScale,
   isGradeWithinScale,
+  calculateGradeAverage,
   defaults,
 } = require('../utils/complianceLogger');
 Module._load = originalLoad;
@@ -362,6 +363,17 @@ test('grade validation accepts failing K-12 grades while preserving each scale r
   assert.equal(isGradeWithinScale('college', 5), true);
   assert.equal(isGradeWithinScale('college', 0.99), false);
   assert.equal(isGradeWithinScale('college', 5.01), false);
+});
+
+test('high school averages are not unit-weighted while college GWA uses course units', () => {
+  assert.equal(calculateGradeAverage([
+    { grade: 80 },
+    { grade: 100 },
+  ], 'k12'), 90);
+  assert.equal(calculateGradeAverage([
+    { grade: 2, units: 3 },
+    { grade: 4, units: 1 },
+  ], 'college'), 2.5);
 });
 
 test('a lone overdue task deducts points but does not immediately trigger a compliance flag', () => {

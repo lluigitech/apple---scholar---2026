@@ -279,6 +279,19 @@ const isGradeWithinScale = (gradeScale, rawGrade) => {
     return false;
 };
 
+const calculateGradeAverage = (subjects, gradeScale) => {
+    const totals = (Array.isArray(subjects) ? subjects : []).reduce((result, subject) => {
+        const grade = Number(subject.grade);
+        const units = gradeScale === 'college' ? Number(subject.units) : 1;
+        if (!Number.isFinite(grade) || !Number.isFinite(units) || units <= 0) return result;
+        result.weightedSum += units * grade;
+        result.totalUnits += units;
+        return result;
+    }, { weightedSum: 0, totalUnits: 0 });
+
+    return totals.totalUnits > 0 ? totals.weightedSum / totals.totalUnits : null;
+};
+
 const normalizeAcademicGrade = (gradeScale, rawGrade) => {
     const gradeValue = Number(rawGrade);
     if (!Number.isFinite(gradeValue)) return null;
@@ -665,6 +678,7 @@ module.exports = {
     getComplianceSettings,
     resolveGradeScale,
     isGradeWithinScale,
+    calculateGradeAverage,
     normalizeAcademicGrade,
     getAcademicTier,
     calculateComplianceScore,
